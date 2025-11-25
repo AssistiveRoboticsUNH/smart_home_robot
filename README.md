@@ -3,18 +3,18 @@
 ## Setup
 
 ``` 
-mkdir -p smart_home_pytree_ws/src
-cd ~/smart_home_pytree_ws/src
-
-pip install -r requirements.txt
+mkdir -p smarthome_ws/src
+cd ~/smarthome_ws/src
 
 git clone https://github.com/splintered-reality/py_trees
 git clone https://github.com/splintered-reality/py_trees_ros/
 git clone https://github.com/splintered-reality/py_trees_ros_viewer
 git clone https://github.com/splintered-reality/py_trees_ros_interfaces
-git clone https://github.com/olaghattas/smart_home_pytree
+git clone https://github.com/AssistiveRoboticsUNH/smart_home_robot
 
-cd ~/smart_home_pytree_ws 
+pip install -r requirements.txt
+
+cd ~/smarthome_ws 
 colcon build --symlink-install
 source install/setup.bash
 
@@ -52,3 +52,10 @@ source .env
 5. **Do not commit `.env`**
 The `.env` file contains sensitive information and must stay private.
 It is already included in `.gitignore` to prevent accidental commits.
+
+### Set up Webapp
+Install the application in https://github.com/AssistiveRoboticsUNH/Hello_Face on your tablet
+
+1. Connect the tablet to your laptop and copy the Hello_Face.apk in the apk folder to the Download folder on your tablet.
+2. go to the Download folder on your tablet and click on the apk file to install it.
+3. Set your Robot IP & Help Number (Swipe from left → Settings → enter values → Save.)
