@@ -1,0 +1,8 @@
+shr_display:
+  ros__parameters:
+    zmq_tx_port: 5556
+    zmq_rx_port: 5557
+    protocol_publish_interval_sec: 10
+    alive_log_interval_sec: 10
+    intersection_file_path: "/home/hello-robot/smarthome_ws/src/smart-home-robot/shr_plan/include/shr_plan/intersection.txt"
+    webapp_file_path: "/home/hello-robot/smarthome_ws/src/smart-home-robot/shr_display/webapp/app.py"

@@ -1,0 +1,73 @@
+## store infromation needed for all protocols
+locations:
+  kitchen:
+    x: 0.5
+    y: 1.44
+    yaw: 0.78     # 45 degrees ≈ 0.78 rad
+  living_room:
+    x: 1.94
+    y: -0.4
+    yaw: -0.3
+  home:
+    x: 0.5
+    y: -1.4
+    yaw: 3.14     # π rad (180 degrees)
+
+## need to be integerated to have robot interface get its info 
+person_location_topic: "person_location"
+robot_location_topic: "robot_location"
+
+# available type: ## todo set it in a way to verifiy htat yaml doesnt include 
+## undefined types: text, audio, video, question_answer 
+protocols:
+  TwoReminderProtocol:
+    medicine_am:
+      permissible_locations: TO BE INCORPORATED
+      low_level:
+        first_reminder: "/home/olagh48652/smart-home/src/smart-home-robot/shr_resources/resources/food_reminder.mp3" #"please take your morning medicine"
+        type_first: audio
+        second_reminder: "/home/olagh48652/smart-home/src/smart-home-robot/shr_resources/resources/food_reminder.mp3" #"This is the second reminder to take your morning medicine"
+        type_second: audio
+        wait_time_between_reminders: 5
+      high_level:
+        priority: 2
+        requirements: 
+          time: {'from': '10:00', 'to': '11:00'}
+
+    medicine_pm:
+      low_level:
+        first_reminder: "please take your night medicine"
+        type_first: text
+        second_reminder: "This is the second reminder to take your night medicine"
+        type_second: text
+        wait_time_between_reminders: 5
+      high_level: 
+        priority: 2
+        requirements: 
+          time: {'from': '22:00', 'to': '23:00'}
+## add topics with /
+  CoffeeProtocol:
+    coffee:
+      low_level:
+        first_text: "please clean the dishes"
+      high_level:
+        priority: 3
+        requirements: 
+          event: 
+            - {'topic': '/coffee', 'value': True}
+            - {'topic': '/coffee_pot', 'value': True}
+          time: {'from': '09:00', 'to': '13:00'}
+
+    # coffee:
+    #   low_level:
+    #     first_text: "please clean the dishes"
+    #     second_text: "This is the second reminder to clean the dishes"
+    #     third_text: "Final reminder: please clean the dishes"
+    #     wait_time_between_reminders: 5
+    #   high_level:
+    #     priority: 3
+    #     requirements: 
+    #       event: 
+    #         - {'topic': '/coffee', 'value': True}
+    #         - {'topic': '/coffee_pot', 'value': True}
+    #       time: {'from': '09:00', 'to': '13:00'}

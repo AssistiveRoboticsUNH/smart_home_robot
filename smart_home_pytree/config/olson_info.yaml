@@ -1,0 +1,63 @@
+## store infromation needed for all protocols
+# locations:
+#   bedroom:
+#     x: -5.9
+#     y: 0.0
+#     quat: [0.0, 0.0,-0.7071, 0.7071]
+#   living_room:
+#     x: -2.0
+#     y: 1.4
+#     quat: [0.0, 0.0, 0.0, 1.0]
+#   home:
+#     x: 0.5
+#     y: 1.92
+#     quat: [0.0, 0.0, -0.7071, 0.7071]
+locations:
+  bedroom:
+    x: -5.9
+    y: 0.0
+    yaw: -1.5708   # -90 degrees
+
+  living_room:
+    x: -2.0
+    y: 1.4
+    yaw: 0.0       # facing forward
+
+  home:
+    x: 0.5
+    y: 1.92
+    yaw: -1.5708   # -90 degrees
+
+## need to be integerated 
+person_location_topic: "person_location"
+robot_location_topic: "robot_location"
+
+protocols:
+  TwoReminderProtocol:
+    medicine_am:
+      first_text: "please take your morning medicine"
+      second_text: "This is the second reminder to take your morning medicine"
+      wait_time_between_reminders: 10
+    medicine_pm:
+      first_text: "please take your night medicine"
+      second_text: "This is the second reminder to take your night medicine"
+      wait_time_between_reminders: 5
+
+  # Version2TwoReminderProtocol:
+  #   medicine_am:
+  #     first_reminder:
+  #       type: script
+  #       data: "please take your morning medicine"
+  #     second_reminder:
+  #       type: audio
+  #       data: "/home/olagh48652/smart-home/src/smart-home-robot/shr_resources/resources/food_reminder.mp3"
+
+  #   medicine_pm:
+  #     first_reminder:
+  #       type: script
+  #       data: "please take your night medicine"
+  #     second_reminder:
+  #       type: audio
+  #       data: "/home/olagh48652/smart-home/src/smart-home-robot/shr_resources/resources/food_reminder.mp3"
+
+
