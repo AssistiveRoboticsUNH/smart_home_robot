@@ -6,7 +6,6 @@ import operator
 
 from datetime import datetime
 import rclpy
-from rclpy.logging import LoggingSeverity
 
 """
 A logging behavior that prints the current time and a custom message. It takes status as input, if its reporting a failure it should return Failure or else the robot woud get success becasue 
@@ -15,7 +14,7 @@ one of the children gave success. (For fallback to return success it requires on
 """
 
 class LoggingBehavior(py_trees.behaviour.Behaviour):
-    def __init__(self, name: str, message: str, status: py_trees.common.Status =py_trees.common.Status.SUCCESS):
+    def __init__(self, name: str, message: str, robot_interface, status: py_trees.common.Status =py_trees.common.Status.SUCCESS):
         """
         A simple logging behavior that prints the current time and a custom message
         each time it's ticked.
@@ -23,7 +22,7 @@ class LoggingBehavior(py_trees.behaviour.Behaviour):
         super().__init__(name)
         self.message = message
         self.status = status
-        self.ros_logger = rclpy.logging.get_logger("py_trees_logger")
+        self.robot_interface = robot_interface
 
     def setup(self, **kwargs):
         """
@@ -53,10 +52,8 @@ class LoggingBehavior(py_trees.behaviour.Behaviour):
         msg = f"weblog={full_message}"
 
         # publish to rosout with magic word (which Discord node subscribes to)
-        self.ros_logger.log(
-            LoggingSeverity.INFO,
-            msg
-        )
+        ## add robot_interface to get node
+        self.robot_interface.get_logger().info(msg)
         
         return self.status
 
@@ -66,3 +63,43 @@ class LoggingBehavior(py_trees.behaviour.Behaviour):
         """
         self.logger.debug(f"{self.name} [LoggingBehavior::terminate()][{self.status}→{new_status}]")
          
+
+
+class DummyRobotInterface:
+    """A minimal ROS2 node so the behavior can call get_logger()."""
+    def __init__(self):
+        rclpy.init()
+        self.node = rclpy.create_node("dummy_logger_node")
+
+    def get_logger(self):
+        return self.node.get_logger()
+
+
+def main():
+    # Create dummy robot interface (gives you a working ROS node)
+    robot_interface = DummyRobotInterface()
+
+    # Create the logging behavior
+    log_node = LoggingBehavior(
+        name="TestLogger",
+        message="Standalone Logging Test",
+        robot_interface=robot_interface,
+        status=py_trees.common.Status.SUCCESS
+    )
+
+    # Minimal tree to execute the behavior
+    root = py_trees.composites.Sequence("Root", memory=True)
+    root.add_child(log_node)
+
+    tree = py_trees.trees.BehaviourTree(root)
+
+    # Single tick to trigger logging
+    print("==== TICKING LOGGING BEHAVIOR ====")
+    tree.tick()
+
+    # Clean shutdown
+    rclpy.shutdown()
+
+
+if __name__ == "__main__":
+    main()

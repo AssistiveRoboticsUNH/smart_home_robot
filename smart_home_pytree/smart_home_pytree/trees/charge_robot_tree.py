@@ -114,14 +114,16 @@ class ChargeRobotTree(BaseTreeRunner):
         log_message_success = LoggingBehavior(
             name="Log_Success",
             message="Charging sequence completed successfully",
-            status=py_trees.common.Status.SUCCESS
+            status=py_trees.common.Status.SUCCESS,
+            robot_interface=self.robot_interface
         )
         ## its actually the default so no need to use status
 
         log_message_fail = LoggingBehavior(
             name="Log_Fail",
             message="Failed to charge after retry attempts",
-            status=py_trees.common.Status.FAILURE
+            status=py_trees.common.Status.FAILURE,
+            robot_interface=self.robot_interface
         )
 
         # Charge sequence

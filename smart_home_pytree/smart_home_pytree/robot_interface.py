@@ -6,6 +6,9 @@ import threading
 from std_msgs.msg import String
 from geometry_msgs.msg import PoseWithCovarianceStamped
 
+from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
+
+
 class RobotState:
     """Thread-safe singleton state container."""
 
@@ -69,9 +72,15 @@ class RobotInterface(Node):
 
         super().__init__('robot_interface')
         self.state = RobotState()
-        
+        self.qos_profile = QoSProfile(
+            reliability=ReliabilityPolicy.RELIABLE,        # RELIABLE
+            history=HistoryPolicy.KEEP_LAST,              # KEEP_LAST
+            depth=1,                                      # Depth 1
+            durability=DurabilityPolicy.TRANSIENT_LOCAL   # TRANSIENT_LOCAL
+        )
+
         # Subscriptions
-        self.create_subscription(PoseWithCovarianceStamped, "/amcl_pose", self.amcl_callback, 10)
+        self.create_subscription(PoseWithCovarianceStamped, "/amcl_pose", self.amcl_callback, self.qos_profile)
         self.create_subscription(String, 'robot_location', self.robot_location_callback, 10)
         self.create_subscription(String, 'person_location', self.person_location_callback, 10)
         
@@ -91,6 +100,7 @@ class RobotInterface(Node):
         self.state.update('robot_location_xy', None)
     
     def amcl_callback(self, msg):
+        print("updating rbot amcl")
         x = msg.pose.pose.position.x
         y = msg.pose.pose.position.y
         self.state.update('robot_location_xy', (x,y))

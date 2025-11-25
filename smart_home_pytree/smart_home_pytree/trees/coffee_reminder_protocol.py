@@ -58,9 +58,9 @@ class CoffeeReminderProtocolTree(BaseTreeRunner):
             key=f"{protocol_name}_done.{text_1}_done",
             expected_value=True,
         )
-        
+
         read_script_tree_1 = ReadScriptTree(node_name=f"{self.node_name}_read_first_script", robot_interface=self.robot_interface)
-        read_script_reminder_1 = read_script_tree_1.create_tree(protocol_name=protocol_name,text_number=text_1)
+        read_script_reminder_1 = read_script_tree_1.create_tree(protocol_name=protocol_name,data_key=text_1)
         
         read_script_1_with_check.add_children([condition_1, read_script_reminder_1])
         

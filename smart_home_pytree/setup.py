@@ -35,7 +35,7 @@ setup(
             'move_to_tree = smart_home_pytree.trees.move_to_tree:main',
             'undocking = robot_actions.undocking:main',
             'docking = robot_actions.docking:main',
-            'play_video = robot_actions.docking:main',
+            'play_video = robot_actions.play_video=:main',
             'smart_plug = smart_sensors.smart_plug_node:main',
         ],
     },

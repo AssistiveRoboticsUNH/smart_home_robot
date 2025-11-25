@@ -1,5 +1,0 @@
-
----
-bool result
----
-bool running # returns true if running

@@ -12,12 +12,14 @@ class RobotPersonSameLocation(py_trees.behaviour.Behaviour):
     """
     Node that checks if robot and person are in the same location
     """
-    def __init__(self, robot_interface, name="RobotPersonSameLocation", distance_threshold=1.0, debug=False):
+    def __init__(self, robot_interface, name="RobotPersonSameLocation", distance_threshold=1.0, debug=True):
         super().__init__(name)
         self.robot_interface = robot_interface
         self.debug_enabled = debug
         self.distance_threshold = distance_threshold
-    
+        self.blackboard = py_trees.blackboard.Blackboard()
+        self.locations = self.blackboard.get("locations")
+        print("self.locations", self.locations)
     def debug(self, msg):
         if self.debug_enabled:
             print(f"[DEBUG - {self.name}] {msg}")
@@ -39,15 +41,12 @@ class RobotPersonSameLocation(py_trees.behaviour.Behaviour):
         self.debug(f"robot_location_xy = {robot_xy}")
         
 
-        # Blackboard locations table
-        bb = py_trees.blackboard.Blackboard()
-        locations = bb.get("locations", {})
 
-        if person_location not in locations:
+        if person_location not in self.locations:
             self.debug(f"Person location '{person_location}' not in locations table → FAILURE")
             return py_trees.common.Status.FAILURE
 
-        target = locations[person_location]
+        target = self.locations[person_location]
         target_x = target["x"]
         target_y = target["y"]
 
@@ -59,7 +58,7 @@ class RobotPersonSameLocation(py_trees.behaviour.Behaviour):
             self.debug(f"Using AMCL coordinates = ({robot_x:.3f}, {robot_y:.3f})")
         else:
             self.debug(f"robot_location (name) = {robot_location}")
-            if robot_location not in locations:
+            if robot_location not in self.locations:
                 self.debug("Fallback robot location name missing from table → FAILURE")
                 return py_trees.common.Status.FAILURE
 

@@ -1,3 +1,5 @@
 python-math
 python-kasa
 asyncio
+gTTS
+discord

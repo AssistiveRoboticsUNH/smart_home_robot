@@ -29,14 +29,14 @@ class DisplayNode(Node):
         tx_port = self.get_parameter('zmq_tx_port').value
         rx_port = self.get_parameter('zmq_rx_port').value
         interval = self.get_parameter('protocol_publish_interval_sec').value
-        intersection_file_path = self.get_parameter('intersection_file_path').value
+        # intersection_file_path = self.get_parameter('intersection_file_path').value
         webapp_file_path = self.get_parameter('webapp_file_path').value
         alive_log_interval = self.get_parameter('alive_log_interval_sec').value
 
         # Load JSON routines
-        self.protocol_manager = ProtocolManager(
-            str(self.get_package_share_directory() / 'config' / 'protocol_routines.json'), intersection_file_path
-        )
+        # self.protocol_manager = ProtocolManager(
+        #     str(self.get_package_share_directory() / 'config' / 'protocol_routines.json'), intersection_file_path
+        # )
 
         self.zmq = ZmqInterface(tx_port, rx_port)
         time.sleep(1) # Allow 1 second for zmq connection to establish
@@ -46,14 +46,14 @@ class DisplayNode(Node):
         self.rx_pub = self.create_publisher(String, 'display_rx', 10)
 
         # Timers
-        self.create_timer(interval, self.publish_protocols)
+        # self.create_timer(interval, self.publish_protocols)
         self.create_timer(0.5, self.poll_app_responses)
         self.create_timer(alive_log_interval, self.periodic_alive_log)
 
         self.display_alive = False
 
         # Publish once immediately
-        self.publish_protocols()
+        # self.publish_protocols()
 
         deadline = time.time() + 2
         while time.time() < deadline:
@@ -85,10 +85,10 @@ class DisplayNode(Node):
         from ament_index_python.packages import get_package_share_directory
         return pathlib.Path(get_package_share_directory('shr_display'))
 
-    def publish_protocols(self):
-        self.protocol_manager.update_protocol_json()
-        msg_string = self.protocol_manager.get_as_string()
-        self.zmq.send(msg_string)
+    # def publish_protocols(self):
+    #     self.protocol_manager.update_protocol_json()
+    #     msg_string = self.protocol_manager.get_as_string()
+    #     self.zmq.send(msg_string)
 
     def poll_app_responses(self):
         response = self.zmq.receive()

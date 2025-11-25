@@ -18,27 +18,13 @@ find_package(geometry_msgs REQUIRED)
 include_directories(${geometry_msgs_INCLUDE_DIRS})
 
 set(msg_files
-        msg/MidnightWarningProtocol.msg
-        msg/MedicineReminderProtocol.msg
-        msg/FoodReminderProtocol.msg
-        msg/ActionRecord.msg
         msg/WorldState.msg
-        msg/LocationFromCamera.msg
-        msg/SuccessProtocol.msg
         )
 
 set(action_files
         action/CallRequest.action
-        action/PlayAudioRequest.action
         action/PlayVideoRequest.action
-        action/ReadScriptRequest.action
-        action/RecognizeRequest.action
-        action/RotateRequest.action
-        action/DeepFakeRequest.action
-        action/NavigateToPose.action
-        action/TextRequest.action
         action/DockingRequest.action
-        action/QuestionResponseRequest.action
         )
 
 rosidl_generate_interfaces(shr_msgs
