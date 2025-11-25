@@ -1,7 +1,5 @@
 # Smart Home Pytree
 
-This project is being developed at and for the University of New Hampshire’s [Cognitive Assistive Robotics Lab](https://github.com/AssistiveRoboticsUNH) under NIH support.  
-
 
 ## Overview
 
