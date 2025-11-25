@@ -12,9 +12,11 @@ git clone https://github.com/splintered-reality/py_trees
 git clone https://github.com/splintered-reality/py_trees_ros/
 git clone https://github.com/splintered-reality/py_trees_ros_viewer
 git clone https://github.com/splintered-reality/py_trees_ros_interfaces
-git clone https://github.com/olaghattas/smart_home_pytree
+git clone https://github.com/AssistiveRoboticsUNH/smart_home_robot
 
-cd ~/smart_home_pytree_ws 
+pip install -r requirements.txt
+
+cd ~/smarthome_ws 
 colcon build --symlink-install
 source install/setup.bash
 
@@ -93,3 +95,9 @@ helper commands:
 to find free ports
  for port in {5556..5600}; do   if ! ss -tuln | grep -q ":$port "; then     echo "Port $port is free";   fi; done
 
+### Set up Webapp
+Install the application in https://github.com/AssistiveRoboticsUNH/Hello_Face on your tablet
+
+1. Connect the tablet to your laptop and copy the Hello_Face.apk in the apk folder to the Download folder on your tablet.
+2. go to the Download folder on your tablet and click on the apk file to install it.
+3. Set your Robot IP & Help Number (Swipe from left → Settings → enter values → Save.)
