@@ -1,0 +1,42 @@
+[
+  {
+    "protocol": "Morning Med: Droxidopa and CARB at 7:00 AM",
+    "provided": false,
+    "confirmed": true
+  },
+  {
+    "protocol": "Breakfast at 9:00 AM",
+    "provided": false,
+    "confirmed": true
+  },
+  {
+    "protocol": "Morning Med: Medodrine at 10:00 AM",
+    "provided": false,
+    "confirmed": false
+  },
+  {
+    "protocol": "Lunch at 12:00 PM",
+    "provided": false,
+    "confirmed": false
+  },
+  {
+    "protocol": "Afternoon Med: Droxidopa and CARB at 1:00 PM",
+    "provided": false,
+    "confirmed": false
+  },
+  {
+    "protocol": "Meal at 4:00 PM",
+    "provided": false,
+    "confirmed": false
+  },
+  {
+    "protocol": "Afternoon Med: Droxidopa and CARB at 5:00 PM",
+    "provided": false,
+    "confirmed": false
+  },
+  {
+    "protocol": "Dinner at 7:00 PM",
+    "provided": false,
+    "confirmed": false
+  }
+]

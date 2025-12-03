@@ -10,18 +10,9 @@ def load_locations_to_blackboard(yaml_path: str):
     
     # Get blackboard
     blackboard = py_trees.blackboard.Blackboard()
-
-    ## singleton-style check. To prevent writing data multiple times since it will be used
-    ## in the subtrees.
-    # --- Singleton guard ---
-    # if getattr(blackboard, "initialized", False):
-    #     # Already done → skip reloading
-    #     print("shuwe heta")
-    #     return blackboard
     
     try:
         blackboard.get('initialized')
-        # print("shuwe heta")
         return blackboard
     except:
         pass

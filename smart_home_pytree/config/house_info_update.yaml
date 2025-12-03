@@ -1,0 +1,105 @@
+## store infromation needed for all protocols
+locations:
+  kitchen:
+    x: 0.5
+    y: 1.44
+    yaw: 0.78     # 45 degrees ≈ 0.78 rad
+  living_room:
+    x: 1.94
+    y: -0.4
+    yaw: -0.3
+  home:
+    x: 0.5
+    y: -1.4
+    yaw: 3.14     # π rad (180 degrees)
+
+## need to be integerated to have robot interface get its info 
+person_location_topic: "person_location"
+robot_location_topic: "robot_location"
+
+# available type: ## todo set it in a way to verifiy htat yaml doesnt include 
+## undefined types: text, audio, video, question_answer 
+
+###
+# day:[] or not there means everyday
+# optional
+# reset_pattern optional         reset_pattern:
+          # hours: 1
+          # minutes: 30
+          # atleast one hours or minutes need to be there
+
+# different types of pattern:
+# everytime the protocol is triggered it will be reset
+## make sure that /topic are turned to false
+## reset after 5 mins
+# reset_pattern:
+#   type: on_trigger 
+
+# reset_pattern:
+#   type: periodic
+#   hours: 1
+#   minutes: 30
+
+## this will be reset depending on the value of blackboard key
+# reset_pattern:
+#   blackboard_key: last_reset_timestamp 
+
+###
+protocols:
+  TwoReminderProtocol:
+    medicine_am:
+      permissible_locations: TO BE INCORPORATED
+      low_level:
+        first_reminder: "/home/olagh48652/smart-home/src/smart-home-robot/shr_resources/resources/food_reminder.mp3" #"please take your morning medicine"
+        type_first: audio
+        second_reminder: "/home/olagh48652/smart-home/src/smart-home-robot/shr_resources/resources/food_reminder.mp3" #"This is the second reminder to take your morning medicine"
+        type_second: audio
+        wait_time_between_reminders: 5
+      high_level:
+        priority: 2
+        reset_pattern:
+          type: periodic
+          minutes: 1
+        requirements: 
+          time: {'from': '1:30', 'to': '5:00'}
+
+    medicine_pm:
+      low_level:
+        first_reminder: "please take your night medicine"
+        type_first: text
+        second_reminder: "This is the second reminder to take your night medicine"
+        type_second: text
+        wait_time_between_reminders: 5
+      high_level: 
+      
+        priority: 2
+        requirements: 
+          day: [monday, wednesday, friday]
+          time: {'from': '22:00', 'to': '23:00'}
+
+  CoffeeProtocol:
+    coffee:
+      low_level:
+        first_text: "please clean the dishes"
+      high_level:
+        reset_pattern:
+          type: periodic
+          hours: 1
+          minutes: 30
+        priority: 3
+        requirements: 
+          event: 
+            - {'topic': '/coffee', 'value': True}
+            - {'topic': '/coffee_pot', 'value': True}
+          time: {'from': '09:00', 'to': '13:00'}
+  
+  # EmergencyProtocol:
+  #   emergency:
+  #     low_level:
+  #       alert_message: "/home/olagh48652/smart-home/src/smart-home-robot/shr_resources/resources/emergency_alert.mp3"
+  #       type_alert: audio
+  #     high_level:
+  #       priority: 1
+  #       requirements:
+  #         event:
+  #           - {'topic': '/emergency', 'value': True}
