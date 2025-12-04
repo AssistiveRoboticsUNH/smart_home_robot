@@ -92,8 +92,8 @@ class BaseMockActionServer(Node):
                 self.completed = False
                 self.complete_time = time.time()
                 return result
-
-            time.sleep(self._check_period)  # non-blocking-ish delay
+            print("waiting for action server wait time to end")
+            time.sleep(self._check_period)  # non-blocking delay
             elapsed = time.time() - self.trigger_time
 
         # Post-wait: determine outcome

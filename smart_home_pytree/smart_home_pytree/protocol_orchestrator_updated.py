@@ -10,7 +10,9 @@ from smart_home_pytree.trees.two_reminder_protocol import TwoReminderProtocolTre
 from smart_home_pytree.trees.charge_robot_tree import ChargeRobotTree
 from smart_home_pytree.robot_interface import get_robot_interface
 from smart_home_pytree.trees.coffee_reminder_protocol import CoffeeReminderProtocolTree
-
+from smart_home_pytree.trees.move_away_protocol import MoveAwayProtocolTree
+import py_trees        
+from smart_home_pytree.registry import load_protocols_to_bb
 
 #  TRIGGER MONITOR 
 class TriggerMonitor:
@@ -449,7 +451,9 @@ class ProtocolOrchestrator:
             print(f"[Orchestrator]  coffee_protocol_tree for {protocol_name}")
             self.trigger_monitor.set_complete_specific_protocol(sub_name)
             self.trigger_monitor.mark_completed(protocol_name)
-            
+        elif "MoveAwayProtocol" in protocol_name:
+            self.trigger_monitor.set_complete_specific_protocol(sub_name)
+            self.trigger_monitor.mark_completed(protocol_name)
         elif "ChargeRobotTree" in protocol_name:
             print(f"[Orchestrator]  charge_robot_tree for {protocol_name}")
         else:
@@ -477,6 +481,10 @@ class ProtocolOrchestrator:
         elif "CoffeeProtocol" in protocol_name:
             tree_runner = CoffeeReminderProtocolTree(
                 node_name="coffee_protocol_tree", protocol_name=sub_name, robot_interface=self.robot_interface 
+            )
+        elif "MoveAwayProtocol" in protocol_name:
+            tree_runner = MoveAwayProtocolTree(
+                node_name="move_away_tree", protocol_name=sub_name, robot_interface=self.robot_interface 
             )
         elif "ChargeRobotTree" in protocol_name:
             tree_runner = ChargeRobotTree(node_name="charge_robot_tree",robot_interface=self.robot_interface)
@@ -529,16 +537,15 @@ class ProtocolOrchestrator:
         print("[Orchestrator] Shutdown complete.")
 
         
-import py_trees        
-from smart_home_pytree.registry import load_protocols_to_bb
+
 if __name__ == "__main__":
     import time
     yaml_file_path = os.getenv("house_yaml_path", None)
     blackboard = py_trees.blackboard.Blackboard()
     load_protocols_to_bb(yaml_file_path)
     # For testing:
-    # orch = ProtocolOrchestrator(test_time="10:30")
-    orch = ProtocolOrchestrator()
+    orch = ProtocolOrchestrator(test_time="10:30")
+    # orch = ProtocolOrchestrator()
     # For live use:
     # orch = ProtocolOrchestrator()
 
@@ -548,7 +555,7 @@ if __name__ == "__main__":
     # ]
 
     try:
-        orch.orchestrator_loop(mock=True)
+        orch.orchestrator_loop(mock=False)
     except KeyboardInterrupt:
         print("Shutting down orchestrator...")
         orch.shutdown()

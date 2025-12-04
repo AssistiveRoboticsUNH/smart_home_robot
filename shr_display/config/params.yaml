@@ -1,7 +1,7 @@
 shr_display:
   ros__parameters:
-    zmq_tx_port: 5556 #5556
-    zmq_rx_port: 5557 #5557
+    zmq_tx_port: 5568 #5556
+    zmq_rx_port: 5578 #5557
     protocol_publish_interval_sec: 10
     alive_log_interval_sec: 10
     intersection_file_path: "/home/hello-robot/smarthome_ws/src/smart_home_robot/shr_display/config/intersection.txt"

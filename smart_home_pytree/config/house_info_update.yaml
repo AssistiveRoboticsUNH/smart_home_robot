@@ -71,7 +71,6 @@ protocols:
         type_second: text
         wait_time_between_reminders: 5
       high_level: 
-      
         priority: 2
         requirements: 
           day: [monday, wednesday, friday]

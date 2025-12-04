@@ -282,7 +282,7 @@ class ProtocolOrchestrator:
                     self.stop_protocol()
                     self.start_protocol(next_protocol)
 
-            time.sleep(1)
+            time.sleep(3) ## more than start_monitor that updated self.satisfied
 
     def _run_protocol(self, tree_runner, protocol_name, priority):
         """Run a protocol tree and clean up when done."""
@@ -329,7 +329,7 @@ class ProtocolOrchestrator:
             )
         elif "MoveAwayProtocol" in protocol_name:
             tree_runner = MoveAwayProtocolTree(
-                node_name="coffee_protocol_tree", protocol_name=sub_name, robot_interface=self.robot_interface 
+                node_name="move_away_tree", protocol_name=sub_name, robot_interface=self.robot_interface 
             )
         elif "ChargeRobotTree" in protocol_name:
             tree_runner = ChargeRobotTree(node_name="charge_robot_tree",robot_interface=self.robot_interface)

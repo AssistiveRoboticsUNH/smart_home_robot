@@ -95,6 +95,10 @@ helper commands:
 to find free ports
  for port in {5556..5600}; do   if ! ss -tuln | grep -q ":$port "; then     echo "Port $port is free";   fi; done
 
+run video action 
+
+ros2 action send_goal /play_video shr_msgs/action/PlayVideoRequest "file_name: 'file:///storage/emulated/0/Download/maggie_coffee.mp4'"
+
 ### Set up Webapp
 Install the application in https://github.com/AssistiveRoboticsUNH/Hello_Face on your tablet
 

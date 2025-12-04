@@ -12,7 +12,7 @@ class RobotPersonSameLocation(py_trees.behaviour.Behaviour):
     """
     Node that checks if robot and person are in the same location
     """
-    def __init__(self, robot_interface, name="RobotPersonSameLocation", distance_threshold=1.0, debug=True):
+    def __init__(self, robot_interface, name="RobotPersonSameLocation", distance_threshold=0.5, debug=True):
         super().__init__(name)
         self.robot_interface = robot_interface
         self.debug_enabled = debug
@@ -79,7 +79,7 @@ class RobotPersonSameLocation(py_trees.behaviour.Behaviour):
         # --- Within threshold ---
         if distance <= self.distance_threshold:
             state.update("robot_location", person_location)
-            self.debug(f"Robot is within 1 meter → setting robot_location = {person_location}")
+            self.debug(f"Robot is within {self.distance_threshold} meter → setting robot_location = {person_location}")
             return py_trees.common.Status.SUCCESS
 
         self.debug("Robot not close enough → FAILURE")

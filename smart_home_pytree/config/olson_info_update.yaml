@@ -10,8 +10,8 @@ locations:
     y: 1.9037660360336304
     yaw: 0.0       # facing forward
   home:
-    x: 0.85 #2.6955928802490234
-    y: 1.014 #3.3216073513031006
+    x: 2.6955928802490234 #0.85 #
+    y: 3.3216073513031006 #1.014 #
     yaw: -1.5708   # -90 degrees
 
   dining:
@@ -39,6 +39,9 @@ protocols:
         wait_time_between_reminders: 100
       high_level:
         priority: 2
+        reset_pattern:
+          type: periodic
+          minutes: 60
         requirements: 
           time: {'from': '10:00', 'to': '11:00'}
 
@@ -52,6 +55,7 @@ protocols:
       high_level: 
         priority: 2
         requirements: 
+          day: [monday, wednesday, friday]
           time: {'from': '22:00', 'to': '23:00'}
 
 ## add topics with /
@@ -61,6 +65,10 @@ protocols:
         first_text: "please clean the dishes"
       high_level:
         priority: 3
+        reset_pattern:
+          type: periodic
+          hours: 1
+          minutes: 30
         requirements: 
           event: 
             - {'topic': '/coffee', 'value': True}

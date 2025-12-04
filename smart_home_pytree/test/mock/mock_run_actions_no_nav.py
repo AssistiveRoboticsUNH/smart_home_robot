@@ -30,13 +30,12 @@ def main():
     
     robot_interface = RobotInterface()
     
-    
     mock_dock_server = BaseMockActionServer(
         action_name='/docking',
         action_type=DockingRequest,
         result_cls=DockingRequest.Result,
         succeed=True,
-        wait_time=1.0 
+        wait_time=30.0 
     )
 
     mock_undock_server = BaseMockActionServer(
@@ -44,7 +43,7 @@ def main():
         action_type=DockingRequest,
         result_cls=DockingRequest.Result,
         succeed=True,
-        wait_time=1.0 
+        wait_time=30.0 
     )
     
     executor = MultiThreadedExecutor()
