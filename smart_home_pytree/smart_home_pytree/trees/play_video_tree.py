@@ -13,21 +13,23 @@ from smart_home_pytree.trees.move_to_person_location import MoveToPersonLocation
 from smart_home_pytree.trees.charge_robot_tree import ChargeRobotTree
 from smart_home_pytree.behaviors.set_protocol_bb import SetProtocolBB
 from smart_home_pytree.registry import load_protocols_to_bb 
-
-
+from shr_msgs.action import PlayVideoRequest
+import py_trees_ros
 """
 
 This script is responsible for reading a script to the person at their location and then charging the robot.
+The reason for adding this tree and not using the action client directly is becasue after the action client we need to set the variable indicating
+that play audio was successful to true.
 
 """
 
-class PlayAudioTree(BaseTreeRunner):      
+class PlayVideoTree(BaseTreeRunner):      
     def __init__(self, node_name: str, robot_interface=None,
-        protocol_name: str = None,  ## for tests
+        protocol_name: str = None, 
         data_key: str = None,
         **kwargs):
         """
-        Initialize the PlayAudioTree.
+        Initialize the PlayVideoTree.
 
         Args:
             node_name (str): name of the ROS node.
@@ -46,9 +48,9 @@ class PlayAudioTree(BaseTreeRunner):
     def create_tree(self, protocol_name: str = None,
         data_key: str = None) -> py_trees.behaviour.Behaviour:
         """
-        Creates the PlayAudioTree tree:
+        Creates the PlayVideoTree tree:
         Sequence:
-            MoveToPersonLocation -> ReadScript -> ChargeRobot
+            MoveToPersonLocation -> Play video -> ChargeRobot
         
         Args:
             protocol_name (str): which protocol does this play audio belong to (same name as in yaml)
@@ -66,7 +68,7 @@ class PlayAudioTree(BaseTreeRunner):
         protocol_info = blackboard.get(protocol_name)
 
         data_key = data_key or self.data_key 
-        audio_path = protocol_info[data_key]
+        video_path = protocol_info[data_key]
         
         move_to_person_tree = MoveToPersonLocationTree(node_name=f"{protocol_name}_move_to_person", robot_interface=self.robot_interface)
         move_to_person = move_to_person_tree.create_tree()
@@ -75,17 +77,26 @@ class PlayAudioTree(BaseTreeRunner):
         charge_robot = charge_robot_tree.create_tree()
 
         # Custom behaviors
-        play_audio_reminder = play_audio.PlayAudio(name=f"{protocol_name}_play_audio", audio_path=audio_path)
+        video_goal = PlayVideoRequest.Goal()
+        video_goal.file_name = video_path
         
-        set_play_audio_success = SetProtocolBB(name = "play_audio_set_bb", key=f"{protocol_name}_done.{data_key}_done", value = True)
+        play_video_reminder = py_trees_ros.actions.ActionClient(
+            name="Play_video",
+            action_type=PlayVideoRequest,
+            action_name="play_video",
+            action_goal=video_goal,
+            wait_for_server_timeout_sec=120.0
+        )
+        
+        set_play_video_success = SetProtocolBB(name = "play_video_set_bb", key=f"{protocol_name}_done.{data_key}_done", value = True)
     
         # Root sequence
-        root_sequence = py_trees.composites.Sequence(name=f"{protocol_name}_play_audio", memory=True)
+        root_sequence = py_trees.composites.Sequence(name=f"{protocol_name}_play_video", memory=True)
 
         root_sequence.add_children([
             move_to_person,
-            play_audio_reminder,
-            set_play_audio_success,
+            play_video_reminder,
+            set_play_video_success,
             charge_robot,
         ])
         
@@ -98,7 +109,7 @@ def str2bool(v):
 import os
 def main(args=None):    
     parser = argparse.ArgumentParser(
-        description="""Play Audio Tree 
+        description="""Play Video Tree 
         
         Handles Playing the Audio logic where robot and person need to be in the same location before audio is played:
         1. Retries up to num_attempts times if needed
@@ -121,8 +132,8 @@ def main(args=None):
     blackboard = py_trees.blackboard.Blackboard()
     load_protocols_to_bb(yaml_file_path)
     
-    tree_runner = PlayAudioTree(
-        node_name="play_audio_tree",
+    tree_runner =PlayVideoTree(
+        node_name="play_video_tree",
         protocol_name=protocol_name,
         data_key=data_key
     )

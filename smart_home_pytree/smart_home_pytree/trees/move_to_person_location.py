@@ -62,12 +62,12 @@ class MoveToPersonLocationTree(BaseTreeRunner):
         get_person_room = GetPersonLocation(self.robot_interface)
         
         ## get_person_room would give failure if person_location is not set or not valid
-        move_to_home_tree = MoveToLocationTree(
+        move_to_room_tree = MoveToLocationTree(
             node_name="move_to_location_tree",
             robot_interface=self.robot_interface,
             location_key = "person_location"
         )
-        move_to_room = move_to_home_tree.create_tree()
+        move_to_room = move_to_room_tree.create_tree()
         robot_same_room_post = RobotPersonSameLocation(self.robot_interface)
     
         go_to_person_sequence = py_trees.composites.Sequence("GotoPersonRoutine", memory=True)

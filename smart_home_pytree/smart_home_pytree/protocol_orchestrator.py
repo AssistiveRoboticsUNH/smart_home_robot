@@ -10,7 +10,7 @@ from smart_home_pytree.trees.two_reminder_protocol import TwoReminderProtocolTre
 from smart_home_pytree.trees.charge_robot_tree import ChargeRobotTree
 from smart_home_pytree.robot_interface import get_robot_interface
 from smart_home_pytree.trees.coffee_reminder_protocol import CoffeeReminderProtocolTree
-
+from smart_home_pytree.trees.move_away_protocol import MoveAwayProtocolTree
 
 #  TRIGGER MONITOR 
 class TriggerMonitor:
@@ -172,7 +172,7 @@ class TriggerMonitor:
             
             current_events = self._collect_current_events()
             new_satisfied = self.satisfied_protocols(current_events, current_time=current_time)
-            
+
             print("**************** new_satisfied: ", new_satisfied)
             
             with self.lock:
@@ -193,8 +193,6 @@ class TriggerMonitor:
     def stop_monitor(self):
         self.stop_flag = True
 
-    
-
 
 # PROTOCOL ORCHESTRATOR 
 class ProtocolOrchestrator:
@@ -213,7 +211,6 @@ class ProtocolOrchestrator:
                 self.rclpy_initialized_here = False
                 print(" self.rclpy_initialized_here should be false: ", self.rclpy_initialized_here)
 
-        
         if  robot_interface is None:
             print("initialize robot interface")
             self.robot_interface=get_robot_interface()
@@ -330,6 +327,10 @@ class ProtocolOrchestrator:
             tree_runner = CoffeeReminderProtocolTree(
                 node_name="coffee_protocol_tree", protocol_name=sub_name, robot_interface=self.robot_interface 
             )
+        elif "MoveAwayProtocol" in protocol_name:
+            tree_runner = MoveAwayProtocolTree(
+                node_name="coffee_protocol_tree", protocol_name=sub_name, robot_interface=self.robot_interface 
+            )
         elif "ChargeRobotTree" in protocol_name:
             tree_runner = ChargeRobotTree(node_name="charge_robot_tree",robot_interface=self.robot_interface)
         else:
@@ -383,6 +384,7 @@ class ProtocolOrchestrator:
         
 import py_trees        
 from smart_home_pytree.registry import load_protocols_to_bb
+
 if __name__ == "__main__":
     import time
     yaml_file_path = os.getenv("house_yaml_path", None)

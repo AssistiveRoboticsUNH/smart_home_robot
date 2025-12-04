@@ -45,6 +45,7 @@ protocols:
         priority: 2
         requirements: 
           time: {'from': '22:00', 'to': '23:00'}
+          
 ## add topics with /
   CoffeeProtocol:
     coffee:
@@ -57,6 +58,16 @@ protocols:
             - {'topic': '/coffee', 'value': True}
             - {'topic': '/coffee_pot', 'value': True}
           time: {'from': '09:00', 'to': '13:00'}
+  
+  MoveAwayProtocol:
+    move_away:
+      low_level:
+        position_state_key: position # indicates which key it should refer to in the state dictionary
+      high_level:
+        priority: 1
+        requirements: 
+          event: 
+            - {'topic': '/move_away', 'value': True}  
 
     # coffee:
     #   low_level:

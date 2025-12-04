@@ -10,15 +10,14 @@ Helper script to avoid repeating code for differnt protocols
 
 from smart_home_pytree.trees.play_audio_tree import PlayAudioTree 
 from smart_home_pytree.trees.read_script_tree import ReadScriptTree
-from shr_msgs.action import PlayVideoRequest
+from smart_home_pytree.trees.play_video_tree import PlayVideoTree
 import py_trees_ros
 
 def make_reminder_tree(reminder_type: str,
                 node_name: str,
                 robot_interface,
                 protocol_name: str,
-                data_key: str,
-                wait_time_key: str | None = None):
+                data_key: str):
     """
     Returns a behavior tree subtree for the given reminder type.
     """
@@ -27,26 +26,19 @@ def make_reminder_tree(reminder_type: str,
         tree = ReadScriptTree(node_name=node_name,
                                 robot_interface=robot_interface)
         return tree.create_tree(protocol_name=protocol_name,
-                                data_key=data_key,
-                                wait_time_key=wait_time_key)
+                                data_key=data_key)
 
     elif reminder_type == "audio":
         tree = PlayAudioTree(node_name=node_name,
                                 robot_interface=robot_interface)
         return tree.create_tree(protocol_name=protocol_name,
-                                data_key=data_key,
-                                wait_time_key=wait_time_key)
+                                data_key=data_key)
         
     elif  reminder_type == "video":
-        video_goal = PlayVideoRequest.Goal()
-        
-        return py_trees_ros.actions.ActionClient(
-            name="Dock_Robot",
-            action_type=PlayVideoRequest,
-            action_name="play_video",
-            action_goal=video_goal,
-            wait_for_server_timeout_sec=120.0
-        )
+        tree = PlayVideoTree(node_name=node_name,
+                                robot_interface=robot_interface)
+        return tree.create_tree(protocol_name=protocol_name,
+                                data_key=data_key)
     else:
         raise ValueError(f"Unknown reminder type: {reminder_type} available types are text, audio, video, question_answer ")
     

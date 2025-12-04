@@ -13,12 +13,9 @@ from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
 import yaml
 import argparse
 
-from smart_home_pytree.trees.play_audio_tree import PlayAudioTree 
-from smart_home_pytree.trees.read_script_tree import ReadScriptTree
 from smart_home_pytree.registry import load_protocols_to_bb
 from smart_home_pytree.behaviors.check_protocol_bb import CheckProtocolBB
-from shr_msgs.action import PlayVideoRequest
-import py_trees_ros
+from smart_home_pytree.trees.wait_tree import WaitTree
 
 from smart_home_pytree.trees.tree_utils import make_reminder_tree
     
@@ -72,18 +69,31 @@ class TwoReminderProtocolTree(BaseTreeRunner):
             expected_value=True,
         )
         
-        
         first_tree = make_reminder_tree(
             reminder_type=type_1,
             node_name=f"{self.node_name}_first",
             robot_interface=self.robot_interface,
             protocol_name=protocol_name,
-            data_key=reminder_1,
-            wait_time_key=wait_time_key  # only first needs wait
+            data_key=reminder_1
         )
         
         first_selector.add_children([condition_1, first_tree])
         
+        wait_selector = py_trees.composites.Selector("Run wait if needed", memory=True)
+        
+        condition_wait = CheckProtocolBB(
+            name="Should Run wait?",
+            key=f"{protocol_name}_done.{wait_time_key}_done",
+            expected_value=True,
+        )
+        
+        wait_tree_init = WaitTree(node_name=f"{self.node_name}_wait",
+                                robot_interface=self.robot_interface)
+        wait_tree = wait_tree_init.create_tree(protocol_name=protocol_name,
+                                wait_time_key=wait_time_key)
+        
+        wait_selector.add_children([condition_wait, wait_tree])
+
         reminder_2 = "second_reminder"
         second_selector = py_trees.composites.Selector("Run Second Script if needed", memory=True)
         condition_2 = CheckProtocolBB(
@@ -108,6 +118,7 @@ class TwoReminderProtocolTree(BaseTreeRunner):
         # Add behaviors in order
         root_sequence.add_children([
             first_selector,
+            wait_selector,
             second_selector,
         ])
 

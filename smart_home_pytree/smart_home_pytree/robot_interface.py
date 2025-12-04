@@ -84,6 +84,10 @@ class RobotInterface(Node):
         self.create_subscription(String, 'robot_location', self.robot_location_callback, 10)
         self.create_subscription(String, 'person_location', self.person_location_callback, 10)
         
+        ## can be postion1 or position 2
+        self.create_subscription(String, 'position', self.position_location_callback, 10)
+        self.create_subscription(Bool, 'move_away', self.move_away_callback, 10)
+        
         ## subcription for protocol events
         self.create_subscription(Bool, 'coffee', self.coffee_callback, 10)
         self.create_subscription(Bool, 'coffee_pot', self.coffee_pot_callback, 10)
@@ -123,6 +127,10 @@ class RobotInterface(Node):
         self.get_logger().debug(f"Robot location: {msg.data}")
         self.state.update('robot_location', msg.data)
 
+    def position_location_callback(self, msg):
+        self.get_logger().debug(f"Position location: {msg.data}")
+        self.state.update('position', msg.data)
+        
     def person_location_callback(self, msg):
         self.get_logger().debug(f"Person location: {msg.data}")
         self.state.update('person_location', msg.data)
@@ -130,6 +138,10 @@ class RobotInterface(Node):
     def charging_callback(self, msg):
         self.get_logger().debug(f"Charging: {msg.data}")
         self.state.update('charging', msg.data)
+        
+    def move_away_callback(self, msg):
+        self.get_logger().debug(f"Move away: {msg.data}")
+        self.state.update('move_away', msg.data)
         
     def coffee_callback(self, msg):
         self.get_logger().debug(f"coffee : {msg.data}")
@@ -149,7 +161,6 @@ def get_robot_interface():
     if not rclpy.ok():
         rclpy.init()
     return RobotInterface()
-
 
 def main():
     rclpy.init()

@@ -8,7 +8,7 @@ import rclpy
 from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
 
 import argparse
-from smart_home_pytree.behaviors.action_behaviors import read_script, wait
+from smart_home_pytree.behaviors.action_behaviors import read_script
 from smart_home_pytree.trees.move_to_person_location import MoveToPersonLocationTree
 from smart_home_pytree.trees.charge_robot_tree import ChargeRobotTree
 from smart_home_pytree.behaviors.set_protocol_bb import SetProtocolBB
@@ -25,9 +25,9 @@ class ReadScriptTree(BaseTreeRunner):
     def __init__(self, node_name: str, robot_interface=None,
         protocol_name: str = None,  ## for tests
         data_key: str = None,
-        wait_time_key: str = None, **kwargs):
+        **kwargs):
         """
-        Initialize the TwoReminderProtocol.
+        Initialize the ReadScriptTree.
 
         Args:
             node_name (str): name of the ROS node.
@@ -42,15 +42,13 @@ class ReadScriptTree(BaseTreeRunner):
         # Store optional configuration ONLY USED FOR TESTING
         self.protocol_name = protocol_name
         self.data_key = data_key
-        self.wait_time_key = wait_time_key
         
     def create_tree(self, protocol_name: str = None,
-        data_key: str = None,
-        wait_time_key: str = None) -> py_trees.behaviour.Behaviour:
+        data_key: str = None) -> py_trees.behaviour.Behaviour:
         """
         Creates the ReadScriptTree tree:
         Sequence:
-            MoveToPersonLocation -> ReadScript -> ChargeRobot -> Wait (optional)
+            MoveToPersonLocation -> ReadScript -> ChargeRobot
         
         Args:
             protocol_name (str): which protocol does this read script belong to (same name as in yaml)
@@ -70,13 +68,6 @@ class ReadScriptTree(BaseTreeRunner):
         data_key = data_key or self.data_key 
         text = protocol_info[data_key]
         
-        if wait_time_key is not None or self.wait_time_key is not None :
-            wait_time_key = wait_time_key or self.wait_time_key
-            wait_time = protocol_info[wait_time_key]
-        else:
-            wait_time_key = ""
-            wait_time = 0.0
-        
         
         move_to_person_tree = MoveToPersonLocationTree(node_name=f"{protocol_name}_move_to_person", robot_interface=self.robot_interface)
         move_to_person = move_to_person_tree.create_tree()
@@ -94,33 +85,16 @@ class ReadScriptTree(BaseTreeRunner):
         # name: name of the behaviour
         set_read_script_success = SetProtocolBB(name = "read_script_set_bb", key=f"{protocol_name}_done.{data_key}_done", value = True)
         
-        wait_behavior = wait.Wait(name="wait", duration_in_sec=wait_time)
-        
-        set_wait_success = SetProtocolBB(name = "wait_set_bb", key=f"{protocol_name}_done.{wait_time_key}_done", value = True)
-
         # Root sequence
         root_sequence = py_trees.composites.Sequence(name=f"{protocol_name}_read_script", memory=True)
 
-        if wait_time>0:
-            # Add behaviors in order
-            root_sequence.add_children([
-            move_to_person,
-            read_script_reminder,
-            set_read_script_success,
-            charge_robot,
-            wait_behavior,
-            set_wait_success,
-        ])
-            
-        else:
-            root_sequence.add_children([
+        root_sequence.add_children([
             move_to_person,
             read_script_reminder,
             set_read_script_success,
             charge_robot,
         ])
         
-
         return root_sequence
     
     
@@ -153,12 +127,6 @@ def main(args=None):
     
     blackboard = py_trees.blackboard.Blackboard()
     load_protocols_to_bb(yaml_file_path)
-    
-    # yaml_path = "/home/olagh48652/smart_home_pytree_ws/src/smart_home_pytree/config/house_info.yaml"
-    
-    # yaml_file_path = os.getenv("house_yaml_path", None) 
-    # load_protocol_info_from_bb(yaml_file_path, protocol_name)
-    
     
     tree_runner = ReadScriptTree(
         node_name="read_script_tree",

@@ -310,7 +310,6 @@ class TriggerMonitor:
         self.stop_flag = True
 
     
-
 # PROTOCOL ORCHESTRATOR 
 class ProtocolOrchestrator:
     def __init__(self, robot_interface = None, test_time=None):

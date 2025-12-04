@@ -20,6 +20,7 @@ class RobotPersonSameLocation(py_trees.behaviour.Behaviour):
         self.blackboard = py_trees.blackboard.Blackboard()
         self.locations = self.blackboard.get("locations")
         print("self.locations", self.locations)
+        
     def debug(self, msg):
         if self.debug_enabled:
             print(f"[DEBUG - {self.name}] {msg}")
@@ -39,8 +40,6 @@ class RobotPersonSameLocation(py_trees.behaviour.Behaviour):
         robot_location = state.get("robot_location", None)
 
         self.debug(f"robot_location_xy = {robot_xy}")
-        
-
 
         if person_location not in self.locations:
             self.debug(f"Person location '{person_location}' not in locations table → FAILURE")
@@ -69,8 +68,7 @@ class RobotPersonSameLocation(py_trees.behaviour.Behaviour):
                 print(f"[INFO] [{self.name}] Person and robot are in DIFFERENT locations -> "
                   f"Person: {person_location}, Robot: {robot_location}")
                 return py_trees.common.Status.FAILURE
-            
-            
+
         # Compute distance
         dx = robot_x - target_x
         dy = robot_y - target_y

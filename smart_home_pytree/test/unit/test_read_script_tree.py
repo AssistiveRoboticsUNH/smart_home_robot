@@ -104,16 +104,13 @@ def test_read_script_only_runs_in_same_location():
     robot_interface.state.update('person_location', 'living_room')
     robot_interface.state.update('robot_location', 'kitchen')
     
-    
-    text = "first_text"
-    wait_time_key = "wait_time_between_reminders"
+    text = "first_reminder"
   
     tree_runner = ReadScriptTree(
         node_name="read_script_test",
         robot_interface=robot_interface,
         protocol_name=protocol_name,
-        text_number=text,
-        wait_time_key=wait_time_key
+        data_key=text
     )
     
     tree_runner.setup()
@@ -142,7 +139,7 @@ def test_read_script_only_runs_in_same_location():
     
     ## assert all keys corresponding to protocol passed
     found_protocol = False
-    expected_keys_to_be_true = [f"{text}_done", f"{wait_time_key}_done" ]
+    expected_keys_to_be_true = [f"{text}_done"]
     
     for key, value in blackboard.storage.items():
         print("key:", key)
@@ -216,16 +213,13 @@ def test_read_script_shouldnt_run_in_diff_location():
     robot_interface.state.update('person_location', 'living_room')
     robot_interface.state.update('robot_location', 'kitchen')
     
-    
-    text = "first_text"
-    wait_time_key = "wait_time_between_reminders"
+    text = "first_reminder"
   
     tree_runner = ReadScriptTree(
         node_name="read_script_test",
         robot_interface=robot_interface,
         protocol_name=protocol_name,
-        text_number=text,
-        wait_time_key=wait_time_key
+        data_key=text
     )
     
     tree_runner.setup()
@@ -250,7 +244,7 @@ def test_read_script_shouldnt_run_in_diff_location():
     
     ## assert all keys corresponding to protocol passed
     found_protocol = False
-    expected_keys_to_be_true = [f"{text}_done", f"{wait_time_key}_done" ]
+    expected_keys_to_be_true = [f"{text}_done" ]
     
     for key, value in blackboard.storage.items():
         print("key:", key)
@@ -278,4 +272,4 @@ def test_read_script_shouldnt_run_in_diff_location():
     mock_undock_server.destroy_node()
     tree_runner.cleanup()
      
-# ~/smart_home_pytree_ws/src/smart_home_pytree: run  python3 -m  pytest test/unit/test_read_script_tree.py -vv
+# ~/smart_home_pytree_ws/src/smart_home_robot/smart_home_pytree and run  python3 -m  pytest test/unit/test_read_script_tree.py -vv

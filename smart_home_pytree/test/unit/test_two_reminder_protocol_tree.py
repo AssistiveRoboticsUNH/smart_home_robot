@@ -31,8 +31,6 @@ def setup_module(module):
     if not rclpy.ok():
         rclpy.init(args=None)
     
-
-    
     robot_interface = RobotInterface()
     
 def teardown_module(module):
@@ -201,7 +199,7 @@ def test_two_reminder_stops_midway_and_resumes_correctly():
     executor_thread = threading.Thread(target=executor.spin, daemon=True)
     executor_thread.start()
 
-    protocol_name = "medicine_am"
+    protocol_name = "medicine_pm"
     robot_interface.state.update('charging', False)
     robot_interface.state.update('person_location', 'living_room')
     robot_interface.state.update('robot_location', 'kitchen')
@@ -221,7 +219,6 @@ def test_two_reminder_stops_midway_and_resumes_correctly():
     def on_docking_trigger(action_name):
         print(f"[Callback] Docking triggered ({action_name})")
         robot_interface.state.update('charging', True)
-        
         
     def on_undocking_trigger(action_name):
         print(f"[Callback] Undocking triggered ({action_name})")
@@ -274,7 +271,6 @@ def test_two_reminder_stops_midway_and_resumes_correctly():
     protocol_data = blackboard.storage.get(f"/{protocol_name}_done", {})
     assert protocol_data.get("first_text_done") is True, "First reminder should stay marked done"
     assert protocol_data.get("second_text_done") is True, "Second reminder should complete after resume"
-
     assert tree_runner_2.final_status == py_trees.common.Status.SUCCESS
 
     # Cleanup
@@ -284,6 +280,5 @@ def test_two_reminder_stops_midway_and_resumes_correctly():
     mock_dock_server.destroy_node()
     mock_undock_server.destroy_node()
     tree_runner_2.cleanup()
-
-      
+     
 # ~/smart_home_pytree_ws/src/smart_home_pytree: run  python3 -m  pytest test/unit/test_two_reminder_protocol_tree.py -vv

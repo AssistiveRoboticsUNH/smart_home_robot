@@ -198,8 +198,6 @@ def main(args=None):
         tree_runner.cleanup()
         
     # Examine collected feedback
-    
-
     rclpy.shutdown()
 
 
