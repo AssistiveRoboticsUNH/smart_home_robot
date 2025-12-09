@@ -7,6 +7,22 @@
 
 ---
 
+
+## Protocol Name → File Name → Class Name
+
+    Given a protocol name in the YAML:
+        General rule:
+        YAML key is CamelCase
+        Class name = <YAMLKey>Tree
+        File name = camel_to_snake(YAMLKey)
+
+        ex: CoffeeProtocol in protocols
+
+        The following must hold:
+            1. Class name: CoffeeProtocolTree
+            2. File name: coffee_protocol.py
+            3. Location: smart_home_pytree/trees/
+
 ## Protocol YAML Structure
 
 Each protocol must be defined under the top-level key `protocols`.
@@ -80,3 +96,22 @@ protocols:
 ```
 
 ---
+
+## X_reminder_protocol
+This reminder-based protocol must define:
+
+number_of_protocols: N
+
+For every index i in the range 1..N, the following keys must be present.
+Required keys
+
+  reminder_i:
+      If type_i = text → a string message
+      If type_i = audio → a path to an .mp3 file
+      If type_i = video → a path to an .mp4 file
+
+  type_i ∈ {text, audio, video}
+
+  Optional key
+    wait_i: <seconds>
+    If omitted, sets wait to 0.

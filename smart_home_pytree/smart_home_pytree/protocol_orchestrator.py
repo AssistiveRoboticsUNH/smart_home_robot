@@ -6,13 +6,15 @@ import random
 import threading
 from datetime import datetime
 import rclpy
-from smart_home_pytree.trees.two_reminder_protocol import TwoReminderProtocolTree
+# from smart_home_pytree.trees.two_reminder_protocol import TwoReminderProtocolTree
 from smart_home_pytree.trees.charge_robot_tree import ChargeRobotTree
 from smart_home_pytree.robot_interface import get_robot_interface
-from smart_home_pytree.trees.coffee_reminder_protocol import CoffeeReminderProtocolTree
-from smart_home_pytree.trees.move_away_protocol import MoveAwayProtocolTree
+# from smart_home_pytree.trees.coffee_reminder_protocol import CoffeeReminderProtocolTree
+# from smart_home_pytree.trees.move_away_protocol import MoveAwayProtocolTree
 import py_trees        
 from smart_home_pytree.registry import load_protocols_to_bb
+import re
+import importlib
 
 #  TRIGGER MONITOR 
 class TriggerMonitor:
@@ -410,7 +412,7 @@ class ProtocolOrchestrator:
 
             time.sleep(3) ## more than start_monitor that updated self.satisfied
 
-    def _run_protocol(self, tree_runner, protocol_name, priority):
+    def _run_protocol(self, tree_runner, class_protocol_name, priority):
         """Run a protocol tree and clean up when done."""
         try:
             tree_runner.run_until_done()
@@ -418,18 +420,26 @@ class ProtocolOrchestrator:
             print("tree_runner.final_status", tree_runner.final_status)
             if (tree_runner.final_status ==  py_trees.common.Status.SUCCESS):
                 
-                if "ChargeRobotTree" not in protocol_name:
-                    self.trigger_monitor.mark_completed(protocol_name)
+                if "ChargeRobotTree" not in class_protocol_name:
+                    self.trigger_monitor.mark_completed(class_protocol_name)
                 
             # tree_runner.final_status == py_trees.common.Status.SUCCESS
 
             with self.lock:
                 time.sleep(3)
-                print(f"[Orchestrator] Finished: {protocol_name}")
+                print(f"[Orchestrator] Finished: {class_protocol_name}")
                 tree = self.running_tree["tree"]
                 tree.nodes_cleanup()
                 self.running_tree = None
                 self.running_thread = None
+
+    
+
+    def camel_to_snake(self, name: str) -> str:
+        """Convert CamelCase to snake_case."""
+        s1 = re.sub(r'(.)([A-Z][a-z]+)', r'\1_\2', name)
+        s2 = re.sub(r'([a-z0-9])([A-Z])', r'\1_\2', s1)
+        return s2.lower()
 
     def start_protocol_mock(self, protocol_tuple):
         """Start the protocol in its own thread."""
@@ -441,6 +451,9 @@ class ProtocolOrchestrator:
         protocol_name, priority = protocol_tuple
         sub_name = protocol_name.split(".")[-1]
         print(f"[Orchestrator] Starting: {protocol_name} (priority {priority})")
+        print("sub_name", sub_name)
+        print("protocol_name mega", protocol_name.split(".")[0])
+        
         
         if "TwoReminderProtocol" in protocol_name:
             print(f"[Orchestrator]  two_reminder_protocol_tree for {protocol_name}")
@@ -468,34 +481,44 @@ class ProtocolOrchestrator:
             return
         
         print("protocol_tuple: ", protocol_tuple)
-        protocol_name, priority = protocol_tuple
-        sub_name = protocol_name.split(".")[-1]
-        print(f"[Orchestrator] Starting: {protocol_name} (priority {priority})")
+        class_protocol_name, priority = protocol_tuple
+        
+        print(f"[Orchestrator] Starting: {class_protocol_name} (priority {priority})")
 
-        # Choose the correct tree type
-        print("**** sub_name: ", sub_name)
-        if "TwoReminderProtocol" in protocol_name:
-            tree_runner = TwoReminderProtocolTree(
-                node_name="two_reminder_protocol_tree", protocol_name=sub_name, robot_interface=self.robot_interface 
-            )
-        elif "CoffeeProtocol" in protocol_name:
-            tree_runner = CoffeeReminderProtocolTree(
-                node_name="coffee_protocol_tree", protocol_name=sub_name, robot_interface=self.robot_interface 
-            )
-        elif "MoveAwayProtocol" in protocol_name:
-            tree_runner = MoveAwayProtocolTree(
-                node_name="move_away_tree", protocol_name=sub_name, robot_interface=self.robot_interface 
-            )
-        elif "ChargeRobotTree" in protocol_name:
+             
+        if "ChargeRobotTree" in class_protocol_name:
+            protocol_name = "" ## charge robot doesnt take a protocol name cause it doesnt depend on it
             tree_runner = ChargeRobotTree(node_name="charge_robot_tree",robot_interface=self.robot_interface)
         else:
-            print(f"[Orchestrator] No matching tree for {protocol_name}")
-            return
+            ### load based on name where name is
+            ## import tree dynamically
+            
+            tree_class_name = class_protocol_name.split(".")[0] ## example MoveAwayProtocolTree
+            snake_case_class_name = self.camel_to_snake(tree_class_name)  ## turns it to snake case
+            protocol_name = class_protocol_name.split(".")[-1] ## unique for a protocol ex: medicine_am
+            
+            print("**** tree_class_name : ", tree_class_name)
+            print("**** snake_case_class_name : ", snake_case_class_name)
+            print("**** protocol name: ", protocol_name)
+            #  Dynamically import module & class
+            try:
+                module = importlib.import_module(f"smart_home_pytree.trees.{snake_case_class_name}")
+                tree_class = getattr(module, f"{tree_class_name}Tree") ## gets the class from the file in module
+            except Exception as e:
+                print(f"[Orchestrator] Failed to load tree '{tree_class_name}Tree' from module smart_home_pytree.trees.{snake_case_class_name} : {e}")
+                return 
+
+            # Instantiate the tree
+            tree_runner = tree_class(
+                node_name=snake_case_class_name,
+                protocol_name=protocol_name,
+                robot_interface=self.robot_interface
+            )
 
         tree_runner.setup()
         thread = threading.Thread(
             target=self._run_protocol,
-            args=(tree_runner, protocol_name, priority),
+            args=(tree_runner, class_protocol_name, priority),
             daemon=True,
         )
         thread.start()
@@ -536,7 +559,6 @@ class ProtocolOrchestrator:
             rclpy.shutdown()
         print("[Orchestrator] Shutdown complete.")
 
-        
 
 if __name__ == "__main__":
     import time
@@ -544,7 +566,7 @@ if __name__ == "__main__":
     blackboard = py_trees.blackboard.Blackboard()
     load_protocols_to_bb(yaml_file_path)
     # For testing:
-    orch = ProtocolOrchestrator(test_time="10:30")
+    orch = ProtocolOrchestrator(test_time="1:30")
     # orch = ProtocolOrchestrator()
     # For live use:
     # orch = ProtocolOrchestrator()

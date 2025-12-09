@@ -192,10 +192,9 @@ def test_protocol_orchestrator_one_protocol_true():
     mock_dock_server.set_on_trigger(on_docking_trigger)
     mock_undock_server.set_on_trigger(on_undocking_trigger)
     
-    
     robot_interface.state.update('coffee', False)
     robot_interface.state.update('coffee_pot', False)
-    orch = ProtocolOrchestrator(robot_interface=robot_interface, test_time="10:30")
+    orch = ProtocolOrchestrator(robot_interface=robot_interface, test_time="1:30")
     
     time.sleep(2.5)
 
@@ -285,7 +284,7 @@ def test_protocol_orchestrator_two_protocol_true():
     
     robot_interface.state.update('coffee', True)
     robot_interface.state.update('coffee_pot', True)
-    orch = ProtocolOrchestrator(robot_interface=robot_interface, test_time="10:30")
+    orch = ProtocolOrchestrator(robot_interface=robot_interface, test_time="1:30")
     
     executed_protocols = []
     

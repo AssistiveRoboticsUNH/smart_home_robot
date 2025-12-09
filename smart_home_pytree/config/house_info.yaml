@@ -90,7 +90,7 @@ protocols:
           event: 
             - {'topic': '/coffee', 'value': True}
             - {'topic': '/coffee_pot', 'value': True}
-          time: {'from': '09:00', 'to': '13:00'}
+          time: {'from': '01:00', 'to': '3:00'}
   
   XReminderProtocol:
     medicine_am_2:
@@ -100,7 +100,6 @@ protocols:
         wait_1: 10
         reminder_2:  "please take your night medicine"
         type_2: text
-       
         number_of_protocols: 2
 
       high_level:

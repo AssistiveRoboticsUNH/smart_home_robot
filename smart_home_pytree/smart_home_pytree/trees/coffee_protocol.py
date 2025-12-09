@@ -19,10 +19,10 @@ from smart_home_pytree.registry import load_locations_to_blackboard, load_protoc
 from smart_home_pytree.behaviors.check_protocol_bb import CheckProtocolBB
 
 
-class CoffeeReminderProtocolTree(BaseTreeRunner):      
+class CoffeeProtocolTree(BaseTreeRunner):      
     def __init__(self, node_name: str, robot_interface=None, **kwargs):
         """
-        Initialize the CoffeeReminderProtocol.
+        Initialize the CoffeeProtocolTree.
         currently on reminder protocol
 
         Args:
@@ -37,7 +37,7 @@ class CoffeeReminderProtocolTree(BaseTreeRunner):
     
     def create_tree(self) -> py_trees.behaviour.Behaviour:
         """
-        Creates the CoffeeReminderProtocol tree:
+        Creates the CoffeeProtocolTree tree:
         Sequence:
             MoveToPersonLocation -> ReadScript -> ChargeRobot
 
@@ -107,7 +107,7 @@ def main(args=None):
     
     load_protocols_to_bb(yaml_file_path)
     
-    tree_runner = CoffeeReminderProtocolTree(
+    tree_runner = CoffeeProtocolTree(
         node_name="Coffee_Reminder_Protocol_Tree",
         protocol_name=protocol_name,
     )
