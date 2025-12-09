@@ -11,6 +11,8 @@ from smart_home_pytree.trees.charge_robot_tree import ChargeRobotTree
 from smart_home_pytree.robot_interface import get_robot_interface
 from smart_home_pytree.trees.coffee_reminder_protocol import CoffeeReminderProtocolTree
 from smart_home_pytree.trees.move_away_protocol import MoveAwayProtocolTree
+import py_trees        
+from smart_home_pytree.registry import load_protocols_to_bb
 
 #  TRIGGER MONITOR 
 class TriggerMonitor:
@@ -29,6 +31,9 @@ class TriggerMonitor:
         self.lock = threading.Lock()
         self.stop_flag = False
         self.completed_protocols = set()  # track completed ones
+        
+        self.protocols_to_reset = set()  # track ones that need resetting
+        # self.protocols_to_reset should include (protocl_name, time it fines, after how much time to reset)
         
          # Dynamically collect event keys from YAML
         self.event_keys = self._extract_event_keys()
@@ -69,7 +74,30 @@ class TriggerMonitor:
                 reset_dict = {sub_key: False for sub_key in value.keys()}
                 self.blackboard.set(key, reset_dict)    
                 print(f"Reset {key} → {reset_dict}")
-                
+    
+    def set_complete_specific_protocol(self, protocol_name: str):
+        """
+        Set the <protocol_name>_done dictionary in the py_trees blackboard to true.
+        """
+        key = f"{protocol_name}_done"
+
+        # Ensure it exists
+        value = self.blackboard.get(key)
+        if value is None:
+            print(f"[reset] No such protocol done key: {key}")
+            return
+
+        if not isinstance(value, dict):
+            print(f"[reset] Key '{key}' exists but is not a dictionary.")
+            return
+
+        # Set each entry to True
+        reset_dict = {sub_key: True for sub_key in value.keys()}
+        self.blackboard.set(key, reset_dict)
+
+        print(f"[reset] Reset {key} → {reset_dict}")
+
+  
     # -------- Helper functions to get protocols to activate --------
     def _extract_event_keys(self):
         """Collect all event topic names used in the YAML protocols."""
@@ -170,9 +198,12 @@ class TriggerMonitor:
                 self.reset_all_protocol_dones()
                 last_day = today
             
+            # resets periodic protocols in reset array
+            self.check_and_reset_protocols()
+            
             current_events = self._collect_current_events()
             new_satisfied = self.satisfied_protocols(current_events, current_time=current_time)
-
+            
             print("**************** new_satisfied: ", new_satisfied)
             
             with self.lock:
@@ -180,12 +211,99 @@ class TriggerMonitor:
 
             time.sleep(2)  # small delay to avoid busy loop
 
+    def parse_reset_pattern(self, reset_pattern):
+        """
+        Convert a reset_pattern dict into total seconds.
+        Safe for missing fields.
+        Examples:
+            {"hours": 1, "minutes": 30} → 5400
+            {"minutes": 30}             → 1800
+            {"hours": 1}                → 3600
+            None or {}                  → None
+        """
+        if not reset_pattern:
+            return None
+
+        hours = reset_pattern.get("hours", 0)
+        minutes = reset_pattern.get("minutes", 0)
+
+        # Validate types
+        if not isinstance(hours, (int, float)) or not isinstance(minutes, (int, float)):
+            print(f"[reset_pattern] Invalid format: {reset_pattern}")
+            return None
+
+        total_seconds = int(hours * 3600 + minutes * 60)
+
+        return total_seconds if total_seconds > 0 else None
+
     def mark_completed(self, protocol_name):
         """Mark a protocol as successfully completed to avoid retriggering."""
         with self.lock:
             print(f"[TriggerMonitor] Marking {protocol_name} as completed.")
             self.completed_protocols.add(protocol_name)
             
+            # ---- Split the name correctly ----
+            try:
+                main, sub = protocol_name.split(".")
+            except ValueError:
+                print(f"[ERROR] Invalid protocol name format: {protocol_name}")
+                return
+            
+            # ---- Look up YAML entry safely ----
+            try:
+                sub_data = self.protocols_yaml['protocols'][main][sub]
+            except KeyError:
+                print(f"[ERROR] Protocol not found in YAML: {protocol_name}")
+                return
+        
+            high_level = sub_data["high_level"]
+            reset_pattern = high_level.get('reset_pattern', None)
+            
+            if reset_pattern is None:
+                print(f"[TriggerMonitor] No reset pattern for {protocol_name}")
+                return
+
+            pattern_type = reset_pattern.get("type", "periodic")  # default to periodic if not given
+
+            # --- PERIODIC ---------------------------------------------------------
+            if pattern_type != "periodic":
+                return
+            
+            timestamp = datetime.now()
+
+            # Store cooldown metadata
+            
+            reset_seconds = self.parse_reset_pattern(reset_pattern)
+            print("protocol_name: ", protocol_name, " timestamp: ", timestamp, " reset_pattern: ", reset_seconds)
+            self.protocols_to_reset.add(
+                (protocol_name, timestamp, reset_seconds)
+            )
+            print(f"[TriggerMonitor] Scheduled reset for {protocol_name} in {reset_pattern}")
+
+    def check_and_reset_protocols(self):
+        """Check all protocols scheduled for auto-reset and reset those whose timer expired."""
+        now = datetime.now()
+        to_remove = []
+
+        for (name, finished_time, reset_seconds) in list(self.protocols_to_reset):
+            if (now - finished_time).total_seconds() >= reset_seconds:
+                print(f"[TriggerMonitor] Auto-resetting protocol: {name}")
+
+                sub_name = name.split(".")[-1]
+                self.reset_specific_protocol_dones(sub_name)
+                
+                if name in self.completed_protocols:   
+                    self.completed_protocols.remove(name)
+                else:
+                    print(f"[TriggerMonitor] Warning protocol {name} not in completed_protocols")
+
+                to_remove.append((name, finished_time, reset_seconds))
+
+        # Remove after iteration (safe)
+        for entry in to_remove:
+            print(f"[reset] ************ protocol to reset : {entry}")
+            self.protocols_to_reset.remove(entry)
+        
     def get_satisfied(self):
         with self.lock:
             return list(self.current_satisfied_protocols)
@@ -193,7 +311,7 @@ class TriggerMonitor:
     def stop_monitor(self):
         self.stop_flag = True
 
-
+    
 # PROTOCOL ORCHESTRATOR 
 class ProtocolOrchestrator:
     def __init__(self, robot_interface = None, test_time=None):
@@ -211,6 +329,7 @@ class ProtocolOrchestrator:
                 self.rclpy_initialized_here = False
                 print(" self.rclpy_initialized_here should be false: ", self.rclpy_initialized_here)
 
+        
         if  robot_interface is None:
             print("initialize robot interface")
             self.robot_interface=get_robot_interface()
@@ -235,7 +354,7 @@ class ProtocolOrchestrator:
         self.lock = threading.Lock()
         self.stop_flag = False
        
-    def orchestrator_loop(self):
+    def orchestrator_loop(self, mock: bool = False):
         """Main loop that manages protocol execution."""
         while not self.stop_flag:
             # --- cleanup if running thread finished ---
@@ -268,11 +387,18 @@ class ProtocolOrchestrator:
                         
                     if not charging:
                         # CHARGE THE ROBOT
-                        self.start_protocol(("ChargeRobotTree",100))
+                        # self.start_protocol(("ChargeRobotTree",100))
+                        if mock:
+                            self.start_protocol_mock(("ChargeRobotTree",100))
+                        else:
+                            self.start_protocol(("ChargeRobotTree",100))
                     
 
             if not self.running_tree:
-                self.start_protocol(next_protocol)
+                if mock:
+                    self.start_protocol_mock(next_protocol)
+                else:
+                    self.start_protocol(next_protocol)
             else:
                 if next_protocol is None:
                     time.sleep(1)
@@ -304,6 +430,35 @@ class ProtocolOrchestrator:
                 tree.nodes_cleanup()
                 self.running_tree = None
                 self.running_thread = None
+
+    def start_protocol_mock(self, protocol_tuple):
+        """Start the protocol in its own thread."""
+        if protocol_tuple is None: 
+            print("[Orchestrator] Warning: Tried to start None protocol — skipping.")
+            return
+        
+        print("protocol_tuple: ", protocol_tuple)
+        protocol_name, priority = protocol_tuple
+        sub_name = protocol_name.split(".")[-1]
+        print(f"[Orchestrator] Starting: {protocol_name} (priority {priority})")
+        
+        if "TwoReminderProtocol" in protocol_name:
+            print(f"[Orchestrator]  two_reminder_protocol_tree for {protocol_name}")
+            self.trigger_monitor.set_complete_specific_protocol(sub_name)
+            self.trigger_monitor.mark_completed(protocol_name)
+            
+        elif "CoffeeProtocol" in protocol_name:
+            print(f"[Orchestrator]  coffee_protocol_tree for {protocol_name}")
+            self.trigger_monitor.set_complete_specific_protocol(sub_name)
+            self.trigger_monitor.mark_completed(protocol_name)
+        elif "MoveAwayProtocol" in protocol_name:
+            self.trigger_monitor.set_complete_specific_protocol(sub_name)
+            self.trigger_monitor.mark_completed(protocol_name)
+        elif "ChargeRobotTree" in protocol_name:
+            print(f"[Orchestrator]  charge_robot_tree for {protocol_name}")
+        else:
+            print(f"[Orchestrator] No matching tree for {protocol_name}")
+            return
 
 
     def start_protocol(self, protocol_tuple):
@@ -382,8 +537,6 @@ class ProtocolOrchestrator:
         print("[Orchestrator] Shutdown complete.")
 
         
-import py_trees        
-from smart_home_pytree.registry import load_protocols_to_bb
 
 if __name__ == "__main__":
     import time
@@ -392,7 +545,7 @@ if __name__ == "__main__":
     load_protocols_to_bb(yaml_file_path)
     # For testing:
     orch = ProtocolOrchestrator(test_time="10:30")
-
+    # orch = ProtocolOrchestrator()
     # For live use:
     # orch = ProtocolOrchestrator()
 
@@ -402,7 +555,7 @@ if __name__ == "__main__":
     # ]
 
     try:
-        orch.orchestrator_loop()
+        orch.orchestrator_loop(mock=False)
     except KeyboardInterrupt:
         print("Shutting down orchestrator...")
         orch.shutdown()

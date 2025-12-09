@@ -19,6 +19,32 @@ robot_location_topic: "robot_location"
 
 # available type: ## todo set it in a way to verifiy htat yaml doesnt include 
 ## undefined types: text, audio, video, question_answer 
+
+###
+# day:[] or not there means everyday
+# optional
+# reset_pattern optional         reset_pattern:
+          # hours: 1
+          # minutes: 30
+          # atleast one hours or minutes need to be there
+
+# different types of pattern:
+# everytime the protocol is triggered it will be reset
+## make sure that /topic are turned to false
+## reset after 5 mins
+# reset_pattern:
+#   type: on_trigger 
+
+# reset_pattern:
+#   type: periodic
+#   hours: 1
+#   minutes: 30
+
+## this will be reset depending on the value of blackboard key
+# reset_pattern:
+#   blackboard_key: last_reset_timestamp 
+
+###
 protocols:
   TwoReminderProtocol:
     medicine_am:
@@ -31,8 +57,11 @@ protocols:
         wait_time_between_reminders: 5
       high_level:
         priority: 2
+        reset_pattern:
+          type: periodic
+          minutes: 1
         requirements: 
-          time: {'from': '10:00', 'to': '11:00'}
+          time: {'from': '1:30', 'to': '5:00'}
 
     medicine_pm:
       low_level:
@@ -44,14 +73,18 @@ protocols:
       high_level: 
         priority: 2
         requirements: 
+          day: [monday, wednesday, friday]
           time: {'from': '22:00', 'to': '23:00'}
-          
-## add topics with /
+
   CoffeeProtocol:
     coffee:
       low_level:
         first_text: "please clean the dishes"
       high_level:
+        reset_pattern:
+          type: periodic
+          hours: 1
+          minutes: 30
         priority: 3
         requirements: 
           event: 
@@ -59,26 +92,55 @@ protocols:
             - {'topic': '/coffee_pot', 'value': True}
           time: {'from': '09:00', 'to': '13:00'}
   
-  MoveAwayProtocol:
-    move_away:
+  XReminderProtocol:
+    medicine_am_2:
       low_level:
-        position_state_key: position # indicates which key it should refer to in the state dictionary
-      high_level:
-        priority: 1
-        requirements: 
-          event: 
-            - {'topic': '/move_away', 'value': True}  
+        reminder_1: "/home/olagh48652/smart-home/src/smart-home-robot/shr_resources/resources/food_reminder.mp3"
+        type_1: audio
+        wait_1: 10
+        reminder_2:  "please take your night medicine"
+        type_2: text
+       
+        number_of_protocols: 2
 
-    # coffee:
-    #   low_level:
-    #     first_text: "please clean the dishes"
-    #     second_text: "This is the second reminder to clean the dishes"
-    #     third_text: "Final reminder: please clean the dishes"
-    #     wait_time_between_reminders: 5
-    #   high_level:
-    #     priority: 3
-    #     requirements: 
-    #       event: 
-    #         - {'topic': '/coffee', 'value': True}
-    #         - {'topic': '/coffee_pot', 'value': True}
-    #       time: {'from': '09:00', 'to': '13:00'}
+      high_level:
+        priority: 2
+        reset_pattern:
+          type: periodic
+          minutes: 60
+        requirements:
+          time: {from: "10:00", to: "11:00"}
+          permissible_locations: [living_room]
+    medicine_pm_2:
+      low_level:
+        reminder_1: "/home/olagh48652/smart-home/src/smart-home-robot/shr_resources/resources/food_reminder.mp3"
+        type_1: audio
+        wait_1: 10
+        reminder_2:  "please take your night medicine"
+        type_2: text
+        wait_2: 10 
+        reminder_3: "please 1 take your night medicine"
+        type_3: text
+      
+        number_of_protocols: 3
+
+      high_level:
+        priority: 2
+        reset_pattern:
+          type: periodic
+          minutes: 60
+        requirements:
+          time: {from: "10:00", to: "11:00"}
+          permissible_locations: [living_room]
+
+
+  # EmergencyProtocol:
+  #   emergency:
+  #     low_level:
+  #       alert_message: "/home/olagh48652/smart-home/src/smart-home-robot/shr_resources/resources/emergency_alert.mp3"
+  #       type_alert: audio
+  #     high_level:
+  #       priority: 1
+  #       requirements:
+  #         event:
+  #           - {'topic': '/emergency', 'value': True}

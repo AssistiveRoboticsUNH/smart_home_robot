@@ -40,6 +40,7 @@ def load_locations_to_blackboard(yaml_path: str):
     
     return blackboard
 
+
 def load_protocols_to_bb(yaml_path: str):  
     """
     Load protocol related data from a YAML file and register it to the py_trees blackboard.
@@ -74,6 +75,10 @@ def load_protocols_to_bb(yaml_path: str):
                 # Skip creating *_done entry
                     continue
                 
+                if key.startswith("number_of_protocols"):
+                # Skip creating *_done entry
+                    continue
+                
                 protocol_dict_done[f"{key}_done"] = False
                     
             blackboard.set(protocol_name, protocol_dict)
@@ -83,25 +88,6 @@ def load_protocols_to_bb(yaml_path: str):
         print(f"{key} : {value}")
     
 
-
-    # protocol_name = "medicine_am"
-
-    # for key, value in blackboard.storage.items():
-    #     # Only print the protocol_done section
-    #     print("key: ", key)
-    #     if key == f"/{protocol_name}_done":
-    #         print(f"\n[{key}]")
-    #         if isinstance(value, dict):
-    #             for sub_key, sub_value in value.items():
-    #                 print(f"  {sub_key}: {sub_value}")
-    #         else:
-    #             print(f"  (Non-dict value): {value}")
-        
-    # output:
-    # /medicine_am : {'first_text': 'please take your morning medicine', 'second_text': 'This is the second reminder to take your morning medicine'}
-    # /medicine_pm : {'first_text': 'please take your night medicine', 'second_text': 'This is the second reminder to take your night medicine'}
-    # /medicine_am_done : {'first_text_done': False, 'second_text_done': False}
-    # /medicine_pm_done : {'first_text_done': False, 'second_text_done': False}
     
     return blackboard
     
