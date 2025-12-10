@@ -1,12 +1,8 @@
 #!/usr/bin/env python3
 
 import py_trees
-
 import rclpy
-
-
 from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
-
 import argparse
 from smart_home_pytree.behaviors.action_behaviors import read_script
 from smart_home_pytree.trees.move_to_person_location import MoveToPersonLocationTree
