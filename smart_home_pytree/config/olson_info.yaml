@@ -22,8 +22,8 @@ locations:
 
 
 ## need to be integerated to have robot interface get its info 
-person_location_topic: "person_location"
-robot_location_topic: "robot_location"
+person_location_state: "person_location"
+robot_location_state: "robot_location"
 
 # available type: ## todo set it in a way to verifiy htat yaml doesnt include 
 ## undefined types: text, audio, video, question_answer 
@@ -58,7 +58,7 @@ protocols:
           day: [monday, wednesday, friday]
           time: {'from': '22:00', 'to': '23:00'}
 
-## add topics with /
+## add states with /
   CoffeeProtocol:
     coffee:
       low_level:
@@ -71,8 +71,8 @@ protocols:
           minutes: 30
         requirements: 
           event: 
-            - {'topic': '/coffee', 'value': True}
-            - {'topic': '/coffee_pot', 'value': True}
+            - {'state': 'coffee', 'value': True}
+            - {'state': 'coffee_pot', 'value': True}
           time: {'from': '09:00', 'to': '13:00'}
 
   MoveAwayProtocol:
@@ -83,7 +83,7 @@ protocols:
         priority: 1
         requirements: 
           event: 
-            - {'topic': '/move_away', 'value': True}  
+            - {'state': '/move_away', 'value': True}  
 
   XReminderProtocol:
     medicine_am_2:

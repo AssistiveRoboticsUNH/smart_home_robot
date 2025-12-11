@@ -30,7 +30,7 @@ class CheckRobotStateKey(py_trees.behaviour.Behaviour):
             self.logger.warning(f"{self.name}: '{self.key}' not found in RobotState")
             return py_trees.common.Status.FAILURE
         
-        print("cahrging value: ", value)
+        print("charging value: ", value)
         # Compare and return
         if self.comparison(value, self.expected_value):
             self.logger.debug(f"{self.name}: {self.key} == {self.expected_value} → SUCCESS")

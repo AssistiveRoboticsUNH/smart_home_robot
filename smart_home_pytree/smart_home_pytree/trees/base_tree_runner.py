@@ -149,7 +149,7 @@ class BaseTreeRunner:
 
         self.executor_.add_node(self.tree.node)
         self.count = 0
-    
+        
     def run_until_done(self):
         """Run until the tree finishes with SUCCESS or FAILURE."""
         
@@ -173,17 +173,20 @@ class BaseTreeRunner:
                 self.cleanup(exit_code=1)
                 return
 
+            current_status = self.tree.root.status
             if self.tree.root.status in [
                 py_trees.common.Status.SUCCESS,
                 py_trees.common.Status.FAILURE
             ]:
+                color = console.green if current_status == py_trees.common.Status.SUCCESS else console.red
+
                 console.loginfo(
-                    console.green +
-                    f"Tree finished with status: {self.tree.root.status}" +
+                    color +
+                    f"Tree finished with status: {current_status}" +
                     console.reset
                 )
                 
-                self.final_status = self.tree.root.status    
+                self.final_status = current_status  
                 timer.cancel()
                 self._stop_tree = True 
 

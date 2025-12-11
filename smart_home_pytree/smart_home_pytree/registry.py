@@ -79,9 +79,17 @@ def load_protocols_to_bb(yaml_path: str):
                 # Skip creating *_done entry
                     continue
                 
+                if "exercise" in protocol_name:
+                    print("protocol_name")
+                    continue
+                
                 protocol_dict_done[f"{key}_done"] = False
                     
             blackboard.set(protocol_name, protocol_dict)
+            
+            if "exercise" in protocol_name:
+                    print("protocol_name")
+                    continue
             blackboard.set(f"{protocol_name}_done", protocol_dict_done)
     
     for key, value in blackboard.storage.items():

@@ -1,71 +1,94 @@
-#!/usr/bin/env python3
-
-'''
-Check if robot and person are in the same location. gets the location from robot_interface which reads it from the topics
-'''
 import py_trees
-
-from gtts import gTTS
-import tempfile
-
-import os
 import subprocess
-import shlex
 import tempfile
-
-
 import os
-import shlex
-import tempfile
-import subprocess
 from gtts import gTTS
-import py_trees
+import time
 
 class ReadScript(py_trees.behaviour.Behaviour):
-    """
-    Behavior that reads a text aloud using gTTS and mpg321.
-    Returns SUCCESS if playback completes, FAILURE otherwise.
-    """
     def __init__(self, text: str, name="ReadScript"):
         super().__init__(name)
         self.text = text
+        self.proc = None
+        self.tmp_path = None
 
-    def update(self):
-        print("Reading script...")
-
+    def initialise(self):
+        """
+        Creates the audio file and launches the audio player subprocess.
+        """
         try:
-            print(f"[Reading aloud] {self.text}")
-            # Convert text to speech
+            # Create temp audio file
             tts = gTTS(self.text)
+            tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
+            self.tmp_path = tmp.name
+            tmp.close()
+            tts.save(self.tmp_path)
 
-            # Create a temporary file for the audio
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as tmpfile:
-                tmp_path = tmpfile.name
-                tts.save(tmp_path)
-
-            # Play the audio file
-            cmd = f"mpg321 -q {tmp_path}"  # -q for quiet mode
-            result = subprocess.run(shlex.split(cmd), capture_output=True)
-
-            # Clean up
-            os.remove(tmp_path)
-
-            # Check if playback succeeded
-            if result.returncode != 0:
-                print(f"[ERROR] Audio playback failed: {result.stderr.decode().strip()}")
-                return py_trees.common.Status.FAILURE
-
-            print("[SUCCESS] Script read successfully.")
-            return py_trees.common.Status.SUCCESS
+            # Start audio playback asynchronously
+            self.proc = subprocess.Popen(
+                ["mpg321", "-q", self.tmp_path],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
 
         except Exception as e:
-            print(f"[ERROR] ReadScript failed: {e}")
+            print("[ERROR] Failed to initialise speech:", e)
+            self.proc = None
+
+    def update(self):
+        """
+        If audio is still playing, return RUNNING.
+        When finished, return SUCCESS or FAILURE.
+        """
+        if self.proc is None:
             return py_trees.common.Status.FAILURE
-  
-def main():
-    read_script = ReadScript("Kimleri sevdik, kimleri sildik Kimlerin peşine düştük genç ömrümüzde")
-    read_script.update()
+
+        ret = self.proc.poll() 
+
+        if ret is None:
+            # Still running
+            return py_trees.common.Status.RUNNING
+
+        # Process finished
+        if ret == 0:
+            return py_trees.common.Status.SUCCESS
+        else:
+            return py_trees.common.Status.FAILURE
+
+    def terminate(self, new_status):
+        """
+        Stop audio and clean up.
+        """
+        if self.proc is not None and self.proc.poll() is None:
+            # Still playing, kill it
+            self.proc.terminate()
+
+        # Clean up the temp file
+        if self.tmp_path and os.path.exists(self.tmp_path):
+            os.remove(self.tmp_path)
+
+        self.proc = None
+        self.tmp_path = None
         
+        
+def main():
+    read_script = ReadScript(
+        "Kimleri sevdik, kimleri sildik Kimlerin peşine düştük genç ömrümüzde"
+    )
+
+    read_script.initialise()
+
+    while True:
+        status = read_script.update()
+        print("STATUS:", status)
+
+        if status != py_trees.common.Status.RUNNING:
+            break
+
+        time.sleep(0.1)
+
+    read_script.terminate(status)
+
+
 if __name__ == "__main__":
     main()
-    

@@ -110,16 +110,16 @@ class TriggerMonitor:
                 reqs = high_level_subdata.get("requirements", {})
                 event_reqs = reqs.get("event", [])
                 for ev in event_reqs:
-                    if "topic" in ev:
-                        event_keys.add(ev["topic"])
+                    if "state" in ev:
+                        event_keys.add(ev["state"])
         return sorted(event_keys)
     
     def _collect_current_events(self):
         """Build a dict of current event states from RobotState."""
         current_events = {}
         for key in self.event_keys:
-            key = key.lstrip("/") 
             val = self.robot_interface.state.get(key)
+            print("val")
             print("key: ", key, "value: ", val)
             if val is None:
                 print(f"[TriggerMonitor] Topic '{key}' not publishing or None → treating as False")
@@ -157,7 +157,7 @@ class TriggerMonitor:
         if not event_reqs:
             return True
         for ev in event_reqs:
-            topic, val = ev['topic'].lstrip("/"), ev['value']
+            topic, val = ev['state'], ev['value']
             if topic not in current_events or current_events[topic] != val:
                 return False
         return True
@@ -242,7 +242,7 @@ class TriggerMonitor:
         """Mark a protocol as successfully completed to avoid retriggering."""
         with self.lock:
             print(f"[TriggerMonitor] Marking {protocol_name} as completed.")
-            self.completed_protocols.add(protocol_name)
+            
             
             # ---- Split the name correctly ----
             try:
@@ -266,14 +266,18 @@ class TriggerMonitor:
                 return
 
             pattern_type = reset_pattern.get("type", "periodic")  # default to periodic if not given
-
-            # --- PERIODIC ---------------------------------------------------------
+            # INSTANT -> DONT ADD IT TO COMPLETED
+            print("pattern_type: ", pattern_type)
+            if pattern_type == "instant":
+                return
+            
+            self.completed_protocols.add(protocol_name)
+            
+            # PERIODIC 
             if pattern_type != "periodic":
                 return
             
             timestamp = datetime.now()
-
-            # Store cooldown metadata
             
             reset_seconds = self.parse_reset_pattern(reset_pattern)
             print("protocol_name: ", protocol_name, " timestamp: ", timestamp, " reset_pattern: ", reset_seconds)
@@ -566,7 +570,7 @@ if __name__ == "__main__":
     blackboard = py_trees.blackboard.Blackboard()
     load_protocols_to_bb(yaml_file_path)
     # For testing:
-    orch = ProtocolOrchestrator(test_time="1:30")
+    orch = ProtocolOrchestrator(test_time="15:30")
     # orch = ProtocolOrchestrator()
     # For live use:
     # orch = ProtocolOrchestrator()
@@ -581,3 +585,11 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print("Shutting down orchestrator...")
         orch.shutdown()
+        
+        
+        
+"""
+ros2 topic pub /display_rx std_msgs/msg/String "data: 'exercise_requested'" 
+ros2 topic pub /display_rx std_msgs/msg/String "data: 'exercise_stop'" 
+
+"""

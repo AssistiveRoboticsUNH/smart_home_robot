@@ -14,8 +14,8 @@ locations:
     yaw: 3.14     # π rad (180 degrees)
 
 ## need to be integerated to have robot interface get its info 
-person_location_topic: "person_location"
-robot_location_topic: "robot_location"
+person_location_state: "person_location"
+robot_location_state: "robot_location"
 
 # available type: ## todo set it in a way to verifiy htat yaml doesnt include 
 ## undefined types: text, audio, video, question_answer 
@@ -30,7 +30,7 @@ robot_location_topic: "robot_location"
 
 # different types of pattern:
 # everytime the protocol is triggered it will be reset
-## make sure that /topic are turned to false
+## make sure that /state are turned to false
 ## reset after 5 mins
 # reset_pattern:
 #   type: on_trigger 
@@ -88,8 +88,8 @@ protocols:
         priority: 3
         requirements: 
           event: 
-            - {'topic': '/coffee', 'value': True}
-            - {'topic': '/coffee_pot', 'value': True}
+            - {'state': 'coffee', 'value': True}
+            - {'state': 'coffee_pot', 'value': True}
           time: {'from': '01:00', 'to': '3:00'}
   
   XReminderProtocol:
@@ -110,6 +110,7 @@ protocols:
         requirements:
           time: {from: "10:00", to: "11:00"}
           permissible_locations: [living_room]
+
     medicine_pm_2:
       low_level:
         reminder_1: "/home/olagh48652/smart-home/src/smart-home-robot/shr_resources/resources/food_reminder.mp3"
@@ -120,9 +121,7 @@ protocols:
         wait_2: 10 
         reminder_3: "please 1 take your night medicine"
         type_3: text
-      
         number_of_protocols: 3
-
       high_level:
         priority: 2
         reset_pattern:
@@ -132,6 +131,21 @@ protocols:
           time: {from: "10:00", to: "11:00"}
           permissible_locations: [living_room]
 
+  ExerciseProtocol:
+    exercise:
+      low_level:
+        exercise_yaml_file: "/home/olagh48652/smart_home_pytree_ws/src/smart_home_robot/smart_home_pytree/config/exercise_routine_test.yaml"
+        video_dir_path: "file:///storage/emulated/0/Download/Exercise_Videos" ## path on the tablet 
+        start_state_key: "start_exercise"
+        stop_state_key: "stop_exercise"
+      high_level:
+        reset_pattern:
+          type: instant ## if triggered should play directly
+        priority: 3
+        requirements: 
+          event: 
+            - {'state': 'start_exercise', 'value': True}
+          time: {'from': '15:00', 'to': '17:00'}
 
   # EmergencyProtocol:
   #   emergency:
@@ -142,4 +156,4 @@ protocols:
   #       priority: 1
   #       requirements:
   #         event:
-  #           - {'topic': '/emergency', 'value': True}
+  #           - {'state': '/emergency', 'value': True}

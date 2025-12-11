@@ -20,9 +20,7 @@ series_1:
 
 series_2:
   introduction: >
-    Alright User, now we are going to do some balance exercises. It is important
-    that you have a chair nearby to grab onto if you lose your balance. If an
-    exercise is too challenging for you it’s OK to skip it.
+    Alright User, now we are going to do some balance exercises.
   type: Balance_Final
   ex1:
     text: >
@@ -31,19 +29,6 @@ series_2:
     rep: 2
     time_between_rep_in_sec: 3
     video_name: "FINAL_feet_together_stance_medium.mp4"
-  ex2:
-    text: "Let’s make it a little bit harder this time."
-    rep: 1
-    time_between_rep_in_sec: 3
-    video_name: "FINAL_semi_tandem_stance_high.mp4"
-  ex3:
-    text: >
-      This balance exercise is similar to the last one but will be more
-      challenging.
-    rep: 1
-    time_between_rep_in_sec: 3
-    video_name: "FINAL_tandem_stance_high.mp4"
-
 
 ending: >
   Great job User you’ve completed all the exercises! We’ll do them again in a

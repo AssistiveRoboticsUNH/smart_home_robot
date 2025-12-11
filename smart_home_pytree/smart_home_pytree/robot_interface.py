@@ -93,6 +93,8 @@ class RobotInterface(Node):
         self.create_subscription(Bool, 'coffee_pot', self.coffee_pot_callback, 10)
         self.create_subscription(Bool, 'charging', self.charging_callback, 10)
 
+        self.create_subscription(String, 'display_rx', self.display_callback, 10)
+        
         self.create_subscription(String, 'sim_time', self.sim_time_callback, 10)
         # Background spinning thread
         self._stop_event = threading.Event()
@@ -123,6 +125,14 @@ class RobotInterface(Node):
         self.get_logger().info("RobotInterface shutdown complete.")
         
     # --- Callbacks ---
+    def display_callback(self, msg):
+        if "exercise_requested" in msg.data:
+            self.state.update('start_exercise', True)
+            self.state.update('stop_exercise', False)
+        elif "exercise_stop" in msg.data:
+            self.state.update('stop_exercise', True)
+            self.state.update('start_exercise', False)
+        
     def robot_location_callback(self, msg):
         self.get_logger().debug(f"Robot location: {msg.data}")
         self.state.update('robot_location', msg.data)
