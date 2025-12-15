@@ -25,6 +25,7 @@ set(action_files
         action/CallRequest.action
         action/PlayVideoRequest.action
         action/DockingRequest.action
+        action/QuestionRequest.action
         )
 
 rosidl_generate_interfaces(shr_msgs

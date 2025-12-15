@@ -1,0 +1,5 @@
+string question
+---
+string response
+---
+bool running # returns true if running
