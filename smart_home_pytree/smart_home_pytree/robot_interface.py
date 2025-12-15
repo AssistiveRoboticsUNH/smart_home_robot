@@ -1,7 +1,7 @@
 import rclpy
 from rclpy.node import Node
 from rclpy.executors import MultiThreadedExecutor
-from std_msgs.msg import String, Bool
+from std_msgs.msg import String, Bool, Int32
 import threading
 from std_msgs.msg import String
 from geometry_msgs.msg import PoseWithCovarianceStamped
@@ -106,7 +106,7 @@ class RobotInterface(Node):
         self.state.update('robot_location_xy', None)
     
     def amcl_callback(self, msg):
-        print("updating rbot amcl")
+        print("updating robot amcl")
         x = msg.pose.pose.position.x
         y = msg.pose.pose.position.y
         self.state.update('robot_location_xy', (x,y))

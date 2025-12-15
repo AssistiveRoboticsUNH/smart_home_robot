@@ -1,5 +1,5 @@
 import rclpy
-from rclpy.action import ActionServer
+from rclpy.action import CancelResponse
 from shr_msgs.action import PlayVideoRequest
 from std_msgs.msg import String
 import time
@@ -22,6 +22,17 @@ class PlayVideoActionServer(GenericActionServer):
             print("callback self.video_finished", self.video_finished)
             self.get_logger().info("Video finished received!")
 
+    ## turn video off
+    def cancel_callback(self, goal_handle):
+        """
+        Called when a cancel request is received.
+        """
+        self.get_logger().info(f"[{self._action_name}] Cancel requested: {goal_handle}")
+        
+        ## stop video
+        self.display_pub.publish(String(data="1"))
+        # By default, allow cancel
+        return CancelResponse.ACCEPT
 
     def execute_callback(self, goal_handle):
         video_path = goal_handle.request.file_name

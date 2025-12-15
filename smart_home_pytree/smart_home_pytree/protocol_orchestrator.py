@@ -359,6 +359,17 @@ class ProtocolOrchestrator:
         self.running_thread = None
         self.lock = threading.Lock()
         self.stop_flag = False
+
+        ## define keys that has to be observed for the tree to work
+        self.state_ready = False
+        self.required_state_keys = ["charging"]
+
+    def _state_is_ready(self):
+        for key in self.required_state_keys:
+            if self.robot_interface.state.get(key) is None:
+                return False
+        return True
+
        
     def orchestrator_loop(self, mock: bool = False):
         """Main loop that manages protocol execution."""
@@ -385,12 +396,17 @@ class ProtocolOrchestrator:
                 
                 else:
                     ## Check if the robot is charging
-                    charging = self.robot_interface.state.get("charging",None)
+                    # charging = self.robot_interface.state.get("charging",None)
+                    if not self._state_is_ready():
+                        print("[Orchestrator] Waiting for robot state to initialize...")
+                        time.sleep(1)
+                        continue
         
-                    if charging is None:
-                        print(f"[TriggerMonitor] Topic '{charging}' not publishing or None → treating as False")
-                        charging = False
+                    # if charging is None:
+                    #     print(f"[TriggerMonitor] Topic '{charging}' not publishing or None → treating as False")
+                    #     charging = False
                         
+                    charging = self.robot_interface.state.get("charging")
                     if not charging:
                         # CHARGE THE ROBOT
                         # self.start_protocol(("ChargeRobotTree",100))

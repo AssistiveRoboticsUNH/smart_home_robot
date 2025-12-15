@@ -1,19 +1,17 @@
 introduction: >
-  We are going to do a series of exercises to work on your balance,
-  cardiovascular fitness, flexibility and strength. 
+  We are going to do a series of exercises. 
 
 series_1:
   introduction: >
-    Our first series of exercises will work on cardio. You may do them slower
-    or faster than the demonstration as you like.
+    Our first series cardio. 
   type: Cardio_Final
   ex1:
-    text: "We’ll start with some low punches. These can be done sitting or standing."
+    text: "We’ll start with some low punches. "
     rep: 2
     time_between_rep_in_sec: 3
     video_name: "cardio_punches_low.mp4"
   ex2:
-    text: "Let’s do some high punches, you can do these either sitting or standing."
+    text: "Let’s do some high punches"
     rep: 1
     time_between_rep_in_sec: 3
     video_name: "cardio_punches_high.mp4"

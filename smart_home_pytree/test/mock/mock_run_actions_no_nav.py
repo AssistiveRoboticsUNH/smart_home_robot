@@ -35,7 +35,7 @@ def main():
         action_type=DockingRequest,
         result_cls=DockingRequest.Result,
         succeed=True,
-        wait_time=30.0 
+        wait_time=10.0 
     )
 
     mock_undock_server = BaseMockActionServer(
@@ -43,7 +43,7 @@ def main():
         action_type=DockingRequest,
         result_cls=DockingRequest.Result,
         succeed=True,
-        wait_time=30.0 
+        wait_time=10.0 
     )
     
     executor = MultiThreadedExecutor()

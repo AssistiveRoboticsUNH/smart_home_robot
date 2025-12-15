@@ -83,54 +83,20 @@ protocols:
         priority: 1
         requirements: 
           event: 
-            - {'state': '/move_away', 'value': True}  
+            - {'state': 'move_away', 'value': True}  
 
-  XReminderProtocol:
-    medicine_am_2:
+  ExerciseProtocol:
+    exercise:
       low_level:
-        reminders:
-          - key: reminder_1
-            type: audio
-            message: "/home/hello-robot/smarthome_ws/src/smart_home_robot/smart_home_pytree/audio_resources/food_reminder_dain.mp3"
-            wait_after: 100 
-          - key: reminder_2
-            type: audio
-            message: "/home/hello-robot/smarthome_ws/src/smart_home_robot/smart_home_pytree/audio_resources/food_reminder.mp3"
-
-
-        number_of_protocols: 2
-
+        exercise_yaml_file: "/home/hello-robot/smarthome_ws/src/smart_home_robot/smart_home_pytree/config/exercise_routine_test.yaml" 
+        video_dir_path: "file:///storage/emulated/0/Download/Exercise_Videos" ## path on the tablet 
+        start_state_key: "start_exercise"
+        stop_state_key: "stop_exercise"
       high_level:
-        priority: 2
         reset_pattern:
-          type: periodic
-          minutes: 60
-        requirements:
-          time: {from: "10:00", to: "11:00"}
-          permissible_locations: [living_room]
-
-    medicine_pm_2:
-      low_level:
-        reminders:
-          - key: reminder_1
-            type: audio
-            message: "/home/hello-robot/smarthome_ws/src/smart_home_robot/smart_home_pytree/audio_resources/food_reminder_dain.mp3"
-            wait_after: 100 
-          - key: reminder_2
-            type: audio
-            message: "/home/hello-robot/smarthome_ws/src/smart_home_robot/smart_home_pytree/audio_resources/food_reminder.mp3"
-            wait_after: 100
-          - key: reminder_3
-            type: text
-            message: "please take your night medicine"
-
-        number_of_protocols: 3
-
-      high_level:
-        priority: 2
-        reset_pattern:
-          type: periodic
-          minutes: 60
-        requirements:
-          time: {from: "10:00", to: "11:00"}
-          permissible_locations: [living_room]
+          type: instant ## if triggered should play directly
+        priority: 3
+        requirements: 
+          event: 
+            - {'state': 'start_exercise', 'value': True}
+          time: {'from': '15:00', 'to': '17:00'}
