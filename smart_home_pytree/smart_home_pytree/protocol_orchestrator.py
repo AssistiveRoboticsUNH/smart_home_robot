@@ -49,6 +49,30 @@ class TriggerMonitor:
         # full_name -> {"state": str, "value": Any}
         self.monitor_state_success = {}
 
+    def check_success_on_conditions(self):
+        """
+        Continuously checks whether any waiting protocol
+        has reached its success_on condition.
+        """
+        to_remove = []
+
+        for full_name, cond in self.monitor_state_success.items():
+            key = cond["state"]
+            desired = cond["value"]
+
+            current = self.robot_interface.state.get(key)
+
+            if current == desired:
+                print(f"[success_on] {full_name} satisfied via {key} == {desired}")
+
+                # stop waiting
+                self.pending_waits.pop(full_name, None)
+                to_remove.append(full_name)
+
+        # cleanup after iteration
+        for name in to_remove:
+            self.monitor_state_success.pop(name, None)
+        
     ## support yield waiting
     ### test no clash when run protocol and satisfied call it at the same time
     def collect_wait_requests(self):
@@ -69,8 +93,23 @@ class TriggerMonitor:
 
             # Register resume
             self.pending_waits[full_name] = resume_time
-            
             self.completed_protocols.add(full_name)
+            
+            # register success_on if present
+            # only done once
+            try:
+                protocol, sub = full_name.split(".")
+                high_level = self.protocols_yaml["protocols"][protocol][sub]["high_level"]
+                success_on = high_level.get("success_on", None)
+
+                if success_on:
+                    self.monitor_state_success[full_name] = {
+                        "state": success_on["state"],
+                        "value": success_on["value"]
+                    }
+                    print(f"[success_on] Monitoring {full_name}: {success_on}")
+            except Exception as e:
+                print(f"[success_on] Failed to register {full_name}: {e}")
             
             # Remove request so it is processed once
             del wait_requests[full_name]
@@ -256,8 +295,11 @@ class TriggerMonitor:
         last_day = datetime.now().strftime("%Y-%m-%d")
         
         while not self.stop_flag:
-            
             self.collect_wait_requests()
+            
+            ## check if pending protocols got success_on achieved
+            self.check_success_on_conditions()
+
             # Check for daily reset
             today = datetime.now().strftime("%Y-%m-%d")
             if today != last_day:
