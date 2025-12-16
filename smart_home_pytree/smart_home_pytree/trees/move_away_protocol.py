@@ -57,13 +57,20 @@ class MoveAwayProtocolTree(BaseTreeRunner):
         
         state = self.robot_interface.state
         position_loc = state.get(state_key, None)
-        print(f"&&& postion loc using key {state_key} is  {position_loc}")
-       
+        
+        print(f"&&& postion loc using key {state_key} is {position_loc}")
+        print(f"&&& protocol_info using key {protocol_info["away_location"]} ")
+
+        if position_loc is "home":
+            target_location = "home"
+        else:
+            target_location = protocol_info["away_location"]
+        
+        print(f"&&& target_location loc using key {target_location} ")
+        
         # Root sequence
         root_sequence = py_trees.composites.Sequence(name="MoveAwaySequence", memory=True)
-        
-        target_location = position_loc
-        
+                
         move_to_position_tree = MoveToLocationTree(
             node_name=f"{protocol_name}_move_to_position",
             robot_interface=self.robot_interface,

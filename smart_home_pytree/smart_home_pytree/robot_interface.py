@@ -85,8 +85,8 @@ class RobotInterface(Node):
         self.create_subscription(String, 'person_location', self.person_location_callback, 10)
         
         ## can be postion1 or position 2
-        self.create_subscription(String, 'position', self.position_location_callback, 10)
-        self.create_subscription(Bool, 'move_away', self.move_away_callback, 10)
+        self.create_subscription(String, 'position', self.position_location_callback, self.qos_profile)
+        self.create_subscription(Bool, 'move_away', self.move_away_callback, self.qos_profile)
         
         ## subcription for protocol events
         self.create_subscription(Bool, 'coffee', self.coffee_callback, 10)
