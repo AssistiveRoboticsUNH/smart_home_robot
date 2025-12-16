@@ -4,18 +4,18 @@ import yaml
 import time
 import random
 import threading
-from datetime import datetime
+
 import rclpy
-# from smart_home_pytree.trees.two_reminder_protocol import TwoReminderProtocolTree
 from smart_home_pytree.trees.charge_robot_tree import ChargeRobotTree
 from smart_home_pytree.robot_interface import get_robot_interface
-# from smart_home_pytree.trees.coffee_reminder_protocol import CoffeeReminderProtocolTree
-# from smart_home_pytree.trees.move_away_protocol import MoveAwayProtocolTree
 import py_trees        
 from smart_home_pytree.registry import load_protocols_to_bb
 import re
 import importlib
+from datetime import datetime, timedelta
 
+## TODO: unify naming class name protocol name
+## TODO: support finishign a protocl if a req is met
 #  TRIGGER MONITOR 
 class TriggerMonitor:
     def __init__(self, robot_interface, yaml_path=None):
@@ -42,7 +42,55 @@ class TriggerMonitor:
         print(f"[TriggerMonitor] Loaded event keys from YAML: {self.event_keys}")
         
         self.blackboard = py_trees.blackboard.Blackboard()
+        
+        ## support yield waiting
+        self.pending_waits = {}
+        # success_on monitoring:  support finishing a protocol if a req is met
+        # full_name -> {"state": str, "value": Any}
+        self.monitor_state_success = {}
 
+    ## support yield waiting
+    ### test no clash when run protocol and satisfied call it at the same time
+    def collect_wait_requests(self):
+        bb = py_trees.blackboard.Blackboard()
+        # Ensure the key exists
+        if not bb.exists("wait_requests"):
+            bb.set("wait_requests", {})
+            
+        wait_requests = bb.get("wait_requests")
+        
+        print(f"[Yield wait] from collect_wait_requests got wait_requests: {wait_requests} ")
+        
+        for full_name, req in list(wait_requests.items()):
+            seconds = req["seconds"]
+            timestamp = req["timestamp"]
+            print(f"[Yield wait] from full_name {full_name} got wait_requests: {req} ")
+            resume_time = datetime.fromtimestamp(timestamp) + timedelta(seconds=seconds)
+
+            # Register resume
+            self.pending_waits[full_name] = resume_time
+            
+            self.completed_protocols.add(full_name)
+            
+            # Remove request so it is processed once
+            del wait_requests[full_name]
+    
+    def wait_resumed(self, full_name):
+        print(f"[Yield wait] {full_name}: {self.pending_waits}")
+        if full_name not in self.pending_waits.keys():
+            return False
+
+        if datetime.now() >= self.pending_waits[full_name]:
+            print(f"[Yield wait] {full_name} reached time removing from pending_waits")
+            del self.pending_waits[full_name]
+            ### can use remove but discard doest give errors
+            print(f"self.completed_protocols {full_name}") 
+            self.completed_protocols.discard(full_name)
+            return True
+
+        ## check if protocol has key to check that it is done
+        return False
+ 
     # -------- Helper functions to reset protocols --------
     def reset_specific_protocol_dones(self, protocol_name: str):
         """
@@ -161,7 +209,10 @@ class TriggerMonitor:
             if topic not in current_events or current_events[topic] != val:
                 return False
         return True
-
+ 
+    ## TODO: for every protocl in wait_request check if the key turned true and remove it from 
+    ## resume
+    # A protocol is satisfied if (normal requirements are met) OR (it has a pending wait whose resume time has passed).
     def satisfied_protocols(self, current_events, current_day=None, current_time=None):
         satisfied = []
         for protocol_name, protocol_data in self.protocols_yaml['protocols'].items():
@@ -170,21 +221,34 @@ class TriggerMonitor:
                 # print("sub_name: ", sub_name)
                 high_level_subdata = sub_data["high_level"]
                 full_name = f"{protocol_name}.{sub_name}"
-                if full_name in self.completed_protocols:  # skip completed ones
+                
+                # yield wait 
+                resumed = self.wait_resumed(full_name)
+                print(f"[Yield wait] resumed: {self.completed_protocols}")
+                if full_name in self.completed_protocols:  # skip completed ones ## when resumed it deletes the protocol from completed
                     continue
                 
-                reqs = high_level_subdata.get('requirements', {})
-                event_reqs = reqs.get('event', [])
-                time_req = reqs.get('time', {})
-                day_req = reqs.get('day', [])
-                # print("$$$$$ time_req: ", time_req)
-                
-                if self.check_day_requirement(day_req, current_day) and \
-                    self.check_event_requirement(event_reqs, current_events) and \
-                    self.check_time_requirement(time_req, current_time):
-                       
+                if not resumed:
+                    reqs = high_level_subdata.get('requirements', {})
+                    event_reqs = reqs.get('event', [])
+                    time_req = reqs.get('time', {})
+                    day_req = reqs.get('day', [])
+                    # print("$$$$$ time_req: ", time_req)
+                    
+                    if self.check_day_requirement(day_req, current_day) and \
+                        self.check_event_requirement(event_reqs, current_events) and \
+                        self.check_time_requirement(time_req, current_time):
+                        
+                        priority = high_level_subdata.get('priority', 1)
+                        satisfied.append((full_name, priority))
+                else:
+                    ## resume  dont check for req thye were already satisfied
+                    ## modify to track keys for req resuming.
+                    print(f"[Yield wait] full_name: {full_name}")
+                    print(f"[Yield wait] high_level_subdata: {high_level_subdata}")
                     priority = high_level_subdata.get('priority', 1)
                     satisfied.append((full_name, priority))
+                        
         satisfied.sort(key=lambda x: x[1])
         return satisfied
 
@@ -193,6 +257,7 @@ class TriggerMonitor:
         
         while not self.stop_flag:
             
+            self.collect_wait_requests()
             # Check for daily reset
             today = datetime.now().strftime("%Y-%m-%d")
             if today != last_day:
@@ -238,6 +303,7 @@ class TriggerMonitor:
 
         return total_seconds if total_seconds > 0 else None
 
+    ## TODO: clean
     def mark_completed(self, protocol_name):
         """Mark a protocol as successfully completed to avoid retriggering."""
         with self.lock:
@@ -263,6 +329,7 @@ class TriggerMonitor:
             
             if reset_pattern is None:
                 print(f"[TriggerMonitor] No reset pattern for {protocol_name}")
+                self.completed_protocols.add(protocol_name)
                 return
 
             pattern_type = reset_pattern.get("type", "periodic")  # default to periodic if not given
@@ -298,7 +365,8 @@ class TriggerMonitor:
                 sub_name = name.split(".")[-1]
                 self.reset_specific_protocol_dones(sub_name)
                 
-                if name in self.completed_protocols:   
+                if name in self.completed_protocols: 
+                    print(f"self.completed_protocols {name}") 
                     self.completed_protocols.remove(name)
                 else:
                     print(f"[TriggerMonitor] Warning protocol {name} not in completed_protocols")
@@ -441,8 +509,11 @@ class ProtocolOrchestrator:
             if (tree_runner.final_status ==  py_trees.common.Status.SUCCESS):
                 
                 if "ChargeRobotTree" not in class_protocol_name:
+                    print(f"************** mark_completed *************")
                     self.trigger_monitor.mark_completed(class_protocol_name)
-                
+            # else:
+            #     ## wait sends false to make sure that it was polled and added to marked_completed
+            #     self.trigger_monitor.collect_wait_requests()
             # tree_runner.final_status == py_trees.common.Status.SUCCESS
 
             with self.lock:
@@ -492,7 +563,6 @@ class ProtocolOrchestrator:
         else:
             print(f"[Orchestrator] No matching tree for {protocol_name}")
             return
-
 
     def start_protocol(self, protocol_tuple):
         """Start the protocol in its own thread."""
@@ -586,7 +656,7 @@ if __name__ == "__main__":
     blackboard = py_trees.blackboard.Blackboard()
     load_protocols_to_bb(yaml_file_path)
     # For testing:
-    orch = ProtocolOrchestrator(test_time="15:30")
+    orch = ProtocolOrchestrator(test_time="1:35")
     # orch = ProtocolOrchestrator()
     # For live use:
     # orch = ProtocolOrchestrator()

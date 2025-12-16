@@ -17,6 +17,8 @@ from smart_home_pytree.registry import load_protocols_to_bb
 from smart_home_pytree.behaviors.check_protocol_bb import CheckProtocolBB
 from smart_home_pytree.trees.wait_tree import WaitTree
 from smart_home_pytree.behaviors.action_behaviors.yield_wait import YieldWait
+
+
 from smart_home_pytree.trees.tree_utils import make_reminder_tree
     
 class TwoReminderProtocolTree(BaseTreeRunner):      
@@ -52,7 +54,7 @@ class TwoReminderProtocolTree(BaseTreeRunner):
         print("protocol_name: ", protocol_name)
         protocol_info = bb.get(protocol_name)
 
-        print(protocol_info)
+        
         type_1 = protocol_info["type_first"]
         type_2 = protocol_info["type_second"]
         wait_time_key = "wait_time_between_reminders"
@@ -93,7 +95,7 @@ class TwoReminderProtocolTree(BaseTreeRunner):
             protocol_name=protocol_name,
             wait_time_key=wait_time_key
         )
-        
+
         wait_selector.add_children([condition_wait, wait_tree])
 
         reminder_2 = "second_reminder"
