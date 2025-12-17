@@ -55,7 +55,6 @@ class YieldWait(py_trees.behaviour.Behaviour):
 def main():
     import pprint
     import os
-    pending_waits = {}
     
     yaml_file_path = os.getenv("house_yaml_path", None) 
     load_protocols_to_bb(yaml_file_path)

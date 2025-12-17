@@ -18,9 +18,10 @@ from smart_home_pytree.behaviors.check_protocol_bb import CheckProtocolBB
 from smart_home_pytree.trees.wait_tree import WaitTree
 from smart_home_pytree.behaviors.action_behaviors.yield_wait import YieldWait
 from smart_home_pytree.trees.tree_utils import make_reminder_tree
-    
+from smart_home_pytree.trees.wait_tree import WaitTree
+
 class TwoReminderProtocolTree(BaseTreeRunner):      
-    def __init__(self, node_name: str, robot_interface=None, **kwargs):
+    def __init__(self, node_name: str, robot_interface=None, test=False, **kwargs):
         """
         Initialize the TwoReminderProtocol.
 
@@ -33,7 +34,8 @@ class TwoReminderProtocolTree(BaseTreeRunner):
             robot_interface=robot_interface,
             **kwargs
         )
-    
+        self.test = test
+        
     def create_tree(self) -> py_trees.behaviour.Behaviour:
         """
         Creates the TwoReminderProtocol tree:
@@ -87,12 +89,23 @@ class TwoReminderProtocolTree(BaseTreeRunner):
             expected_value=True,
         )
         
-        wait_tree = YieldWait(
-            name=f"{self.node_name}_yield_wait",
-            class_name="TwoReminderProtocol", ## class name without tree
-            protocol_name=protocol_name,
-            wait_time_key=wait_time_key
-        )
+        if self.test:
+            wait_tree_init = WaitTree(
+            node_name=f"{self.node_name}_{wait_time_key}",
+            robot_interface=self.robot_interface,
+            )
+
+            wait_tree = wait_tree_init.create_tree(
+                protocol_name=protocol_name,
+                wait_time_key=wait_time_key,
+            )
+        else:
+            wait_tree = YieldWait(
+                name=f"{self.node_name}_{wait_time_key}",
+                class_name="XReminderProtocol", ## class name without tree
+                protocol_name=protocol_name,
+                wait_time_key=wait_time_key
+            )
         
         wait_selector.add_children([condition_wait, wait_tree])
 

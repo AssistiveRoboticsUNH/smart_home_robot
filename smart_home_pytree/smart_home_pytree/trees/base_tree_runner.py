@@ -39,7 +39,6 @@ class BaseTreeRunner:
         self.launch_service = None
         
         yaml_file_path = os.getenv("house_yaml_path", None) 
-        # yaml_file_path = "/home/olagh48652/smart_home_pytree_ws/src/smart_home_pytree/config/house_info.yaml"
         
         self.nodes_cleanup_done = False 
         load_locations_to_blackboard(yaml_file_path)

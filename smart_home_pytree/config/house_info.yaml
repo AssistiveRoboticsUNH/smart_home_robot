@@ -54,9 +54,47 @@ protocols:
         type_first: text
         second_reminder: "This is the second reminder to take your night medicine"
         type_second: text
-        wait_time_between_reminders: 30
+        wait_time_between_reminders: 5
       high_level:
         priority: 2
         success_on: {'state': 'coffee', 'value': True}
         requirements: 
           time: {'from': '1:30', 'to': '5:00'}
+
+  XReminderProtocol:
+    medicine_am_2:
+      low_level:
+        reminder_1: "/home/olagh48652/smart-home/src/smart-home-robot/shr_resources/resources/food_reminder.mp3"
+        type_1: audio
+        wait_1: 10
+        reminder_2:  "please take your night medicine"
+        type_2: text
+        number_of_protocols: 2
+      high_level:
+        priority: 2
+        reset_pattern:
+          type: periodic
+          minutes: 60
+        requirements:
+          time: {from: "10:00", to: "11:00"}
+          permissible_locations: [living_room]
+
+    medicine_pm_2:
+      low_level:
+        reminder_1: "/home/olagh48652/smart-home/src/smart-home-robot/shr_resources/resources/food_reminder.mp3"
+        type_1: audio
+        wait_1: 10
+        reminder_2:  "please take your night medicine"
+        type_2: text
+        wait_2: 10 
+        reminder_3: "please 1 take your night medicine"
+        type_3: text
+        number_of_protocols: 3
+      high_level:
+        priority: 2
+        reset_pattern:
+          type: periodic
+          minutes: 60
+        requirements:
+          time: {from: "10:00", to: "11:00"}
+          permissible_locations: [living_room]
