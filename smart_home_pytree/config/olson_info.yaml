@@ -78,8 +78,12 @@ protocols:
   MoveAwayProtocol:
     move_away:
       low_level:
-        position_state_key: position # indicates which key it should refer to in the state dictionary
+        away_location: dining # move_away has two loc, home or away where away is the location defined here and has to be part of the locations in the yaml
+        position_state_key: position # key to indicate whether to move away or home
+        state_key: move_away
       high_level:
+        reset_pattern:
+          type: instant 
         priority: 1
         requirements: 
           event: 

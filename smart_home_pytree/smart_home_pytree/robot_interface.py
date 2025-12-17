@@ -73,10 +73,17 @@ class RobotInterface(Node):
         super().__init__('robot_interface')
         self.state = RobotState()
         self.qos_profile = QoSProfile(
-            reliability=ReliabilityPolicy.RELIABLE,        # RELIABLE
-            history=HistoryPolicy.KEEP_LAST,              # KEEP_LAST
-            depth=1,                                      # Depth 1
-            durability=DurabilityPolicy.TRANSIENT_LOCAL   # TRANSIENT_LOCAL
+            reliability=ReliabilityPolicy.RELIABLE,        
+            history=HistoryPolicy.KEEP_LAST,              
+            depth=1,                                    
+            durability=DurabilityPolicy.TRANSIENT_LOCAL   
+        )
+
+        self.move_away_profile = QoSProfile(
+            reliability=ReliabilityPolicy.RELIABLE,       
+            history=HistoryPolicy.KEEP_LAST,             
+            depth=1,                                     
+            durability=DurabilityPolicy.VOLATILE  
         )
 
         # Subscriptions
@@ -85,8 +92,8 @@ class RobotInterface(Node):
         self.create_subscription(String, 'person_location', self.person_location_callback, 10)
         
         ## can be postion1 or position 2
-        self.create_subscription(String, 'position', self.position_location_callback, 10)
-        self.create_subscription(Bool, 'move_away', self.move_away_callback, 10)
+        self.create_subscription(String, 'position', self.position_location_callback, self.move_away_profile)
+        self.create_subscription(Bool, 'move_away', self.move_away_callback, self.move_away_profile)
         
         ## subcription for protocol events
         self.create_subscription(Bool, 'coffee', self.coffee_callback, 10)

@@ -219,6 +219,27 @@ medicine_am:
 You can access any field like this:
 ```text = protocol_info["first_text"]```
 
+## run at olson:
+
+#######
+RUN THE PROTOCOLS:
+
+python3 test_move_away.py ## this is responsible to publish true to the move_away and the position to go to
+ros2 run shr_human_interaction human_interaction_node ## responsible for publishing user output
+ros2 run rmw_zenoh_cpp rmw_zenohd
+
+'''' launch navigation '''' look for the command on the robot for that
+
+ros2 launch smart_home_pytree real_robot.launch.py  ## for play_video action server and simple logger
+python3 gui_for_testing.py ## need to change charging to true and false manually and person location. robot location is used from amcl
+python3 mock/mock_run_actions_no_nav.py ## mock dock and undock becuase the action server are not ready yet
+ 
+then run protocl_orchestrator with python3 protocol_orchestrator.py
+can change the test time, or remove it to use the actual time
+orch = ProtocolOrchestrator(test_time="15:30")
+
+#######
+
 
 ## Video of Running the Tree
 
