@@ -263,6 +263,7 @@ class TriggerMonitor:
             
             if reset_pattern is None:
                 print(f"[TriggerMonitor] No reset pattern for {protocol_name}")
+                self.completed_protocols.add(protocol_name)
                 return
 
             pattern_type = reset_pattern.get("type", "periodic")  # default to periodic if not given
