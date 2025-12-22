@@ -71,8 +71,8 @@ class PlayAudioTree(BaseTreeRunner):
         move_to_person_tree = MoveToPersonLocationTree(node_name=f"{protocol_name}_move_to_person", robot_interface=self.robot_interface)
         move_to_person = move_to_person_tree.create_tree()
         
-        charge_robot_tree = ChargeRobotTree(node_name=f"{protocol_name}_charge_robot", robot_interface=self.robot_interface)
-        charge_robot = charge_robot_tree.create_tree()
+        # charge_robot_tree = ChargeRobotTree(node_name=f"{protocol_name}_charge_robot", robot_interface=self.robot_interface)
+        # charge_robot = charge_robot_tree.create_tree()
 
         # Custom behaviors
         play_audio_reminder = play_audio.PlayAudio(name=f"{protocol_name}_play_audio", audio_path=audio_path)
@@ -86,7 +86,7 @@ class PlayAudioTree(BaseTreeRunner):
             move_to_person,
             play_audio_reminder,
             set_play_audio_success,
-            charge_robot,
+            # charge_robot,
         ])
         
         return root_sequence

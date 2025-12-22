@@ -5,7 +5,6 @@ This script is responsible for running the two reminder protocol.
 
 """
 
-
 import py_trees
 
 import rclpy
@@ -14,12 +13,15 @@ from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
 import yaml
 import argparse
 
-from smart_home_pytree.trees.read_script_tree import ReadScriptTree
 from smart_home_pytree.registry import load_protocols_to_bb
 from smart_home_pytree.behaviors.check_protocol_bb import CheckProtocolBB
+from smart_home_pytree.trees.wait_tree import WaitTree
+from smart_home_pytree.behaviors.action_behaviors.yield_wait import YieldWait
+from smart_home_pytree.trees.tree_utils import make_reminder_tree
+from smart_home_pytree.trees.wait_tree import WaitTree
 
 class TwoReminderProtocolTree(BaseTreeRunner):      
-    def __init__(self, node_name: str, robot_interface=None, **kwargs):
+    def __init__(self, node_name: str, robot_interface=None, test=False, **kwargs):
         """
         Initialize the TwoReminderProtocol.
 
@@ -32,7 +34,8 @@ class TwoReminderProtocolTree(BaseTreeRunner):
             robot_interface=robot_interface,
             **kwargs
         )
-    
+        self.test = test
+        
     def create_tree(self) -> py_trees.behaviour.Behaviour:
         """
         Creates the TwoReminderProtocol tree:
@@ -44,51 +47,99 @@ class TwoReminderProtocolTree(BaseTreeRunner):
         """
         
         protocol_name = self.kwargs.get("protocol_name", "")
-   
+        bb = py_trees.blackboard.Blackboard()
+        
+        # Extract the types
+        
+        print("protocol_name: ", protocol_name)
+        protocol_info = bb.get(protocol_name)
+
+        print(protocol_info)
+        type_1 = protocol_info["type_first"]
+        type_2 = protocol_info["type_second"]
+        wait_time_key = "wait_time_between_reminders"
+    
         if protocol_name  == "":
             raise ValueError("protocol_name is empty. Please specify one (e.g., 'medicine_am').")
         
         # Conditional wrappers
-        text_1 = "first_reminder"
-        read_script_1_with_check = py_trees.composites.Selector("Run First Script if needed", memory=True)
+        reminder_1 = "first_reminder"
+        first_selector = py_trees.composites.Selector("Run First Script if needed", memory=True)
         condition_1 = CheckProtocolBB(
             name="Should Run First Script?",
-            key=f"{protocol_name}_done.{text_1}_done",
+            key=f"{protocol_name}_done.{reminder_1}_done",
             expected_value=True,
         )
         
-        wait_time_key = "wait_time_between_reminders"
-        read_script_tree_1 = ReadScriptTree(node_name=f"{self.node_name}_read_first_script", robot_interface=self.robot_interface)
-        read_script_reminder_1 = read_script_tree_1.create_tree(protocol_name=protocol_name,data_key=text_1, wait_time_key=wait_time_key)
+        first_tree = make_reminder_tree(
+            reminder_type=type_1,
+            node_name=f"{self.node_name}_first",
+            robot_interface=self.robot_interface,
+            protocol_name=protocol_name,
+            data_key=reminder_1
+        )
         
-        read_script_1_with_check.add_children([condition_1, read_script_reminder_1])
+        first_selector.add_children([condition_1, first_tree])
         
-        text_2 = "second_reminder"
-        read_script_2_with_check = py_trees.composites.Selector("Run Second Script if needed", memory=True)
+        wait_selector = py_trees.composites.Selector("Run wait if needed", memory=True)
+        
+        condition_wait = CheckProtocolBB(
+            name="Should Run wait?",
+            key=f"{protocol_name}_done.{wait_time_key}_done",
+            expected_value=True,
+        )
+        
+        if self.test:
+            wait_tree_init = WaitTree(
+            node_name=f"{self.node_name}_{wait_time_key}",
+            robot_interface=self.robot_interface,
+            )
+
+            wait_tree = wait_tree_init.create_tree(
+                protocol_name=protocol_name,
+                wait_time_key=wait_time_key,
+            )
+        else:
+            wait_tree = YieldWait(
+                name=f"{self.node_name}_{wait_time_key}",
+                class_name="XReminderProtocol", ## class name without tree
+                protocol_name=protocol_name,
+                wait_time_key=wait_time_key
+            )
+        
+        wait_selector.add_children([condition_wait, wait_tree])
+
+        reminder_2 = "second_reminder"
+        second_selector = py_trees.composites.Selector("Run Second Script if needed", memory=True)
         condition_2 = CheckProtocolBB(
             name="Should Run Second Script?",
-            key=f"{protocol_name}_done.{text_2}_done",
+            key=f"{protocol_name}_done.{reminder_2}_done",
             expected_value=True,
         )
         
-        read_script_tree_2 = ReadScriptTree(node_name=f"{self.node_name}_read_second_script", robot_interface=self.robot_interface)
-        read_script_reminder_2 = read_script_tree_2.create_tree(protocol_name=protocol_name,data_key=text_2) ## dont want to wait after second script
-        read_script_2_with_check.add_children([condition_2, read_script_reminder_2])
+        second_tree =  make_reminder_tree(
+            reminder_type=type_2,
+            node_name=f"{self.node_name}_second",
+            robot_interface=self.robot_interface,
+            protocol_name=protocol_name,
+            data_key=reminder_2,
+        )
         
-        # # play_audio = play_audio.PlayAudio(name="play_audio", file="food_reminder.mp3")
-
+        second_selector.add_children([condition_2, second_tree])
+        
         # Root sequence
         root_sequence = py_trees.composites.Sequence(name="TwoReminderSequence", memory=True)
 
         # Add behaviors in order
         root_sequence.add_children([
-            read_script_1_with_check,
-            read_script_2_with_check,
+            first_selector,
+            wait_selector,
+            second_selector,
         ])
 
         return root_sequence
     
-    
+
 def str2bool(v):
     return str(v).lower() in ('true', '1', 't', 'yes')
 
@@ -105,7 +156,7 @@ def main(args=None):
 
     parser.add_argument('--run_continuous', type=str2bool, default=False, help="Run tree continuously (default: False)")
     parser.add_argument("--num_attempts", type=int, default=3, help="retry attempts (default: 3)")
-    parser.add_argument("--protocol_name", type=str, default="", help="name of the protocol that needs to run (ex: medicine_am)")
+    parser.add_argument("--protocol_name", type=str, default="medicine_am", help="name of the protocol that needs to run (ex: medicine_am)")
 
 
     args, unknown = parser.parse_known_args()

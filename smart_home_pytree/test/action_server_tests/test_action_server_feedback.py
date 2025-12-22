@@ -6,7 +6,7 @@ from shr_msgs.action import DockingRequest
 class DockingClient(Node):
     def __init__(self):
         super().__init__("feedback_listener")
-        self._action_client = ActionClient(self, DockingRequest, "/undocking")
+        self._action_client = ActionClient(self, DockingRequest, "/undock_robot")
 
     def send_goal(self):
         self.get_logger().info("Waiting for action server...")

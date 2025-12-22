@@ -3,3 +3,4 @@ python-kasa
 asyncio
 gTTS
 discord
+timedelta

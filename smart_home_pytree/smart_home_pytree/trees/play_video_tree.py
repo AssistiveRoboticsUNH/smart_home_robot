@@ -72,8 +72,8 @@ class PlayVideoTree(BaseTreeRunner):
         move_to_person_tree = MoveToPersonLocationTree(node_name=f"{protocol_name}_move_to_person", robot_interface=self.robot_interface)
         move_to_person = move_to_person_tree.create_tree()
         
-        charge_robot_tree = ChargeRobotTree(node_name=f"{protocol_name}_charge_robot", robot_interface=self.robot_interface)
-        charge_robot = charge_robot_tree.create_tree()
+        # charge_robot_tree = ChargeRobotTree(node_name=f"{protocol_name}_charge_robot", robot_interface=self.robot_interface)
+        # charge_robot = charge_robot_tree.create_tree()
 
         # Custom behaviors
         video_goal = PlayVideoRequest.Goal()
@@ -96,7 +96,7 @@ class PlayVideoTree(BaseTreeRunner):
             move_to_person,
             play_video_reminder,
             set_play_video_success,
-            charge_robot,
+            # charge_robot,
         ])
         
         return root_sequence

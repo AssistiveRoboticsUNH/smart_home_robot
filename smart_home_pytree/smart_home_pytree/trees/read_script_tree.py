@@ -68,8 +68,8 @@ class ReadScriptTree(BaseTreeRunner):
         move_to_person_tree = MoveToPersonLocationTree(node_name=f"{protocol_name}_move_to_person", robot_interface=self.robot_interface)
         move_to_person = move_to_person_tree.create_tree()
         
-        charge_robot_tree = ChargeRobotTree(node_name=f"{protocol_name}_charge_robot", robot_interface=self.robot_interface)
-        charge_robot = charge_robot_tree.create_tree()
+        # charge_robot_tree = ChargeRobotTree(node_name=f"{protocol_name}_charge_robot", robot_interface=self.robot_interface)
+        # charge_robot = charge_robot_tree.create_tree()
 
         # Custom behaviors
         read_script_reminder = read_script.ReadScript(name=f"{protocol_name}_read_script", text=text)
@@ -88,7 +88,7 @@ class ReadScriptTree(BaseTreeRunner):
             move_to_person,
             read_script_reminder,
             set_read_script_success,
-            charge_robot,
+            # charge_robot,
         ])
         
         return root_sequence

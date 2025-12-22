@@ -39,7 +39,6 @@ class BaseTreeRunner:
         self.launch_service = None
         
         yaml_file_path = os.getenv("house_yaml_path", None) 
-        # yaml_file_path = "/home/olagh48652/smart_home_pytree_ws/src/smart_home_pytree/config/house_info.yaml"
         
         self.nodes_cleanup_done = False 
         load_locations_to_blackboard(yaml_file_path)
@@ -162,9 +161,9 @@ class BaseTreeRunner:
                 self.count = self.count+1
                 self.tree.root.tick_once()
                 
-                # print("=" * 25 + " TREE STATE " + "=" * 25)
-                # print(display.unicode_tree(root=self.tree.root, show_status=True))
-                # print("\n")
+                print("=" * 25 + " TREE STATE " + "=" * 25)
+                print(display.unicode_tree(root=self.tree.root, show_status=True))
+                print("\n")
                 
             except Exception as e:
                 import traceback
