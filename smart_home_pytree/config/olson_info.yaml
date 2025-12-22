@@ -28,35 +28,23 @@ robot_location_state: "robot_location"
 # available type: ## todo set it in a way to verifiy htat yaml doesnt include 
 ## undefined types: text, audio, video, question_answer 
 protocols:
-  TwoReminderProtocol:
-    medicine_am:
-      permissible_locations: TO BE INCORPORATED
+  XReminderProtocol:
+    medicine_am_2:
       low_level:
-        first_reminder: "/home/hello-robot/smarthome_ws/src/smart_home_robot/smart_home_pytree/audio_resources/food_reminder_dain.mp3" #"please take your morning medicine"
-        type_first: audio
-        second_reminder: "/home/hello-robot/smarthome_ws/src/smart_home_robot/smart_home_pytree/audio_resources/food_reminder.mp3" #"This is the second reminder to take your morning medicine"
-        type_second: audio
-        wait_time_between_reminders: 100
+        reminder_1: "/home/hello-robot/smarthome_ws/src/smart_home_robot/smart_home_pytree/audio_resources/food_reminder_dain.mp3"
+        type_1: audio
+        wait_1: 300 ## 5 minutes
+        reminder_2:  "please take your night medicine"
+        type_2: text
+        number_of_protocols: 2
       high_level:
         priority: 2
         reset_pattern:
           type: periodic
           minutes: 60
-        requirements: 
-          time: {'from': '10:00', 'to': '11:00'}
-
-    medicine_pm:
-      low_level:
-        first_reminder: "please take your night medicine"
-        type_first: text
-        second_reminder: "This is the second reminder to take your night medicine"
-        type_second: text
-        wait_time_between_reminders: 5
-      high_level: 
-        priority: 2
-        requirements: 
-          day: [monday, wednesday, friday]
-          time: {'from': '22:00', 'to': '23:00'}
+        requirements:
+          time: {from: "10:00", to: "11:00"}
+          permissible_locations: [living_room]
 
 ## add states with /
   CoffeeProtocol:
@@ -72,7 +60,6 @@ protocols:
         requirements: 
           event: 
             - {'state': 'coffee', 'value': True}
-            - {'state': 'coffee_pot', 'value': True}
           time: {'from': '09:00', 'to': '13:00'}
 
   MoveAwayProtocol:
@@ -104,3 +91,6 @@ protocols:
           event: 
             - {'state': 'start_exercise', 'value': True}
           time: {'from': '15:00', 'to': '17:00'}
+
+
+## TO TEST new orchestrator, start at time 10:30 during the waiting i will trigger coffee true

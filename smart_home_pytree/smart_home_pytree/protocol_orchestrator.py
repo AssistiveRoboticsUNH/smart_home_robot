@@ -78,12 +78,12 @@ class ProtocolOrchestrator:
                     self.running_tree = None
                     self.running_thread = None
 
-            print("self.completed_protocols: ", self.trigger_monitor.completed_protocols)
+            # print("self.completed_protocols: ", self.trigger_monitor.completed_protocols)
             satisfied = self.trigger_monitor.get_satisfied()
             
             print("########### satisfied: ", satisfied)
             next_protocol = min(satisfied, key=lambda x: x[1], default=None)
-            print("****************next_protocol: ", next_protocol)
+            # print("****************next_protocol: ", next_protocol)
             if not next_protocol:
                 if self.running_tree:
                     ## if something is running this means it shouldnt run anymore and needs to be stopped
@@ -96,6 +96,7 @@ class ProtocolOrchestrator:
                     # charging = self.robot_interface.state.get("charging",None)
                     if not self._state_is_ready():
                         print("[Orchestrator] Waiting for robot state to initialize...")
+                        print("[Orchestrator] ********************** Waiting for robot state to initialize...")
                         time.sleep(1)
                         continue
         
@@ -284,8 +285,9 @@ if __name__ == "__main__":
     yaml_file_path = os.getenv("house_yaml_path", None)
     blackboard = py_trees.blackboard.Blackboard()
     load_protocols_to_bb(yaml_file_path)
+
     # For testing:
-    orch = ProtocolOrchestrator(test_time="1:35")
+    orch = ProtocolOrchestrator(test_time="10:35")
     # orch = ProtocolOrchestrator()
     # For live use:
     # orch = ProtocolOrchestrator()

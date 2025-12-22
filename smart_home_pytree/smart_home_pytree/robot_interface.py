@@ -98,7 +98,7 @@ class RobotInterface(Node):
         ## subcription for protocol events
         self.create_subscription(Bool, 'coffee', self.coffee_callback, 10)
         self.create_subscription(Bool, 'coffee_pot', self.coffee_pot_callback, 10)
-        self.create_subscription(Bool, 'charging', self.charging_callback, 10)
+        self.create_subscription(Bool, 'charging', self.charging_callback, self.qos_profile)
 
         self.create_subscription(String, 'display_rx', self.display_callback, 10)
         
@@ -110,7 +110,10 @@ class RobotInterface(Node):
 
         self._initialized = True
         self.get_logger().info("RobotInterface initialized and spinning in background thread.")
-        self.state.update('robot_location_xy', None)
+        # self.state.update('robot_location_xy', None)
+
+        self.get_logger().warn("person_location initialset to living_room. SHOULD BE ONLY USED FOR TESTING")
+        self.state.update('person_location', "living_room")
     
     def amcl_callback(self, msg):
         print("updating robot amcl")

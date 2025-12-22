@@ -4,7 +4,7 @@ import rclpy
 from nav2_msgs.action import NavigateToPose
 from geometry_msgs.msg import PoseStamped
 from rclpy.executors import MultiThreadedExecutor
-from shr_msgs.action import DockingRequest
+from nav2_msgs.action import DockRobot, UndockRobot
 import threading
 from mock_action_server import BaseMockActionServer
 from smart_home_pytree.robot_interface import RobotInterface
@@ -39,17 +39,17 @@ def main():
     )
     
     mock_dock_server = BaseMockActionServer(
-        action_name='/docking',
-        action_type=DockingRequest,
-        result_cls=DockingRequest.Result,
+        action_name='/dock_robot',
+        action_type=DockRobot,
+        result_cls=DockRobot.Result,
         succeed=True,
         wait_time=1.0 
     )
 
     mock_undock_server = BaseMockActionServer(
-        action_name='/undocking',
-        action_type=DockingRequest,
-        result_cls=DockingRequest.Result,
+        action_name='/undock_robot',
+        action_type=UndockRobot,
+        result_cls=UndockRobot.Result,
         succeed=True,
         wait_time=1.0 
     )

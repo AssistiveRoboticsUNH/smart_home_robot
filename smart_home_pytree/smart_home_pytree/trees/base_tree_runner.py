@@ -161,9 +161,9 @@ class BaseTreeRunner:
                 self.count = self.count+1
                 self.tree.root.tick_once()
                 
-                # print("=" * 25 + " TREE STATE " + "=" * 25)
-                # print(display.unicode_tree(root=self.tree.root, show_status=True))
-                # print("\n")
+                print("=" * 25 + " TREE STATE " + "=" * 25)
+                print(display.unicode_tree(root=self.tree.root, show_status=True))
+                print("\n")
                 
             except Exception as e:
                 import traceback

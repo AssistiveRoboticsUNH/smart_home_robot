@@ -10,7 +10,7 @@ import py_trees
 import py_trees_ros
 import rclpy
 import operator
-from shr_msgs.action import DockingRequest
+from nav2_msgs.action import UndockRobot
 
 from smart_home_pytree.behaviors.check_robot_state_key import CheckRobotStateKey
 
@@ -22,7 +22,7 @@ from smart_home_pytree.robot_interface import get_robot_interface
 ## launch file is using
 def required_actions_():
         return {
-            "smart_home_pytree": ["undocking"]
+            "smart_home_pytree": ["undock_robot"]
         }
         
 # Root (Sequence)
@@ -79,11 +79,13 @@ class MoveToLocationTree(BaseTreeRunner):
             comparison=operator.eq
         )
         
-        undocking_goal = DockingRequest.Goal()
+        undocking_goal = UndockRobot.Goal()
+        undocking_goal.dock_type = ""
+        undocking_goal.max_undocking_time = 30.0
         undock_robot = py_trees_ros.actions.ActionClient(
             name="Undock_Robot",
-            action_type=DockingRequest,
-            action_name="undocking",
+            action_type=UndockRobot,
+            action_name="undock_robot",
             action_goal=undocking_goal,
             wait_for_server_timeout_sec=120.0
         )   

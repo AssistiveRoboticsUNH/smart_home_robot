@@ -27,7 +27,6 @@ class TriggerMonitor:
         
         if yaml_path is None:
             yaml_path = os.getenv("house_yaml_path")
-        # yaml_path = "/home/olagh48652/smart_home_pytree_ws/src/smart_home_pytree/config/house_info copy.yaml"
         
         with open(yaml_path, "r") as f:
             self.protocols_yaml = yaml.safe_load(f)
@@ -162,15 +161,15 @@ class TriggerMonitor:
             del wait_requests[full_name]
     
     def wait_resumed(self, full_name):
-        print(f"[Yield wait] {full_name}: {self.pending_waits}")
+        # print(f"[Yield wait] {full_name}: {self.pending_waits}")
         if full_name not in self.pending_waits.keys():
             return False
 
         if datetime.now() >= self.pending_waits[full_name]:
-            print(f"[Yield wait] {full_name} reached time removing from pending_waits")
+            # print(f"[Yield wait] {full_name} reached time removing from pending_waits")
             del self.pending_waits[full_name]
             ### can use remove but discard doest give errors
-            print(f"self.completed_protocols {full_name}") 
+            # print(f"self.completed_protocols {full_name}") 
             self.completed_protocols.discard(full_name)
             return True
 
@@ -310,7 +309,7 @@ class TriggerMonitor:
                 
                 # yield wait 
                 resumed = self.wait_resumed(full_name)
-                print(f"[Yield wait] resumed: {self.completed_protocols}")
+                # print(f"[Yield wait] resumed: {self.completed_protocols}")
                 if full_name in self.completed_protocols:  # skip completed ones ## when resumed it deletes the protocol from completed
                     continue
                 
@@ -330,8 +329,8 @@ class TriggerMonitor:
                 else:
                     ## resume  dont check for req thye were already satisfied
                     ## modify to track keys for req resuming.
-                    print(f"[Yield wait] full_name: {full_name}")
-                    print(f"[Yield wait] high_level_subdata: {high_level_subdata}")
+                    # print(f"[Yield wait] full_name: {full_name}")
+                    # print(f"[Yield wait] high_level_subdata: {high_level_subdata}")
                     priority = high_level_subdata.get('priority', 1)
                     satisfied.append((full_name, priority))
                         
