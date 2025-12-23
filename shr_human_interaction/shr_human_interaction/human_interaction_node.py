@@ -40,7 +40,7 @@ class ShrHumanInteractionNode(Node):
 
         # ---- Parameters (override via launch/CLI) ----
         self.declare_parameter("model", "base.en")
-        self.declare_parameter("device", "auto")
+        self.declare_parameter("device", "cpu")
         self.declare_parameter("wakeword_keywords", "hey_jarvis")
         self.declare_parameter("vad_silero_threshold", 0.5)
         self.declare_parameter("no_speech_timeout_ms", 8000)
