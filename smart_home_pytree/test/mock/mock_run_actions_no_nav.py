@@ -4,10 +4,10 @@ import rclpy
 from nav2_msgs.action import NavigateToPose
 from geometry_msgs.msg import PoseStamped
 from rclpy.executors import MultiThreadedExecutor
-from shr_msgs.action import DockingRequest
 import threading
 from mock_action_server import BaseMockActionServer
 from smart_home_pytree.robot_interface import RobotInterface
+from nav2_msgs.action import DockRobot, UndockRobot
 
 # class DelayedMockActionServer(BaseMockActionServer):
 #     def execute_callback(self, goal_handle):
@@ -31,19 +31,19 @@ def main():
     robot_interface = RobotInterface()
     
     mock_dock_server = BaseMockActionServer(
-        action_name='/docking',
-        action_type=DockingRequest,
-        result_cls=DockingRequest.Result,
+        action_name='/dock_robot',
+        action_type=DockRobot,
+        result_cls=DockRobot.Result,
         succeed=True,
-        wait_time=30.0 
+        wait_time=10.0 
     )
 
     mock_undock_server = BaseMockActionServer(
-        action_name='/undocking',
-        action_type=DockingRequest,
-        result_cls=DockingRequest.Result,
+        action_name='/undock_robot',
+        action_type=UndockRobot,
+        result_cls=UndockRobot.Result,
         succeed=True,
-        wait_time=30.0 
+        wait_time=10.0 
     )
     
     executor = MultiThreadedExecutor()

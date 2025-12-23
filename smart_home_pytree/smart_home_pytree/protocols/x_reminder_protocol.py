@@ -15,12 +15,12 @@ import argparse
 
 from smart_home_pytree.registry import load_protocols_to_bb
 from smart_home_pytree.behaviors.check_protocol_bb import CheckProtocolBB
+from smart_home_pytree.behaviors.action_behaviors.yield_wait import YieldWait
+from smart_home_pytree.trees.tree_utils import make_reminder_tree
 from smart_home_pytree.trees.wait_tree import WaitTree
 
-from smart_home_pytree.trees.tree_utils import make_reminder_tree
-    
 class XReminderProtocolTree(BaseTreeRunner):      
-    def __init__(self, node_name: str, robot_interface=None, **kwargs):
+    def __init__(self, node_name: str, robot_interface=None, test=False, **kwargs):
         """
         Initialize the XReminderProtocolTree.
 
@@ -33,7 +33,8 @@ class XReminderProtocolTree(BaseTreeRunner):
             robot_interface=robot_interface,
             **kwargs
         )
-    
+        
+        self.test = test
     
     def create_tree(self) -> py_trees.behaviour.Behaviour:
 
@@ -111,17 +112,25 @@ class XReminderProtocolTree(BaseTreeRunner):
                     key=f"{protocol_name}_done.{wait_flag}",
                     expected_value=True
                 )
-
-                wait_tree_init = WaitTree(
+                
+                if self.test:
+                    wait_tree_init = WaitTree(
                     node_name=f"{self.node_name}_{wait_key}",
                     robot_interface=self.robot_interface,
-                )
+                    )
 
-                wait_tree = wait_tree_init.create_tree(
-                    protocol_name=protocol_name,
-                    wait_time_key=wait_key,
-                )
-
+                    wait_tree = wait_tree_init.create_tree(
+                        protocol_name=protocol_name,
+                        wait_time_key=wait_key,
+                    )
+                else:
+                    wait_tree = YieldWait(
+                        name=f"{self.node_name}_{wait_key}",
+                        class_name="XReminderProtocol", ## class name without tree
+                        protocol_name=protocol_name,
+                        wait_time_key=wait_key
+                    )
+                
                 wait_selector.add_children([condition_wait, wait_tree])
                 root.add_child(wait_selector)
 

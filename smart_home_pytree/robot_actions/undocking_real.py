@@ -9,7 +9,7 @@ from rclpy.executors import MultiThreadedExecutor
 import time
 from geometry_msgs.msg import Twist
 import os
-import std_msgs.msg import Bool
+from std_msgs.msg import Bool
 
 class DockingActionServer(GenericActionServer):
     def __init__(self):

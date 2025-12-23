@@ -50,48 +50,17 @@ protocols:
     medicine_am:
       permissible_locations: TO BE INCORPORATED
       low_level:
-        first_reminder: "/home/olagh48652/smart-home/src/smart-home-robot/shr_resources/resources/food_reminder.mp3" #"please take your morning medicine"
-        type_first: audio
-        second_reminder: "/home/olagh48652/smart-home/src/smart-home-robot/shr_resources/resources/food_reminder.mp3" #"This is the second reminder to take your morning medicine"
-        type_second: audio
-        wait_time_between_reminders: 5
-      high_level:
-        priority: 2
-        reset_pattern:
-          type: periodic
-          minutes: 1
-        requirements: 
-          time: {'from': '1:30', 'to': '5:00'}
-
-    medicine_pm:
-      low_level:
         first_reminder: "please take your night medicine"
         type_first: text
         second_reminder: "This is the second reminder to take your night medicine"
         type_second: text
         wait_time_between_reminders: 5
-      high_level: 
-        priority: 2
-        requirements: 
-          day: [monday, wednesday, friday]
-          time: {'from': '22:00', 'to': '23:00'}
-
-  CoffeeProtocol:
-    coffee:
-      low_level:
-        first_text: "please clean the dishes"
       high_level:
-        reset_pattern:
-          type: periodic
-          hours: 1
-          minutes: 30
-        priority: 3
+        priority: 2
+        success_on: {'state': 'coffee', 'value': True}
         requirements: 
-          event: 
-            - {'state': 'coffee', 'value': True}
-            - {'state': 'coffee_pot', 'value': True}
-          time: {'from': '01:00', 'to': '3:00'}
-  
+          time: {'from': '1:30', 'to': '5:00'}
+
   XReminderProtocol:
     medicine_am_2:
       low_level:
@@ -101,7 +70,6 @@ protocols:
         reminder_2:  "please take your night medicine"
         type_2: text
         number_of_protocols: 2
-
       high_level:
         priority: 2
         reset_pattern:
@@ -130,30 +98,3 @@ protocols:
         requirements:
           time: {from: "10:00", to: "11:00"}
           permissible_locations: [living_room]
-
-  ExerciseProtocol:
-    exercise:
-      low_level:
-        exercise_yaml_file: "/home/olagh48652/smart_home_pytree_ws/src/smart_home_robot/smart_home_pytree/config/exercise_routine_test.yaml"
-        video_dir_path: "file:///storage/emulated/0/Download/Exercise_Videos" ## path on the tablet 
-        start_state_key: "start_exercise"
-        stop_state_key: "stop_exercise"
-      high_level:
-        reset_pattern:
-          type: instant ## if triggered should play directly
-        priority: 3
-        requirements: 
-          event: 
-            - {'state': 'start_exercise', 'value': True}
-          time: {'from': '15:00', 'to': '17:00'}
-
-  # EmergencyProtocol:
-  #   emergency:
-  #     low_level:
-  #       alert_message: "/home/olagh48652/smart-home/src/smart-home-robot/shr_resources/resources/emergency_alert.mp3"
-  #       type_alert: audio
-  #     high_level:
-  #       priority: 1
-  #       requirements:
-  #         event:
-  #           - {'state': '/emergency', 'value': True}

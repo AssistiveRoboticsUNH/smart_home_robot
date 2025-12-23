@@ -1,7 +1,7 @@
 import rclpy
 from rclpy.node import Node
 from rclpy.executors import MultiThreadedExecutor
-from std_msgs.msg import String, Bool
+from std_msgs.msg import String, Bool, Int32
 import threading
 from std_msgs.msg import String
 from geometry_msgs.msg import PoseWithCovarianceStamped
@@ -73,10 +73,17 @@ class RobotInterface(Node):
         super().__init__('robot_interface')
         self.state = RobotState()
         self.qos_profile = QoSProfile(
-            reliability=ReliabilityPolicy.RELIABLE,        # RELIABLE
-            history=HistoryPolicy.KEEP_LAST,              # KEEP_LAST
-            depth=1,                                      # Depth 1
-            durability=DurabilityPolicy.TRANSIENT_LOCAL   # TRANSIENT_LOCAL
+            reliability=ReliabilityPolicy.RELIABLE,        
+            history=HistoryPolicy.KEEP_LAST,              
+            depth=1,                                    
+            durability=DurabilityPolicy.TRANSIENT_LOCAL   
+        )
+
+        self.move_away_profile = QoSProfile(
+            reliability=ReliabilityPolicy.RELIABLE,       
+            history=HistoryPolicy.KEEP_LAST,             
+            depth=1,                                     
+            durability=DurabilityPolicy.VOLATILE  
         )
 
         # Subscriptions
@@ -85,13 +92,13 @@ class RobotInterface(Node):
         self.create_subscription(String, 'person_location', self.person_location_callback, 10)
         
         ## can be postion1 or position 2
-        self.create_subscription(String, 'position', self.position_location_callback, 10)
-        self.create_subscription(Bool, 'move_away', self.move_away_callback, 10)
+        self.create_subscription(String, 'position', self.position_location_callback, self.move_away_profile)
+        self.create_subscription(Bool, 'move_away', self.move_away_callback, self.move_away_profile)
         
         ## subcription for protocol events
         self.create_subscription(Bool, 'coffee', self.coffee_callback, 10)
         self.create_subscription(Bool, 'coffee_pot', self.coffee_pot_callback, 10)
-        self.create_subscription(Bool, 'charging', self.charging_callback, 10)
+        self.create_subscription(Bool, 'charging', self.charging_callback, self.qos_profile)
 
         self.create_subscription(String, 'display_rx', self.display_callback, 10)
         
@@ -103,10 +110,13 @@ class RobotInterface(Node):
 
         self._initialized = True
         self.get_logger().info("RobotInterface initialized and spinning in background thread.")
-        self.state.update('robot_location_xy', None)
+        # self.state.update('robot_location_xy', None)
+
+        self.get_logger().warn("person_location initialset to living_room. SHOULD BE ONLY USED FOR TESTING")
+        self.state.update('person_location', "living_room")
     
     def amcl_callback(self, msg):
-        print("updating rbot amcl")
+        print("updating robot amcl")
         x = msg.pose.pose.position.x
         y = msg.pose.pose.position.y
         self.state.update('robot_location_xy', (x,y))

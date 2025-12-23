@@ -12,7 +12,9 @@ setup(
             'smart_home_pytree',
             'smart_home_pytree.*',
             'robot_actions',
-            'robot_actions.*'
+            'robot_actions.*',
+            'smart_sensors',
+            'smart_sensors.*'
         ],
         exclude=['test', 'test.*']
     ),
@@ -37,6 +39,7 @@ setup(
             'docking = robot_actions.docking:main',
             'play_video = robot_actions.play_video:main',
             'smart_plug = smart_sensors.smart_plug_node:main',
+            'charge_monitor = smart_sensors.charge_monitor:main',
         ],
     },
 )

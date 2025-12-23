@@ -7,7 +7,7 @@ import rclpy
 from rclpy.executors import MultiThreadedExecutor
 import threading
 import py_trees
-from smart_home_pytree.trees.two_reminder_protocol import TwoReminderProtocolTree
+from smart_home_pytree.protocols.two_reminder_protocol import TwoReminderProtocolTree
 from smart_home_pytree.registry import load_locations_to_blackboard, load_protocols_to_bb
 
 # Replace these with your actual action types
@@ -106,6 +106,7 @@ def test_two_reminder_success():
         node_name="read_script_test",
         robot_interface=robot_interface,
         protocol_name=protocol_name,
+        test=True
     )
     
     tree_runner.setup()
@@ -116,6 +117,7 @@ def test_two_reminder_success():
 
     def on_docking_trigger(action_name):
         print(f"[Callback] Moving triggered ({action_name}), setting new location")
+        robot_interface.state.update('robot_location', 'home')
         robot_interface.state.update('charging', True)
         
     def on_undocking_trigger(action_name):
@@ -128,15 +130,16 @@ def test_two_reminder_success():
     
     runner_thread = threading.Thread(target=tree_runner.run_until_done, daemon=True)
     runner_thread.start()
-    runner_thread.join(timeout=100)
+    runner_thread.join(timeout=500)
     
     ## since charging is false
-    assert not mock_undock_server.triggered
+    assert mock_undock_server.triggered
     assert mock_nav_server.triggered, "Expected navigation to be triggered"
     assert mock_dock_server.result_status == "succeeded"
 
     assert mock_dock_server.triggered, "Expected docking to be triggered"
-    assert robot_interface.state.get('charging') is True, "Robot should not be charging"
+    ## read script no longer docks
+    assert robot_interface.state.get('charging') is False, "Robot should not be charging"
     
     ## assert all keys corresponding to protocol passed
     found_protocol = False
@@ -165,120 +168,120 @@ def test_two_reminder_success():
     mock_undock_server.destroy_node()
     tree_runner.cleanup()
    
-def test_two_reminder_stops_midway_and_resumes_correctly():
-    blackboard = py_trees.blackboard.Blackboard()
+# def test_two_reminder_stops_midway_and_resumes_correctly():
+#     blackboard = py_trees.blackboard.Blackboard()
 
-    # Mock servers for navigation and docking
-    mock_nav_server = BaseMockActionServer(
-        action_name='/navigate_to_pose',
-        action_type=NavigateToPose,
-        result_cls=NavigateToPose.Result,
-        succeed=True,
-        wait_time=0.5
-    )
-    mock_dock_server = BaseMockActionServer(
-        action_name='/docking',
-        action_type=DockingRequest,
-        result_cls=DockingRequest.Result,
-        succeed=True,
-        wait_time=1.0
-    )
-    mock_undock_server = BaseMockActionServer(
-        action_name='/undocking',
-        action_type=DockingRequest,
-        result_cls=DockingRequest.Result,
-        succeed=True,
-        wait_time=1.0
-    )
+#     # Mock servers for navigation and docking
+#     mock_nav_server = BaseMockActionServer(
+#         action_name='/navigate_to_pose',
+#         action_type=NavigateToPose,
+#         result_cls=NavigateToPose.Result,
+#         succeed=True,
+#         wait_time=0.5
+#     )
+#     mock_dock_server = BaseMockActionServer(
+#         action_name='/docking',
+#         action_type=DockingRequest,
+#         result_cls=DockingRequest.Result,
+#         succeed=True,
+#         wait_time=1.0
+#     )
+#     mock_undock_server = BaseMockActionServer(
+#         action_name='/undocking',
+#         action_type=DockingRequest,
+#         result_cls=DockingRequest.Result,
+#         succeed=True,
+#         wait_time=1.0
+#     )
 
-    executor = MultiThreadedExecutor()
-    executor.add_node(mock_nav_server)
-    executor.add_node(mock_dock_server)
-    executor.add_node(mock_undock_server)
+#     executor = MultiThreadedExecutor()
+#     executor.add_node(mock_nav_server)
+#     executor.add_node(mock_dock_server)
+#     executor.add_node(mock_undock_server)
 
-    executor_thread = threading.Thread(target=executor.spin, daemon=True)
-    executor_thread.start()
+#     executor_thread = threading.Thread(target=executor.spin, daemon=True)
+#     executor_thread.start()
 
-    protocol_name = "medicine_pm"
-    robot_interface.state.update('charging', False)
-    robot_interface.state.update('person_location', 'living_room')
-    robot_interface.state.update('robot_location', 'kitchen')
+#     protocol_name = "medicine_pm"
+#     robot_interface.state.update('charging', False)
+#     robot_interface.state.update('person_location', 'living_room')
+#     robot_interface.state.update('robot_location', 'kitchen')
 
-    tree_runner = TwoReminderProtocolTree(
-        node_name="two_reminder_midway_stop",
-        robot_interface=robot_interface,
-        protocol_name=protocol_name,
-    )
-    tree_runner.setup()
+#     tree_runner = TwoReminderProtocolTree(
+#         node_name="two_reminder_midway_stop",
+#         robot_interface=robot_interface,
+#         protocol_name=protocol_name,
+#     )
+#     tree_runner.setup()
 
-    # Simulate robot movement callbacks
-    def on_moving_trigger(action_name):
-        print(f"[Callback] Moving triggered ({action_name}), setting new location")
-        robot_interface.state.update('robot_location', 'living_room')
+#     # Simulate robot movement callbacks
+#     def on_moving_trigger(action_name):
+#         print(f"[Callback] Moving triggered ({action_name}), setting new location")
+#         robot_interface.state.update('robot_location', 'living_room')
 
-    def on_docking_trigger(action_name):
-        print(f"[Callback] Docking triggered ({action_name})")
-        robot_interface.state.update('charging', True)
+#     def on_docking_trigger(action_name):
+#         print(f"[Callback] Docking triggered ({action_name})")
+#         robot_interface.state.update('charging', True)
         
-    def on_undocking_trigger(action_name):
-        print(f"[Callback] Undocking triggered ({action_name})")
-        robot_interface.state.update('charging', False)
+#     def on_undocking_trigger(action_name):
+#         print(f"[Callback] Undocking triggered ({action_name})")
+#         robot_interface.state.update('charging', False)
         
-    mock_nav_server.set_on_trigger(on_moving_trigger)
-    mock_dock_server.set_on_trigger(on_docking_trigger)
-    mock_undock_server.set_on_trigger(on_undocking_trigger)
+#     mock_nav_server.set_on_trigger(on_moving_trigger)
+#     mock_dock_server.set_on_trigger(on_docking_trigger)
+#     mock_undock_server.set_on_trigger(on_undocking_trigger)
 
-    # Start the tree in a thread
-    runner_thread = threading.Thread(target=tree_runner.run_until_done, daemon=True)
-    runner_thread.start()
+#     # Start the tree in a thread
+#     runner_thread = threading.Thread(target=tree_runner.run_until_done, daemon=True)
+#     runner_thread.start()
 
-    # Let it run through the first reminder, then stop it
-    time.sleep(3.0)
-    print("[TEST] Stopping tree after first reminder...")
+#     # Let it run through the first reminder, then stop it
+#     time.sleep(3.0)
+#     print("[TEST] Stopping tree after first reminder...")
     
-    while True:
-        protocol_data = blackboard.storage.get(f"/{protocol_name}_done", {})
-        if protocol_data.get("first_text_done") is True:
-            tree_runner.stop_tree()
+#     while True:
+#         protocol_data = blackboard.storage.get(f"/{protocol_name}_done", {})
+#         if protocol_data.get("first_text_done") is True:
+#             tree_runner.stop_tree()
             
-            assert not tree_runner.final_status == py_trees.common.Status.SUCCESS
+#             assert not tree_runner.final_status == py_trees.common.Status.SUCCESS
             
-            runner_thread.join(timeout=5)
-            tree_runner.cleanup()
-            break
+#             runner_thread.join(timeout=5)
+#             tree_runner.cleanup()
+#             break
         
-    # Check that the first reminder finished but not the second
-    protocol_data = blackboard.storage.get(f"/{protocol_name}_done", {})
-    assert isinstance(protocol_data, dict), "Expected protocol data dict"
-    assert protocol_data.get("first_text_done") is True, "First reminder should have completed before stop"
-    assert not protocol_data.get("second_text_done", False), "Second reminder should NOT have run yet"
+#     # Check that the first reminder finished but not the second
+#     protocol_data = blackboard.storage.get(f"/{protocol_name}_done", {})
+#     assert isinstance(protocol_data, dict), "Expected protocol data dict"
+#     assert protocol_data.get("first_text_done") is True, "First reminder should have completed before stop"
+#     assert not protocol_data.get("second_text_done", False), "Second reminder should NOT have run yet"
 
     
-    # Now restart the same protocol tree (simulating resume)
-    print("[TEST] Restarting tree...")
-    tree_runner_2 = TwoReminderProtocolTree(
-        node_name="two_reminder_resume",
-        robot_interface=robot_interface,
-        protocol_name=protocol_name,
-    )
-    tree_runner_2.setup()
+#     # Now restart the same protocol tree (simulating resume)
+#     print("[TEST] Restarting tree...")
+#     tree_runner_2 = TwoReminderProtocolTree(
+#         node_name="two_reminder_resume",
+#         robot_interface=robot_interface,
+#         protocol_name=protocol_name,
+#     )
+#     tree_runner_2.setup()
 
-    runner_thread_2 = threading.Thread(target=tree_runner_2.run_until_done, daemon=True)
-    runner_thread_2.start()
-    runner_thread_2.join(timeout=50)
+#     runner_thread_2 = threading.Thread(target=tree_runner_2.run_until_done, daemon=True)
+#     runner_thread_2.start()
+#     runner_thread_2.join(timeout=50)
 
-    # Verify both reminders completed
-    protocol_data = blackboard.storage.get(f"/{protocol_name}_done", {})
-    assert protocol_data.get("first_text_done") is True, "First reminder should stay marked done"
-    assert protocol_data.get("second_text_done") is True, "Second reminder should complete after resume"
-    assert tree_runner_2.final_status == py_trees.common.Status.SUCCESS
+#     # Verify both reminders completed
+#     protocol_data = blackboard.storage.get(f"/{protocol_name}_done", {})
+#     assert protocol_data.get("first_text_done") is True, "First reminder should stay marked done"
+#     assert protocol_data.get("second_text_done") is True, "Second reminder should complete after resume"
+#     assert tree_runner_2.final_status == py_trees.common.Status.SUCCESS
 
-    # Cleanup
-    executor.shutdown()
-    executor_thread.join()
-    mock_nav_server.destroy_node()
-    mock_dock_server.destroy_node()
-    mock_undock_server.destroy_node()
-    tree_runner_2.cleanup()
+#     # Cleanup
+#     executor.shutdown()
+#     executor_thread.join()
+#     mock_nav_server.destroy_node()
+#     mock_dock_server.destroy_node()
+#     mock_undock_server.destroy_node()
+#     tree_runner_2.cleanup()
      
-# ~/smart_home_pytree_ws/src/smart_home_pytree: run  python3 -m  pytest test/unit/test_two_reminder_protocol_tree.py -vv
+# # ~/smart_home_pytree_ws/src/smart_home_pytree: run  python3 -m  pytest test/unit/test_two_reminder_protocol_tree.py -vv

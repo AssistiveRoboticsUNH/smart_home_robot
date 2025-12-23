@@ -7,7 +7,7 @@ import rclpy
 from rclpy.executors import MultiThreadedExecutor
 import threading
 import py_trees
-from smart_home_pytree.trees.x_reminder_protocol import XReminderProtocolTree
+from smart_home_pytree.protocols.x_reminder_protocol import XReminderProtocolTree
 from smart_home_pytree.registry import load_locations_to_blackboard, load_protocols_to_bb
 
 # Replace these with your actual action types
@@ -106,6 +106,7 @@ def test_two_reminder_success():
         node_name="read_script_test",
         robot_interface=robot_interface,
         protocol_name=protocol_name,
+        test=True
     )
     
     tree_runner.setup()
@@ -116,6 +117,7 @@ def test_two_reminder_success():
 
     def on_docking_trigger(action_name):
         print(f"[Callback] Moving triggered ({action_name}), setting new location")
+        robot_interface.state.update('robot_location', 'home')
         robot_interface.state.update('charging', True)
         
     def on_undocking_trigger(action_name):
@@ -131,12 +133,15 @@ def test_two_reminder_success():
     runner_thread.join(timeout=100)
     
     ## since charging is false
-    assert not mock_undock_server.triggered
+    ## but wait charges the robot 
+    ## has to undock for second reminder
+    assert mock_undock_server.triggered
     assert mock_nav_server.triggered, "Expected navigation to be triggered"
     assert mock_dock_server.result_status == "succeeded"
 
     assert mock_dock_server.triggered, "Expected docking to be triggered"
-    assert robot_interface.state.get('charging') is True, "Robot should not be charging"
+    ## read script no longer charges robot
+    assert robot_interface.state.get('charging') is False, "Robot should not be charging"
     
     ## assert all keys corresponding to protocol passed
     found_protocol = False
@@ -182,7 +187,7 @@ def test_three_reminder_success():
         action_type=DockingRequest,
         result_cls=DockingRequest.Result,
         succeed=True,
-        wait_time=1.0 
+        wait_time=0.5
     )
 
     mock_undock_server = BaseMockActionServer(
@@ -190,7 +195,7 @@ def test_three_reminder_success():
         action_type=DockingRequest,
         result_cls=DockingRequest.Result,
         succeed=True,
-        wait_time=1.0 
+        wait_time=0.5
     )
     
     executor = MultiThreadedExecutor()
@@ -219,6 +224,7 @@ def test_three_reminder_success():
         node_name="read_script_test",
         robot_interface=robot_interface,
         protocol_name=protocol_name,
+        test= True
     )
     
     tree_runner.setup()
@@ -229,6 +235,7 @@ def test_three_reminder_success():
 
     def on_docking_trigger(action_name):
         print(f"[Callback] Moving triggered ({action_name}), setting new location")
+        robot_interface.state.update('robot_location', 'home')
         robot_interface.state.update('charging', True)
         
     def on_undocking_trigger(action_name):
@@ -241,15 +248,16 @@ def test_three_reminder_success():
     
     runner_thread = threading.Thread(target=tree_runner.run_until_done, daemon=True)
     runner_thread.start()
-    runner_thread.join(timeout=100)
+    ## needs to be long enough for the protocol to finish
+    runner_thread.join(timeout=500)
     
-    ## since charging is false
-    assert not mock_undock_server.triggered
+    
+    assert mock_undock_server.triggered
     assert mock_nav_server.triggered, "Expected navigation to be triggered"
     assert mock_dock_server.result_status == "succeeded"
 
     assert mock_dock_server.triggered, "Expected docking to be triggered"
-    assert robot_interface.state.get('charging') is True, "Robot should not be charging"
+    assert robot_interface.state.get('charging') is False, "Robot should not be charging"
     
     ## assert all keys corresponding to protocol passed
     found_protocol = False

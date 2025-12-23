@@ -1,0 +1,104 @@
+## store infromation needed for all protocols
+locations:
+  bedroom:
+    x: -1.08
+    y: -1.4811692237854004
+    yaw: -1.5708   # -90 degrees
+
+  living_room:
+    x: 1.0967974662780762
+    y: 1.9037660360336304
+    yaw: 0.0       # facing forward
+  home:
+    x: 2.6955928802490234 #0.85 #
+    y: 3.3216073513031006 #1.014 #
+    yaw: -1.5708   # -90 degrees
+
+  dining:
+    x: 5.066422939300537
+    y: 3.4881248474121094
+    yaw: -1.5708   # -90 degrees
+
+
+
+## need to be integerated to have robot interface get its info 
+person_location_state: "person_location"
+robot_location_state: "robot_location"
+
+# available type: ## todo set it in a way to verifiy that yaml doesnt include 
+## undefined types: text, audio, video, question_answer 
+protocols:
+
+
+  MoveAwayProtocol:
+    move_away:
+      low_level:
+        position_state_key: position # indicates which key it should refer to in the state dictionary
+      high_level:
+        priority: 1
+        requirements: 
+          event: 
+            - {'state': 'move_away', 'value': True}  
+
+  ## permissible_locations to be incorporated
+  XReminderProtocol:
+    lunch_1:
+      low_level:
+        reminder_1: "Hey BE it is time for you to eat Lunch 1 and take your medicine"
+        type_1: text
+        number_of_protocols: 1
+      high_level:
+        priority: 2
+        requirements:
+          day: [thursday, saturday, sunday]
+          time: {from: "12:00", to: "13:00"}
+          permissible_locations: [living_room]
+
+    lunch_2:
+      low_level:
+        reminder_1: "Hey BE it is time for lunch 2 and a no caffeine drink & snack."
+        type_1: text
+        number_of_protocols: 1
+      high_level:
+        priority: 2
+        requirements:
+          time: {from: "15:00", to: "16:00"}
+          permissible_locations: [living_room]
+
+  ExerciseProtocol:
+    exercise:
+      low_level:
+        exercise_yaml_file: "/home/hello-robot/smarthome_ws/src/smart_home_robot/smart_home_pytree/config/exercise_routine_test.yaml" 
+        video_dir_path: "file:///storage/emulated/0/Download/Exercise_Videos" ## path on the tablet 
+        start_state_key: "start_exercise"
+        stop_state_key: "stop_exercise"
+      high_level:
+        reset_pattern:
+          type: instant ## if triggered should play directly
+        priority: 3
+        requirements: 
+          event: 
+            - {'state': 'start_exercise', 'value': True}
+          day: [thursday, saturday, sunday]
+          time: {'from': "9:30", to: "10:30"}
+
+ 
+
+# 3 days a week- 9.30 am- Thursday, Saturday and Sunday 
+
+# BE is spotted in the living area 
+
+# Robbie moves to protocol location 
+
+# “Hey BE, it is time for your exercises now. Are you ready? Say Yes or No 
+
+# If no, Robbie goes back to docking 
+
+# If yes, our exercise videos will start playing for a 10-15 minute session- Different set of exercises each day 
+
+# 7 pm everyday 
+# BE is spotted in the living area 
+# Robbie moves to protocol location 
+# “BE it is time for your PM routine- steps are on your poster in the bathroom” 
+# Robbie goes back to docking 
+# If no motion detected in the bathroom within the next 45 mins 

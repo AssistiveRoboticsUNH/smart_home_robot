@@ -8,7 +8,7 @@ The tree should check if the is charging and exit. else it moves the robot to ho
 
 
 import py_trees
-from shr_msgs.action import DockingRequest
+
 import py_trees.console as console
 import rclpy
 import py_trees_ros
@@ -19,14 +19,15 @@ from smart_home_pytree.behaviors.logging_behavior import LoggingBehavior
 from smart_home_pytree.behaviors.check_robot_state_key import CheckRobotStateKey
 from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
 from smart_home_pytree.trees.move_to_tree import MoveToLocationTree
+from nav2_msgs.action import DockRobot
 
 import argparse
 from smart_home_pytree.robot_interface import get_robot_interface
 
-
+### same names as in action_name of the action clients
 def required_actions_():
         return {
-            "smart_home_pytree": ["docking", "undocking"]
+            "smart_home_pytree": ["dock_robot", "undock_robot "]
         }
         
 
@@ -98,11 +99,11 @@ class ChargeRobotTree(BaseTreeRunner):
 
 
         # Dock robot action (empty goal)
-        docking_goal = DockingRequest.Goal()
+        docking_goal = DockRobot.Goal()
         dock_robot = py_trees_ros.actions.ActionClient(
             name="Dock_Robot",
-            action_type=DockingRequest,
-            action_name="docking",
+            action_type=DockRobot,
+            action_name="dock_robot",
             action_goal=docking_goal,
             wait_for_server_timeout_sec=120.0
         )

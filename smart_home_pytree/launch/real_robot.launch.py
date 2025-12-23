@@ -11,9 +11,9 @@ def generate_launch_description():
 
     ld = LaunchDescription()
 
-    smartthings_node_plug = Node(
+    charge_monitor = Node(
         package='smart_home_pytree',
-        executable='smart_plug',
+        executable='charge_monitor',
         output='screen'
     )
 
@@ -29,10 +29,15 @@ def generate_launch_description():
         output='screen'
     )
 
+    play_video_node_cmd = Node(
+        package='smart_home_pytree',
+        executable='play_video',
+        name='play_video',
+        output='screen')
 
-    ld.add_action(smartthings_node_plug)
-
+    ld.add_action(charge_monitor)
     ld.add_action(discord_logger)
     ld.add_action(display_node)
+    ld.add_action(play_video_node_cmd)
 
     return ld

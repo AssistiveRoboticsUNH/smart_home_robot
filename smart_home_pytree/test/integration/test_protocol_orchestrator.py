@@ -7,8 +7,7 @@ import rclpy
 from rclpy.executors import MultiThreadedExecutor
 import threading
 import py_trees
-from smart_home_pytree.trees.two_reminder_protocol import TwoReminderProtocolTree
-from smart_home_pytree.registry import load_locations_to_blackboard, load_protocols_to_bb
+from smart_home_pytree.registry import load_protocols_to_bb
 from smart_home_pytree.protocol_orchestrator import ProtocolOrchestrator
 
 # Replace these with your actual action types

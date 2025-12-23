@@ -135,7 +135,7 @@ class ExerciseProtocolTree(BaseTreeRunner):
     
         protocol = py_trees.composites.Sequence(
             name="ExerciseProtocolCore",
-            memory=False
+            memory=True # False
         )
 
         # INTRO
@@ -143,11 +143,11 @@ class ExerciseProtocolTree(BaseTreeRunner):
         protocol.add_child(
             py_trees.composites.Selector(
                 name="IntroSelector",
-                memory=False,
+                memory=True, # False
                 children=[
                     CheckDoneBB("IntroAlreadyDone?", intro_flag),
                     py_trees.composites.Sequence(name=f"{intro_flag}_Intro",
-                        memory=False,
+                        memory=True, # False
                         children=[
                         ReadScript(data["introduction"], "IntroScript"),
                         SetDoneBB("MarkIntroDone", intro_flag),
@@ -165,7 +165,7 @@ class ExerciseProtocolTree(BaseTreeRunner):
 
             series_seq = py_trees.composites.Sequence(
                 name=f"{series_key}_Sequence",
-                memory=False
+                memory=True, # False
             )
 
             # SERIES INTRO
@@ -173,11 +173,11 @@ class ExerciseProtocolTree(BaseTreeRunner):
             series_seq.add_child(
                 py_trees.composites.Selector(
                     name=f"{series_key}_IntroSelector",
-                    memory=False,
+                    memory=True, # False
                     children=[
                         CheckDoneBB("SeriesIntroDone?", s_intro_flag),
                         py_trees.composites.Sequence(name="DoIntroSequence",
-                        memory=False,
+                        memory=True, # False
                         children=[
                             ReadScript(series["introduction"], f"{series_key}_Intro"),
                             SetDoneBB(f"{series_key}_MarkIntroDone", s_intro_flag),
@@ -224,7 +224,7 @@ class ExerciseProtocolTree(BaseTreeRunner):
         # Selector: If guard passes: run protocol ELSE If guard blocks: run stop handler
         exercise_block = py_trees.composites.Selector(
             name="ExerciseOrStop",
-            memory=False,
+            memory=True, ## False,
             children=[guarded_protocol, stop_handler]
         )
 
@@ -240,6 +240,7 @@ class ExerciseProtocolTree(BaseTreeRunner):
         # Full pipeline
         root = py_trees.composites.Sequence(
             name="FullExercisePipeline",
+            memory=True,
             children=[
                 move_to_person,
                 exercise_block,
@@ -255,7 +256,7 @@ class ExerciseProtocolTree(BaseTreeRunner):
         prefix = f"{self.key_word}_{series_key}_{ex_key}"
         seq = py_trees.composites.Sequence(
             name=f"{series_key}_{ex_key}",
-            memory=False
+            memory=True ## False
         )
 
         # Exercise description (resumable)
@@ -263,11 +264,11 @@ class ExerciseProtocolTree(BaseTreeRunner):
         seq.add_child(
             py_trees.composites.Selector(
                 name=f"{ex_key}_DescSelector",
-                memory=False,
+                memory=True, ## False
                 children=[
                     CheckDoneBB("DescDone?", desc_flag),
                     py_trees.composites.Sequence(name="Do_{ex_key}_DescSelector",
-                        memory=False,
+                        memory=True, ## False
                         children=[
                         ReadScript(ex["text"], f"{ex_key}_Description"),
                         SetDoneBB(f"{ex_key}_MarkDescDone", desc_flag)
@@ -299,11 +300,11 @@ class ExerciseProtocolTree(BaseTreeRunner):
             
             rep_selector = py_trees.composites.Selector(
                 name=f"{ex_key}_Rep_{i+1}",
-                memory=False,
+                memory=True, ## False
                 children=[
                     CheckDoneBB(f"Rep{i+1}Done?", rep_flag),
                     py_trees.composites.Sequence(name="Do_Rep_{ex_key}_Rep_{i+1}",
-                        memory=False,
+                        memory=True, ## False
                         children=[
                         play_video_reminder,
                         SetDoneBB(f"{ex_key}_MarkRep{i+1}Done", rep_flag),

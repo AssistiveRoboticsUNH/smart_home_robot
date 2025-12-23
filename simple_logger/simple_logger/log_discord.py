@@ -1,7 +1,7 @@
 import rclpy
 from rclpy.node import Node
 from rcl_interfaces.msg import Log
-from std_msgs.msg import Float32, Int64, Int32
+from std_msgs.msg import Float32, Int64, Int32, Bool
 from datetime import datetime
 import os, re, time, asyncio, subprocess, threading
 
@@ -33,7 +33,7 @@ class LogSubscriber(Node):
         self.bump_subscriber = self.create_subscription(Int64, 'bump', self.bump_callback, 10)
         self.voltage_subscriber = self.create_subscription(Float32, 'charging_voltage', self.voltage_callback, 10)
         # self.ir_sensor_subscriber = self.create_subscription(Float32, 'docking/ir_weight', self.ir_sensor_callback, 10)
-        self.charger_subscriber = self.create_subscription(Int32, 'charging', self.iot_charger_callback, 10)
+        self.charger_subscriber = self.create_subscription(Bool, 'charging', self.iot_charger_callback, 10)
         self.current_subscriber = self.create_subscription(Float32, 'charging_current', self.current_callback, 10)
         
         self.charger_status = None

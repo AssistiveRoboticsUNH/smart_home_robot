@@ -21,6 +21,19 @@ import py_trees_ros
 
 from smart_home_pytree.trees.tree_utils import make_reminder_tree
 
+class UpdateRobotStateKey_(py_trees.behaviour.Behaviour):
+    def __init__(self, name: str, robot_interface, key: str):
+        super().__init__(name)
+        self.robot_interface = robot_interface
+        self.key = key
+
+    def update(self):  
+        value = self.robot_interface.state.get(self.key, None)
+        print("[UpdateRobotStateKey_] value: ", value)
+        ## set value ot false
+        self.robot_interface.state.update(self.key, False)
+        return py_trees.common.Status.SUCCESS
+        
 # move_away_protocol
 class MoveAwayProtocolTree(BaseTreeRunner):      
     def __init__(self, node_name: str, robot_interface=None, **kwargs):
@@ -50,33 +63,51 @@ class MoveAwayProtocolTree(BaseTreeRunner):
         protocol_name = self.kwargs.get("protocol_name", "")
         blackboard = py_trees.blackboard.Blackboard()
         protocol_info = blackboard.get(protocol_name)
+       
+        if protocol_info is None:
+            raise RuntimeError(f"Protocol '{protocol_name}' not found in blackboard")
+
         # Extract the types
         position_key = "position_state_key"
         
         state_key = protocol_info[position_key]
+        update_key = protocol_info["state_key"]
         
         state = self.robot_interface.state
         position_loc = state.get(state_key, None)
-        print(f"&&& postion loc using key {state_key} is  {position_loc}")
-       
+        
+        print(f"&&& postion loc using key {state_key} is {position_loc}")
+        print(f"&&& protocol_info using key {protocol_info['away_location']}")
+
+
+        if position_loc == "home":
+            target_location = "home"
+        else:
+            target_location = protocol_info["away_location"]
+        
+        print(f"&&& target_location loc using key {target_location} ")
+        
         # Root sequence
         root_sequence = py_trees.composites.Sequence(name="MoveAwaySequence", memory=True)
-        
-        target_location = position_loc
-        
+                
         move_to_position_tree = MoveToLocationTree(
             node_name=f"{protocol_name}_move_to_position",
             robot_interface=self.robot_interface,
             location=target_location  # pass any location here
         )
         move_to_person = move_to_position_tree.create_tree()
-        wait_time = 20
+        wait_time = 5
         wait_behavior = wait.Wait(name="wait", duration_in_sec=wait_time)
+
+        ## set it to false  
+        update_key_beh = UpdateRobotStateKey_(name="update_beh", robot_interface=self.robot_interface, key=update_key)
+
 
         # Add behaviors in order
         root_sequence.add_children([
             move_to_person,
-            wait_behavior
+            wait_behavior,
+            update_key_beh
         ])
 
         return root_sequence
