@@ -83,6 +83,7 @@ protocols:
         video_dir_path: "file:///storage/emulated/0/Download/Exercise_Videos" ## path on the tablet 
         start_state_key: "start_exercise"
         stop_state_key: "stop_exercise"
+        get_confirmation: "Do you want to exercise now?" ## if empty then dont ask to indictae whther the protocol should start after the person asks
       high_level:
         reset_pattern:
           type: instant ## if triggered should play directly

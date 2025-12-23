@@ -10,7 +10,7 @@ import py_trees
 import py_trees_ros
 import rclpy
 import operator
-from nav2_msgs.action import UndockRobot
+
 
 from smart_home_pytree.behaviors.check_robot_state_key import CheckRobotStateKey
 
@@ -19,6 +19,14 @@ from smart_home_pytree.behaviors.move_to_behavior import MoveToLandmark
 import argparse
 from smart_home_pytree.robot_interface import get_robot_interface
 
+# from nav2_msgs.action import UndockRobot
+try:
+    # ROS 2 Jazzy / Rolling (Standard)
+    from nav2_msgs.action import UndockRobot
+except ImportError:
+    # ROS 2 Humble (Requires 'ros-humble-opennav-docking-msgs')
+    from opennav_docking_msgs.action import UndockRobot
+    
 ## launch file is using
 def required_actions_():
         return {
@@ -46,7 +54,6 @@ class MoveToLocationTree(BaseTreeRunner):
             robot_interface=robot_interface,
             **kwargs
         )
-        # self.robot_interface = robot_interface
 
     
     def create_tree(self) -> py_trees.behaviour.Behaviour:

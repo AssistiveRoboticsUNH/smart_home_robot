@@ -17,10 +17,20 @@ from smart_home_pytree.trigger_monitor import TriggerMonitor
     
 # PROTOCOL ORCHESTRATOR 
 class ProtocolOrchestrator:
-    def __init__(self, robot_interface = None, test_time=None):
+    def __init__(self, robot_interface = None, test_time=None, debug=False):
+        """_summary_
+
+        Args:
+            robot_interface (_type_, optional): _description_. Defaults to None.
+            test_time (_type_, optional): _description_. Defaults to None.
+            debug (bool, optional): _description_. Defaults to False.
+            
+            required_state_keys define what topics need to exist before the protocl should start
+        """
         # rclpy.init()
         self.rclpy_initialized_here = False
-
+        self.debug = debug
+        
         if not rclpy.ok():
             ## just for safety
             try:
@@ -34,16 +44,12 @@ class ProtocolOrchestrator:
 
         
         if  robot_interface is None:
-            print("initialize robot interface")
             self.robot_interface=get_robot_interface()
         else:
-            print("using robot interface provided")
             self.robot_interface = robot_interface
         
         self.trigger_monitor = TriggerMonitor(self.robot_interface)
         
-        ## need to pass argument
-        # self.monitor_thread = threading.Thread(target=self.trigger_monitor.start_monitor, daemon=True)
         self.monitor_thread = threading.Thread(
             target=self.trigger_monitor.start_monitor,
             kwargs={"current_time": test_time},  # can be None or e.g. "10:30"
@@ -60,6 +66,8 @@ class ProtocolOrchestrator:
         ## define keys that has to be observed for the tree to work
         self.state_ready = False
         self.required_state_keys = ["charging"]
+        
+        self.last_satisfied = None
 
     def _state_is_ready(self):
         for key in self.required_state_keys:
@@ -80,8 +88,11 @@ class ProtocolOrchestrator:
 
             # print("self.completed_protocols: ", self.trigger_monitor.completed_protocols)
             satisfied = self.trigger_monitor.get_satisfied()
-            
-            print("########### satisfied: ", satisfied)
+                        
+            if self.debug and satisfied != self.last_satisfied:
+                print("[Orchestrator] Satisfied: ", satisfied)
+                self.last_satisfied = satisfied
+                
             next_protocol = min(satisfied, key=lambda x: x[1], default=None)
             # print("****************next_protocol: ", next_protocol)
             if not next_protocol:
@@ -92,22 +103,14 @@ class ProtocolOrchestrator:
                     continue
                 
                 else:
-                    ## Check if the robot is charging
-                    # charging = self.robot_interface.state.get("charging",None)
                     if not self._state_is_ready():
                         print("[Orchestrator] Waiting for robot state to initialize...")
                         print("[Orchestrator] ********************** Waiting for robot state to initialize...")
                         time.sleep(1)
                         continue
-        
-                    # if charging is None:
-                    #     print(f"[TriggerMonitor] Topic '{charging}' not publishing or None → treating as False")
-                    #     charging = False
                         
                     charging = self.robot_interface.state.get("charging")
                     if not charging:
-                        # CHARGE THE ROBOT
-                        # self.start_protocol(("ChargeRobotTree",100))
                         if mock:
                             self.start_protocol_mock(("ChargeRobotTree",100))
                         else:
@@ -196,30 +199,31 @@ class ProtocolOrchestrator:
 
     def start_protocol(self, protocol_tuple):
         """Start the protocol in its own thread."""
-        if protocol_tuple is None: 
-            print("[Orchestrator] Warning: Tried to start None protocol — skipping.")
+        if protocol_tuple is None:
+            if self.debug: 
+                print("[Orchestrator] Warning: Tried to start None protocol — skipping.")
             return
         
-        print("protocol_tuple: ", protocol_tuple)
         class_protocol_name, priority = protocol_tuple
         
-        print(f"[Orchestrator] Starting: {class_protocol_name} (priority {priority})")
+        if self.debug: 
+            print(f"[Orchestrator] Starting: {class_protocol_name} (priority {priority})")
 
              
         if "ChargeRobotTree" in class_protocol_name:
             protocol_name = "" ## charge robot doesnt take a protocol name cause it doesnt depend on it
             tree_runner = ChargeRobotTree(node_name="charge_robot_tree",robot_interface=self.robot_interface)
         else:
-            ### load based on name where name is
             ## import tree dynamically
-            
             tree_class_name = class_protocol_name.split(".")[0] ## example MoveAwayProtocolTree
             snake_case_class_name = self.camel_to_snake(tree_class_name)  ## turns it to snake case
             protocol_name = class_protocol_name.split(".")[-1] ## unique for a protocol ex: medicine_am
             
-            print("**** tree_class_name : ", tree_class_name)
-            print("**** snake_case_class_name : ", snake_case_class_name)
-            print("**** protocol name: ", protocol_name)
+            if self.debug:
+                print("**** tree_class_name : ", tree_class_name)
+                print("**** snake_case_class_name : ", snake_case_class_name)
+                print("**** protocol name: ", protocol_name)
+                
             #  Dynamically import module & class
             try:
                 module = importlib.import_module(f"smart_home_pytree.protocols.{snake_case_class_name}")

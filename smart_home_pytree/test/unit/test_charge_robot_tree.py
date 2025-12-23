@@ -1,4 +1,3 @@
-
 ## functions that start with test will be run 
 
 import pytest
@@ -16,6 +15,13 @@ from ..mock.mock_action_server import BaseMockActionServer
 import time
 from smart_home_pytree.robot_interface import RobotInterface
 import threading
+
+try:
+    # ROS 2 Jazzy / Rolling (Standard)
+    from nav2_msgs.action import DockRobot, UndockRobot
+except ImportError:
+    # ROS 2 Humble (Requires 'ros-humble-opennav-docking-msgs')
+    from opennav_docking_msgs.action import DockRobot, UndockRobot
 
 # --- Global references for teardown ---
 robot_interface = None
@@ -64,17 +70,17 @@ def test_charge_robot_tree_success():
     )
     
     mock_dock_server = BaseMockActionServer(
-        action_name='/docking',
-        action_type=DockingRequest,
-        result_cls=DockingRequest.Result,
+        action_name='/dock_robot',
+        action_type=DockRobot,
+        result_cls=DockRobot.Result,
         succeed=True,
         wait_time=1.0 
     )
 
     mock_undock_server = BaseMockActionServer(
-        action_name='/undocking',
-        action_type=DockingRequest,
-        result_cls=DockingRequest.Result,
+        action_name='/undock_robot',
+        action_type=UndockRobot,
+        result_cls=UndockRobot.Result,
         succeed=True,
         wait_time=1.0 
     )
@@ -156,19 +162,19 @@ def test_charge_robot_tree_charging_true():
     )
     
     mock_dock_server = BaseMockActionServer(
-        action_name='/docking',
-        action_type=DockingRequest,
-        result_cls=DockingRequest.Result,
+        action_name='/dock_robot',
+        action_type=DockRobot,
+        result_cls=DockRobot.Result,
         succeed=True,
-        wait_time=1.0
+        wait_time=1.0 
     )
 
     mock_undock_server = BaseMockActionServer(
-        action_name='/undocking',
-        action_type=DockingRequest,
-        result_cls=DockingRequest.Result,
+        action_name='/undock_robot',
+        action_type=UndockRobot,
+        result_cls=UndockRobot.Result,
         succeed=True,
-        wait_time=1.0
+        wait_time=1.0 
     )
     
     executor = MultiThreadedExecutor()
@@ -228,19 +234,19 @@ def test_charge_robot_tree_nav_fails():
     )
     
     mock_dock_server = BaseMockActionServer(
-        action_name='/docking',
-        action_type=DockingRequest,
-        result_cls=DockingRequest.Result,
+        action_name='/dock_robot',
+        action_type=DockRobot,
+        result_cls=DockRobot.Result,
         succeed=True,
-        wait_time=1.0
+        wait_time=1.0 
     )
 
     mock_undock_server = BaseMockActionServer(
-        action_name='/undocking',
-        action_type=DockingRequest,
-        result_cls=DockingRequest.Result,
+        action_name='/undock_robot',
+        action_type=UndockRobot,
+        result_cls=UndockRobot.Result,
         succeed=True,
-        wait_time=1.0
+        wait_time=1.0 
     )
     
     executor = MultiThreadedExecutor()
@@ -301,19 +307,19 @@ def test_charge_robot_tree_docking_fails():
     )
     
     mock_dock_server = BaseMockActionServer(
-        action_name='/docking',
-        action_type=DockingRequest,
-        result_cls=DockingRequest.Result,
+        action_name='/dock_robot',
+        action_type=DockRobot,
+        result_cls=DockRobot.Result,
         succeed=False,
-        wait_time=1.0
+        wait_time=1.0 
     )
 
     mock_undock_server = BaseMockActionServer(
-        action_name='/undocking',
-        action_type=DockingRequest,
-        result_cls=DockingRequest.Result,
+        action_name='/undock_robot',
+        action_type=UndockRobot,
+        result_cls=UndockRobot.Result,
         succeed=True,
-        wait_time=1.0
+        wait_time=1.0 
     )
     
     executor = MultiThreadedExecutor()

@@ -1,19 +1,18 @@
 from nav2_msgs.action import NavigateToPose
 import rclpy
 
-from nav2_msgs.action import NavigateToPose
 from geometry_msgs.msg import PoseStamped
 from rclpy.executors import MultiThreadedExecutor
-from nav2_msgs.action import DockRobot, UndockRobot
-import threading
 from mock_action_server import BaseMockActionServer
 from smart_home_pytree.robot_interface import RobotInterface
+from shr_msgs.action import PlayVideoRequest
+try:
+    # ROS 2 Jazzy / Rolling (Standard)
+    from nav2_msgs.action import DockRobot, UndockRobot
+except ImportError:
+    # ROS 2 Humble (Requires 'ros-humble-opennav-docking-msgs')
+    from opennav_docking_msgs.action import DockRobot, UndockRobot
 
-# class DelayedMockActionServer(BaseMockActionServer):
-#     def execute_callback(self, goal_handle):
-#         self.get_logger().info('Delaying response...')
-#         self.create_timer(2.0, lambda: None)  # simulate delay
-#         return super().execute_callback(goal_handle)
     
 def main():
    
@@ -54,10 +53,19 @@ def main():
         wait_time=1.0 
     )
     
+    mock_play_video = BaseMockActionServer(
+        action_name='/play_video',
+        action_type=PlayVideoRequest,
+        result_cls=PlayVideoRequest.Result,
+        succeed=True,
+        wait_time=5.0 
+    )
+    
     executor = MultiThreadedExecutor()
     executor.add_node(mock_nav_server)
     executor.add_node(mock_dock_server)
     executor.add_node(mock_undock_server)
+    executor.add_node(mock_play_video)
     
     robot_interface.state.update('charging', False)
     robot_interface.state.update('person_location', 'living_room')
@@ -97,6 +105,7 @@ def main():
         mock_nav_server.destroy_node()
         mock_dock_server.destroy_node()
         mock_undock_server.destroy_node()
+        mock_play_video.destroy_node()
         
         if rclpy_initialized_here:
             rclpy.shutdown()

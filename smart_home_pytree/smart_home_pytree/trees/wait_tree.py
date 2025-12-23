@@ -43,7 +43,7 @@ class WaitTree(BaseTreeRunner):
             robot_interface=robot_interface,
             **kwargs
         )
-        # self.robot_interface = robot_interface
+        
         self.protocol_name = protocol_name
         self.wait_time_key = wait_time_key
     

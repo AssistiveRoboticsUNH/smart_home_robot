@@ -5,6 +5,8 @@ from PyQt5.QtCore import QTimer
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String, Bool
+from rclpy.qos import QoSProfile, ReliabilityPolicy, HistoryPolicy, DurabilityPolicy
+
 
 # Define some example locations (replace with your YAML-loaded locations if needed)
 LOCATIONS = ["kitchen", "living_room", "bedroom", "home"]
@@ -15,13 +17,20 @@ class RobotControlGUI(Node, QWidget):
         Node.__init__(self, "robot_control_gui")
         QWidget.__init__(self)
         
+        
         self.setWindowTitle("Robot Control GUI")
         self.setGeometry(200, 200, 300, 200)
         
         # Publishers
+        self.qos_profile = QoSProfile(
+            reliability=ReliabilityPolicy.RELIABLE,
+            history=HistoryPolicy.KEEP_LAST,
+            depth=1,
+            durability=DurabilityPolicy.TRANSIENT_LOCAL
+        )
         self.robot_pub = self.create_publisher(String, 'robot_location', 10)
         self.person_pub = self.create_publisher(String, 'person_location', 10)
-        self.charging_pub = self.create_publisher(Bool, 'charging', 10)
+        self.charging_pub = self.create_publisher(Bool, 'charging', self.qos_profile)
         
         # GUI Layout
         layout = QVBoxLayout()

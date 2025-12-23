@@ -19,11 +19,19 @@ from smart_home_pytree.behaviors.logging_behavior import LoggingBehavior
 from smart_home_pytree.behaviors.check_robot_state_key import CheckRobotStateKey
 from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
 from smart_home_pytree.trees.move_to_tree import MoveToLocationTree
-from nav2_msgs.action import DockRobot
+
 
 import argparse
 from smart_home_pytree.robot_interface import get_robot_interface
 
+# from nav2_msgs.action import DockRobot
+try:
+    # ROS 2 Jazzy / Rolling (Standard)
+    from nav2_msgs.action import DockRobot
+except ImportError:
+    # ROS 2 Humble (Requires 'ros-humble-opennav-docking-msgs')
+    from opennav_docking_msgs.action import DockRobot
+    
 ### same names as in action_name of the action clients
 def required_actions_():
         return {
@@ -45,7 +53,7 @@ class ChargeRobotTree(BaseTreeRunner):
             robot_interface=robot_interface,
             **kwargs
         )
-        # self.robot_interface = robot_interface
+
     
     def create_tree(self) -> py_trees.behaviour.Behaviour:
         """
@@ -95,8 +103,6 @@ class ChargeRobotTree(BaseTreeRunner):
         )
 
         move_to_home = move_to_home_tree.create_tree()
-        # move_to_home = py_trees.behaviours.Success(name="Move_to_Pose")  # Placeholder for actual move action
-
 
         # Dock robot action (empty goal)
         docking_goal = DockRobot.Goal()
@@ -108,17 +114,15 @@ class ChargeRobotTree(BaseTreeRunner):
             wait_for_server_timeout_sec=120.0
         )
         
-        # dock_robot = py_trees.behaviours.Success(name="Dock_Robot")  # Placeholder for actual move action
         
         ## Logging behaviors has to be a behavior
-        # 
         log_message_success = LoggingBehavior(
             name="Log_Success",
             message="Charging sequence completed successfully",
             status=py_trees.common.Status.SUCCESS,
             robot_interface=self.robot_interface
         )
-        ## its actually the default so no need to use status
+        ## SUCCESS actually the default so no need to use status
 
         log_message_fail = LoggingBehavior(
             name="Log_Fail",

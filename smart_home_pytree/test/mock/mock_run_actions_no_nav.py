@@ -7,13 +7,14 @@ from rclpy.executors import MultiThreadedExecutor
 import threading
 from mock_action_server import BaseMockActionServer
 from smart_home_pytree.robot_interface import RobotInterface
-from nav2_msgs.action import DockRobot, UndockRobot
 
-# class DelayedMockActionServer(BaseMockActionServer):
-#     def execute_callback(self, goal_handle):
-#         self.get_logger().info('Delaying response...')
-#         self.create_timer(2.0, lambda: None)  # simulate delay
-#         return super().execute_callback(goal_handle)
+try:
+    # ROS 2 Jazzy / Rolling (Standard)
+    from nav2_msgs.action import DockRobot, UndockRobot
+except ImportError:
+    # ROS 2 Humble (Requires 'ros-humble-opennav-docking-msgs')
+    from opennav_docking_msgs.action import DockRobot, UndockRobot
+
     
 def main():
    

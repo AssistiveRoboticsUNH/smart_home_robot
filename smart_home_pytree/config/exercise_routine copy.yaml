@@ -1,0 +1,173 @@
+introduction: >
+  We are going to do a series of exercises to work on your balance,
+  cardiovascular fitness, flexibility and strength. I will first give you a
+  description of the exercise and then show you a video for you to follow along
+  with. We will do two sets of each exercise with 30 seconds break in between
+  each. If you feel like you need a break or an exercise is too challenging it’s
+  OK to sit down and skip some of the exercises. If you feel really tired, light
+  headed, shortness of breath or any discomfort please stop exercising and sit
+  down until you feel better.
+
+series_1:
+  introduction: >
+    Our first series of exercises will work on cardio. You may do them slower
+    or faster than the demonstration as you like.
+  type: Cardio_Final
+  ex1:
+    text: "We’ll start with some low punches. These can be done sitting or standing."
+    rep: 2
+    time_between_rep_in_sec: 30
+    video_name: "cardio_punches_low.mp4"
+  ex2:
+    text: "Let’s do some high punches, you can do these either sitting or standing."
+    rep: 2
+    time_between_rep_in_sec: 30
+    video_name: "cardio_punches_high.mp4"
+  ex3:
+    text: >
+      Next you will march in place. It’s a good idea to have a chair or other
+      object nearby to grab onto if you lose your balance.
+    rep: 2
+    time_between_rep_in_sec: 30
+    video_name: "march_in_place_high.mp4"
+  ex4:
+    text: >
+      For this next exercise you should sit in a chair. You will be performing
+      seated leg kicks.
+    rep: 2
+    time_between_rep_in_sec: 30
+    video_name: "FINAL_seated_leg_kicks_high.mp4"
+
+series_2:
+  introduction: >
+    Alright User, now we are going to do some balance exercises. It is important
+    that you have a chair nearby to grab onto if you lose your balance. If an
+    exercise is too challenging for you it’s OK to skip it.
+  type: Balance_Final
+  ex1:
+    text: >
+      We’ll start with an easy exercise that just requires you to stand quietly
+      with your feet close together.
+    rep: 2
+    time_between_rep_in_sec: 30
+    video_name: "FINAL_feet_together_stance_medium.mp4"
+  ex2:
+    text: "Let’s make it a little bit harder this time."
+    rep: 2
+    time_between_rep_in_sec: 30
+    video_name: "FINAL_semi_tandem_stance_high.mp4"
+  ex3:
+    text: >
+      This balance exercise is similar to the last one but will be more
+      challenging.
+    rep: 2
+    time_between_rep_in_sec: 30
+    video_name: "FINAL_tandem_stance_high.mp4"
+
+series_3:
+  introduction: >
+    Our next series of exercise will work on the strength of your arms and legs.
+    You can do these exercises without resistance or you can use some weights
+    like dumbbells, canned food, or a jug of water to make them more challenging.
+    Please have a chair nearby. You should do these exercise until you begin to
+    feel fatigue in your muscles. We’ll give you a break in between each one. If
+    you feel really tired, light headed, shortness of breath or any discomfort
+    please stop exercising and sit down until you feel better.
+  type: Strength_Final
+  ex1:
+    text: >
+      You’ll do this first calf raise exercise standing to strengthen your legs.
+      Please hold onto a chair for balance while you are doing it.
+    rep: 2
+    time_between_rep_in_sec: 30
+    video_name: "calf_raise_high_final.mp4"
+  ex2:
+    text: >
+      This next exercise will work the triceps muscles on the back of your arm.
+      Please take a seat in your chair.
+    rep: 2
+    time_between_rep_in_sec: 30
+    video_name: "tricep_extension_high_final.mp4"
+  ex3:
+    text: >
+      We’ll do some biceps curl exercises now. If you are using a weight please
+      hold it in your right hand in the same position as shown in the video. You
+      can do these exercises sitting or standing.
+    rep: 2
+    time_between_rep_in_sec: 30
+    video_name: "hammer_curl_high_final.mp4"
+  ex4:
+    text: >
+      Now let’s do the same exercise but with the other arm. Please switch the
+      weight to your left hand.
+    rep: 2
+    time_between_rep_in_sec: 30
+    video_name: "hammer_curl_high_final.mp4"
+  ex5:
+    text: >
+      Now we’ll work on your shoulder muscles. You should do these exercises
+      seated in a chair. If you are using a weight please hold it in your right
+      hand.
+    rep: 2
+    time_between_rep_in_sec: 30
+    video_name: "shoulder_press_high_final.mp4"
+  ex6:
+    text: >
+      OK, let’s do the same exercise but with the other arm. If you are using a
+      weight please hold it in your left hand.
+    rep: 2
+    time_between_rep_in_sec: 30
+    video_name: "shoulder_press_high_final.mp4"
+
+series_4:
+  introduction: >
+    Nice job! Let’s cool down with some stretching. Most of these stretches can
+    be done seated but you are welcome to stand if you feel comfortable.
+  type: Flexibility_Final
+  ex1:
+    text: >
+      Our first stretch will be for your hamstrings, the muscles on the back of
+      your leg. Let’s start with the right leg.
+    rep: 2
+    time_between_rep_in_sec: 30
+    video_name: "FINAL_hamstring_stretch.mp4"
+  ex2:
+    text: >
+      OK, now we’ll stretch the same muscles but on your left leg.
+    rep: 2
+    time_between_rep_in_sec: 30
+    video_name: "FINAL_hamstring_stretch.mp4"
+  ex3:
+    text: >
+      Let’s stretch out your back with this twisting exercise. Again, you can do
+      this standing or sitting as you prefer.
+    rep: 2
+    time_between_rep_in_sec: 30
+    video_name: "FINAL_spinal_twist_stretch.mp4"
+  ex4:
+    text: >
+      This next stretch for your quadriceps requires you to stand up and hold
+      onto a chair for balance. If this is too challenging you may skip this
+      exercise. Let’s start with the right leg.
+    rep: 2
+    time_between_rep_in_sec: 30
+    video_name: "FINAL_quad_stretch.mp4"
+  ex5:
+    text: "OK, we’ll do the same quadriceps stretch but for the left leg."
+    rep: 2
+    time_between_rep_in_sec: 30
+    video_name: "FINAL_quad_stretch.mp4"
+  ex6:
+    text: "Time to work on the muscles in your shoulders. You can do these standing or seated."
+    rep: 2
+    time_between_rep_in_sec: 30
+    video_name: "FINAL_shoulder_rolls.mp4"
+  ex7:
+    text: "Now let’s stretch out your neck."
+    rep: 2
+    time_between_rep_in_sec: 30
+    video_name: "FINAL_neck_stretch.mp4"
+
+ending: >
+  Great job User you’ve completed all the exercises! We’ll do them again in a
+  few days.

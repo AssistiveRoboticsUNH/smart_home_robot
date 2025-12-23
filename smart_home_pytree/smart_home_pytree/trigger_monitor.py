@@ -121,7 +121,6 @@ class TriggerMonitor:
 
         raise ValueError(f"Invalid success_on format: {success_on}")
 
-
     ## support yield waiting
     ### test no clash when run protocol and satisfied call it at the same time
     def collect_wait_requests(self):
@@ -424,6 +423,7 @@ class TriggerMonitor:
             # INSTANT -> DONT ADD IT TO COMPLETED
             print("pattern_type: ", pattern_type)
             if pattern_type == "instant":
+                self.reset_specific_protocol_dones(sub)
                 return
             
             self.completed_protocols.add(protocol_name)

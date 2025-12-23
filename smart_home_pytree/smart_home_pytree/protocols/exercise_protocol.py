@@ -7,7 +7,8 @@ from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
 import py_trees_ros
 from shr_msgs.action import PlayVideoRequest
 from smart_home_pytree.trees.move_to_person_location import MoveToPersonLocationTree
-from smart_home_pytree.trees.charge_robot_tree import ChargeRobotTree
+# from smart_home_pytree.trees.charge_robot_tree import ChargeRobotTree
+from smart_home_pytree.trees.ask_question_tree import AskQuestionTree
 import argparse
 import rclpy
 
@@ -74,7 +75,6 @@ class CheckRobotStateKey_(py_trees.behaviour.Behaviour):
             self.logger.debug(f"Not STOP EXERCISE, SUCCESS ")
             return py_trees.common.Status.SUCCESS
 
-
 # MAIN PROTOCOL TREE
 class ExerciseProtocolTree(BaseTreeRunner):
     def __init__(self, node_name: str, robot_interface=None, **kwargs):
@@ -123,6 +123,12 @@ class ExerciseProtocolTree(BaseTreeRunner):
         self.stop_key = protocol_info["stop_state_key"]
         self.video_dir_path = protocol_info["video_dir_path"]
         
+        confirmation_key = "get_confirmation"
+        try:
+            self.get_confirmation = protocol_info[confirmation_key]
+        except:
+            self.get_confirmation = ""
+            
         print("self.start_key", self.start_key)
         print("self.stop_key", self.stop_key)
         
@@ -233,22 +239,56 @@ class ExerciseProtocolTree(BaseTreeRunner):
         move_to_person_tree = MoveToPersonLocationTree(node_name=f"{protocol_name}_move_to_person", robot_interface=self.robot_interface)
         move_to_person = move_to_person_tree.create_tree()
         
-        charge_robot_tree = ChargeRobotTree(node_name=f"{protocol_name}_charge_robot", robot_interface=self.robot_interface)
-        charge_robot = charge_robot_tree.create_tree()
+        # charge_robot_tree = ChargeRobotTree(node_name=f"{protocol_name}_charge_robot", robot_interface=self.robot_interface)
+        # charge_robot = charge_robot_tree.create_tree()
 
-
+        if self.get_confirmation: 
+            ask_question_tree = AskQuestionTree(
+                node_name="ask_question_tree",
+                robot_interface=self.robot_interface,
+                protocol_name=protocol_name,
+                data_key="get_confirmation"
+                )
+            ask_question = ask_question_tree.create_tree()
+            inverted_ask_question = py_trees.decorators.Inverter(
+                name="InvertConfirmation",
+                child=ask_question
+            ) # if success then should go to fallbakc and play the protocol
+           
+            
+            
         # Full pipeline
-        root = py_trees.composites.Sequence(
-            name="FullExercisePipeline",
-            memory=True,
-            children=[
-                move_to_person,
-                exercise_block,
-                charge_robot
-            ]
-        )
+        if self.get_confirmation:
+            selector = py_trees.composites.Selector(
+                name=f"Run Question If Needed",
+                memory=True
+            )
+            
+            ## ask first
+            # root = py_trees.composites.Sequence(
+            #     name="FullExercisePipeline",
+            #     memory=True,
+            #     children=[
+            #         exercise_block,
+            #         # charge_robot
+            #     ]
+            # )
+            selector.add_children([inverted_ask_question, exercise_block])
+            return selector
 
-        return root
+        else:
+            # Standard execution without permission check
+            root = py_trees.composites.Sequence(
+                name="FullExercisePipeline",
+                memory=True,
+                children=[
+                    move_to_person,
+                    exercise_block,
+                    # charge_robot ## not really needed
+                ]
+            )
+
+            return root
 
         
     # BUILD EXERCISE BLOCK
@@ -320,7 +360,8 @@ class ExerciseProtocolTree(BaseTreeRunner):
 def str2bool(v):
     return str(v).lower() in ('true', '1', 't', 'yes')
 
-
+import os
+from smart_home_pytree.registry import load_protocols_to_bb 
 def main(args=None):    
     parser = argparse.ArgumentParser(
         description="""Exercise Protocol Tree 
@@ -337,8 +378,9 @@ def main(args=None):
     protocol_name = args.protocol_name
     print("protocol_name: ", protocol_name)
     
+    yaml_file_path = os.getenv("house_yaml_path", None) 
     blackboard = py_trees.blackboard.Blackboard()
-    
+    load_protocols_to_bb(yaml_file_path, debug=False)
     tree_runner = ExerciseProtocolTree(
         node_name="exercise_protocol_tree",
         protocol_name=protocol_name

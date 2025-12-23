@@ -3,7 +3,7 @@ import yaml
 import py_trees
 import py_trees_ros
 
-def load_locations_to_blackboard(yaml_path: str):
+def load_locations_to_blackboard(yaml_path: str, debug: bool = False):
     """
     Load location data from a YAML file and register it to the py_trees blackboard.
     """
@@ -30,18 +30,18 @@ def load_locations_to_blackboard(yaml_path: str):
     # Register to blackboard
     blackboard.set("locations", locations)
 
-    print("Registered the following locations to the blackboard:")
+    if debug: print("Registered the following locations to the blackboard:")
     for name, loc in locations.items():
-        print(f"  {name}: {loc}")
+        if debug: print(f"  {name}: {loc}")
 
     # Set flag (singleton-style marker)
     blackboard.set("initialized", True) 
-    print("[Blackboard] Registered 'locations' once only.")
+    if debug:  print("[Blackboard] Registered 'locations' once only.")
     
     return blackboard
 
 
-def load_protocols_to_bb(yaml_path: str):  
+def load_protocols_to_bb(yaml_path: str, debug: bool = False):  
     """
     Load protocol related data from a YAML file and register it to the py_trees blackboard.
     also sets done flags to false for each action in the protocol.
@@ -60,15 +60,15 @@ def load_protocols_to_bb(yaml_path: str):
     protocols = data["protocols"]
     
     for protocol_type in protocols.keys():
-        print("protocol type: ", protocol_type)
+        if debug: print("Protocol type: ", protocol_type)
         for protocol_name in protocols[protocol_type].keys():
-            print("protocol name : ", protocol_name)
+            if debug: print("protocol name : ", protocol_name)
             protocol_dict = {}
             protocol_dict_done = {}
             
             low_level = protocols[protocol_type][protocol_name]["low_level"]
             for key, value in low_level.items():
-                print(key, value)
+                if debug: print(key, value)
                 protocol_dict[key] = value
                 
                 if key.startswith("type_"):
@@ -80,23 +80,23 @@ def load_protocols_to_bb(yaml_path: str):
                     continue
                 
                 if "exercise" in protocol_name:
-                    print("protocol_name")
-                    continue
-                
+                    if key != "get_confirmation":
+                        continue
                 protocol_dict_done[f"{key}_done"] = False
                     
             blackboard.set(protocol_name, protocol_dict)
             
             if "exercise" in protocol_name:
-                    print("protocol_name")
+                if key != "get_confirmation":
                     continue
+                
             blackboard.set(f"{protocol_name}_done", protocol_dict_done)
     
-    for key, value in blackboard.storage.items():
-        print(f"{key} : {value}")
+    if debug:
+        for key, value in blackboard.storage.items():
+            print(f"{key} : {value}")
     
 
-    
     return blackboard
     
 
