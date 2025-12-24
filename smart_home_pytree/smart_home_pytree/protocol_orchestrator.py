@@ -23,68 +23,79 @@ class ProtocolOrchestrator:
             
             required_state_keys define what topics need to exist before the protocl should start
         """
-        # rclpy.init()
+        # rclpy.init() 
         self.rclpy_initialized_here = False
         self.debug = debug
         
         if not rclpy.ok():
-            ## just for safety
             try:
                 rclpy.init(args=None)
                 self.rclpy_initialized_here = True
                 print(" self.rclpy_initialized_here should be true: ", self.rclpy_initialized_here)
             except RuntimeError:
-                # ROS2 already initialized somewhere else
                 self.rclpy_initialized_here = False
                 print(" self.rclpy_initialized_here should be false: ", self.rclpy_initialized_here)
 
+        # Setup Events FIRST
+        self.orchestrator_wakeup = threading.Event()
+        self.human_interrupt_event = threading.Event()
         
-        if  robot_interface is None:
-            self.robot_interface=get_robot_interface()
-        else:
-            self.robot_interface = robot_interface
-        
-        
-    
         self.running_tree = None
         self.running_thread = None
         self.lock = threading.Lock()
         self.stop_flag = False
-
-        ## define keys that has to be observed for the tree to work
         self.state_ready = False
         self.required_state_keys = ["charging"]
         self.last_satisfied = None
         
-        
-        ## human interface integration and removing polling
-        self.orchestrator_wakeup = threading.Event()
-        # Wire orchestrator_wakeup to the trigger monitor class
-        # self.trigger_monitor.satisfied_changed_event = self.orchestrator_wakeup
-        self.trigger_monitor = TriggerMonitor(self.robot_interface, wake_event=self.orchestrator_wakeup, debug = self.debug)
-        
-        self.monitor_thread = threading.Thread(
-            target=self.trigger_monitor.start_monitor,
-            kwargs={"current_time": test_time},  # can be None or e.g. "10:30"
-            daemon=True
-        )
-        
-        self.monitor_thread.start()
-        
-        self.human_interrupt_event = threading.Event()
-        
-        ## NOTE: not a singleton
+        # Setup HumanInterface (CRITICAL: Create BEFORE Robot Interface spins)
         self.human_interface_node = HumanInterface(
             human_interrupt_event=self.human_interrupt_event,
             orchestrator_wakeup=self.orchestrator_wakeup,
-            robot_interface=self.robot_interface
+            robot_interface=None # Pass None for now to prevent dependency loop
         )
-        # Run ROS spinning in a separate thread
+
+        # 4. Setup RobotInterface (Starts the background thread)
+        if robot_interface is None:
+            self.robot_interface = get_robot_interface()
+        else:
+            self.robot_interface = robot_interface
+            
+        # Patch the Link
+        self.human_interface_node.robot_interface = self.robot_interface
+        
+        # Setup TriggerMonitor
+        self.trigger_monitor = TriggerMonitor(
+            self.robot_interface, 
+            wake_event=self.orchestrator_wakeup 
+        )
+        
+        # Start Threads
+        self.monitor_thread = threading.Thread(
+            target=self.trigger_monitor.start_monitor,
+            kwargs={"current_time": test_time},
+            daemon=True
+        )
+        self.monitor_thread.start()
+        
         self.ros_spin_thread = threading.Thread(
             target=self._spin_human_interface,
             daemon=True
         )
         self.ros_spin_thread.start()
+        
+    # TODO: use multi thread executor but robot interface need to stop spinning itself
+    # Create one executor for EVERYTHING
+    # self.executor = MultiThreadedExecutor()
+    # self.executor.add_node(self.human_interface_node)
+    # self.executor.add_node(self.robot_interface) # Assuming it inherits form Node
+    
+    # # Run the executor in a background thread
+    # self.ros_spin_thread = threading.Thread(
+    #     target=self.executor.spin, 
+    #     daemon=True
+    # )
+    # self.ros_spin_thread.start()
     
     def _spin_human_interface(self):
         """Runs the ROS node for Human Interface."""
