@@ -96,7 +96,7 @@ protocols:
           type: periodic
           minutes: 60
         requirements:
-          time: {from: "10:00", to: "11:00"}
+          time: {from: "9:00", to: "11:00"}
           permissible_locations: [living_room]
 
   ExerciseProtocol:
@@ -115,3 +115,25 @@ protocols:
           event: 
             - {'state': 'start_exercise', 'value': True}
           time: {'from': '15:00', 'to': '17:00'}
+
+  ChargeRobot:
+    charge_robot: 
+      high_level:
+        priority: 100
+        requirements:
+          event: 
+              - {'state': 'charging', 'value': False}
+
+  MoveAwayProtocol:
+    move_away:
+      low_level:
+        away_location: dining # move_away has two loc, home or away where away is the location defined here and has to be part of the locations in the yaml
+        position_state_key: position # key to indicate whether to move away or home
+        state_key: move_away
+      high_level:
+        reset_pattern:
+          type: instant 
+        priority: 1
+        requirements: 
+          event: 
+            - {'state': 'move_away', 'value': True}  

@@ -11,10 +11,10 @@ from rclpy.node import Node
 
 from std_msgs.msg import String, Bool
 from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy, HistoryPolicy
-import threading
+
 
 class HumanInterface(Node):
-    def __init__(self, human_interrupt_event: threading.Event, orchestrator_wakeup: threading.Event, node_name:str = 'voice_trigger', robot_interface = None):
+    def __init__(self, node_name:str = 'voice_trigger', robot_interface = None):
         super().__init__(node_name)
 
         # QoS: reliable state
@@ -25,10 +25,23 @@ class HumanInterface(Node):
             durability=DurabilityPolicy.VOLATILE,
         )
 
-        self.human_interrupt_event = human_interrupt_event
-        self.orchestrator_wakeup = orchestrator_wakeup
         self.robot_interface = robot_interface
-     
+        ### Every topic that needs a person to trigger it needs to be here
+        ## in the voice_user_callback, implmeemnt the logic in how you want to set it based on the input of the user
+        
+        # Publishers 
+        # self.move_away_pub = self.create_publisher(
+        #     Bool,
+        #     'move_away',
+        #     self.state_qos
+        # )
+
+        # self.position_pub = self.create_publisher(
+        #     String,
+        #     'position',
+        #     self.state_qos
+        # )
+
         # Voice Subscriptions 
         self.create_subscription(
             String,
@@ -37,7 +50,6 @@ class HumanInterface(Node):
             10
         )
 
-        ## in the voice_user_callback, implmeemnt the logic in how you want to set it based on the input of the user
         self.create_subscription(
             String,
             '/voice/user',
@@ -48,22 +60,12 @@ class HumanInterface(Node):
     def voice_status_callback(self, msg: String):
         wakeup_triggered = "WAKEWORD_TRIGGER"
         done_waking = "IDLE"
-
+        # set event here
+        # event
         if msg.data == wakeup_triggered:
-            # Only log and set if we aren't already interrupted
-            if not self.human_interrupt_event.is_set():
-                self.get_logger().warn("[HumanInterface] WAKEWORD DETECTED! Pausing Orchestrator.")
-                self.human_interrupt_event.set()
-                self.orchestrator_wakeup.set()
-                
-            
-        elif msg.data == done_waking:
-            # CRITICAL CHECK: Only clear/resume if we were actually paused
-            if self.human_interrupt_event.is_set():
-                self.get_logger().info("[HumanInterface] Voice IDLE. Resuming Orchestrator.")
-                self.human_interrupt_event.clear()
-                self.orchestrator_wakeup.set()
-            
+            print("trigger thread ot stop protocol and listen")
+        if msg.data == done_waking
+            print("stop event")
         self.get_logger().info(f"[VOICE STATUS] {msg.data}")
 
     def voice_user_callback(self, msg: String):
@@ -77,17 +79,36 @@ class HumanInterface(Node):
             )
             print("move home found")
             
-            self.robot_interface.state.update('move_away', True)
-            self.robot_interface.state.update('position', "home")
+            ## instead of publishing to topic directly update robot state
+            self.state.update('move_away', msg.data)
+            self.state.update('position', "home")
+            # self.publish_state(True, "home")
 
         elif "move away" in text:
             self.get_logger().info(
                 "[DECISION] User said 'move away' → set move_away=True, position='away'"
             )
             print("move_away found")
-            self.robot_interface.state.update('move_away', True)
-            self.robot_interface.state.update('position', "away")
+            
+            ## instead of publishing to topic directly update robot state
+            self.state.update('move_away', msg.data)
+            self.state.update('position', "away")
+            # self.publish_state(True, "away")
 
+    
+    # def publish_state(self, move_away: bool, position: str):
+    #     move_msg = Bool()
+    #     move_msg.data = move_away
+
+    #     pos_msg = String()
+    #     pos_msg.data = position
+
+    #     self.move_away_pub.publish(move_msg)
+    #     self.position_pub.publish(pos_msg)
+
+    #     self.get_logger().info(
+    #         f"[PUBLISHED] move_away={move_away}, position='{position}'"
+    #     )
 
 
 def main(args=None):

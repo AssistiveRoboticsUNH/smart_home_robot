@@ -10,7 +10,6 @@ from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
 import argparse
 from smart_home_pytree.behaviors.action_behaviors import play_audio, wait
 from smart_home_pytree.trees.move_to_person_location import MoveToPersonLocationTree
-from smart_home_pytree.trees.charge_robot_tree import ChargeRobotTree
 from smart_home_pytree.behaviors.set_protocol_bb import SetProtocolBB
 from smart_home_pytree.registry import load_protocols_to_bb 
 

@@ -1,4 +1,3 @@
-import json
 import py_trees
 from smart_home_pytree.behaviors.action_behaviors.read_script import ReadScript
 from smart_home_pytree.behaviors.action_behaviors.wait import Wait
@@ -7,7 +6,6 @@ from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
 import py_trees_ros
 from shr_msgs.action import PlayVideoRequest
 from smart_home_pytree.trees.move_to_person_location import MoveToPersonLocationTree
-# from smart_home_pytree.trees.charge_robot_tree import ChargeRobotTree
 from smart_home_pytree.trees.ask_question_tree import AskQuestionTree
 import argparse
 import rclpy
