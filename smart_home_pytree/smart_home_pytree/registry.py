@@ -66,7 +66,18 @@ def load_protocols_to_bb(yaml_path: str, debug: bool = False):
             protocol_dict = {}
             protocol_dict_done = {}
             
-            low_level = protocols[protocol_type][protocol_name]["low_level"]
+            # low_level = protocols[protocol_type][protocol_name]["low_level"]
+            # 1. Get the specific protocol data
+            protocol_data = protocols[protocol_type][protocol_name]
+
+            # 2. Try to get 'low_level'. If missing, default to None.
+            low_level = protocol_data.get("low_level")
+
+            # 3. If it exists but is empty in YAML (None), make it an empty dict
+            if low_level is None:
+                if debug: print("low_level is none for protocol : ", protocol_name)
+                continue
+    
             for key, value in low_level.items():
                 if debug: print(key, value)
                 protocol_dict[key] = value

@@ -1,27 +1,14 @@
 import os
-import os
 import yaml
 import time
-import random
 import threading
-
-import rclpy
-from smart_home_pytree.trees.charge_robot_tree import ChargeRobotTree
-from smart_home_pytree.robot_interface import get_robot_interface
 import py_trees        
-from smart_home_pytree.registry import load_protocols_to_bb
-import re
-import importlib
 from datetime import datetime, timedelta
 
 ## TODO: unify naming class name protocol name
-## TODO: support finishign a protocl if a req is met
-#  TRIGGER MONITOR 
-
-
 #  TRIGGER MONITOR 
 class TriggerMonitor:
-    def __init__(self, robot_interface, yaml_path=None):
+    def __init__(self, robot_interface, wake_event: threading.Event, yaml_path=None, debug: bool = False):
         
         self.robot_interface = robot_interface
         
@@ -50,7 +37,10 @@ class TriggerMonitor:
         # success_on monitoring:  support finishing a protocol if a req is met
         # full_name -> {"state": str, "value": Any}
         self.monitor_state_success = {}
-
+        
+        ## change orchestrator to become reactive 
+        self.satisfied_changed_event = wake_event
+        self.debug = debug
     def check_success_on_conditions(self):
         """
         whether any waiting protocol
@@ -251,10 +241,10 @@ class TriggerMonitor:
         current_events = {}
         for key in self.event_keys:
             val = self.robot_interface.state.get(key)
-            print("val")
-            print("key: ", key, "value: ", val)
+            # print("val")
+            # print("key: ", key, "value: ", val)
             if val is None:
-                print(f"[TriggerMonitor] Topic '{key}' not publishing or None → treating as False")
+                if self.debug: print(f"[TriggerMonitor] Topic '{key}' not publishing or None → treating as False")
                 current_events[key] = False
             else:
                 current_events[key] = val
@@ -294,9 +284,26 @@ class TriggerMonitor:
                 return False
         return True
  
-    ## TODO: for every protocl in wait_request check if the key turned true and remove it from 
-    ## resume
+   
+    def recompute_satisfied(self, current_time=None):
+        current_events = self._collect_current_events()
+        new_satisfied = self.satisfied_protocols(
+            current_events,
+            current_time=current_time
+        )
+
+        with self.lock:
+            changed = new_satisfied != self.current_satisfied_protocols
+            self.current_satisfied_protocols = new_satisfied
+
+        if changed or new_satisfied: ## trigger if not empty and if change happened might be redundant
+            print("Satisfied change event : ", new_satisfied)
+            self.satisfied_changed_event.set()
+        
+        return changed
+    
     # A protocol is satisfied if (normal requirements are met) OR (it has a pending wait whose resume time has passed).
+    ## only called in recompute_satisfied
     def satisfied_protocols(self, current_events, current_day=None, current_time=None):
         satisfied = []
         for protocol_name, protocol_data in self.protocols_yaml['protocols'].items():
@@ -328,20 +335,18 @@ class TriggerMonitor:
                 else:
                     ## resume  dont check for req thye were already satisfied
                     ## modify to track keys for req resuming.
-                    # print(f"[Yield wait] full_name: {full_name}")
-                    # print(f"[Yield wait] high_level_subdata: {high_level_subdata}")
                     priority = high_level_subdata.get('priority', 1)
                     satisfied.append((full_name, priority))
                         
         satisfied.sort(key=lambda x: x[1])
         return satisfied
 
+    ## TODO: trigger updates when events change
     def start_monitor(self, current_time: str = None):
         last_day = datetime.now().strftime("%Y-%m-%d")
         
         while not self.stop_flag:
             self.collect_wait_requests()
-            
             ## check if pending protocols got success_on achieved
             self.check_success_on_conditions()
 
@@ -354,16 +359,10 @@ class TriggerMonitor:
             
             # resets periodic protocols in reset array
             self.check_and_reset_protocols()
-            
-            current_events = self._collect_current_events()
-            new_satisfied = self.satisfied_protocols(current_events, current_time=current_time)
-            
-            print("**************** new_satisfied: ", new_satisfied)
-            
-            with self.lock:
-                self.current_satisfied_protocols = new_satisfied
+        
+            self.recompute_satisfied(current_time=current_time)
 
-            time.sleep(2)  # small delay to avoid busy loop
+            time.sleep(1)  # small delay to avoid busy loop
 
     def parse_reset_pattern(self, reset_pattern):
         """
@@ -423,6 +422,7 @@ class TriggerMonitor:
             # INSTANT -> DONT ADD IT TO COMPLETED
             print("pattern_type: ", pattern_type)
             if pattern_type == "instant":
+                ## to enable the protocol to run after
                 self.reset_specific_protocol_dones(sub)
                 return
             
@@ -440,6 +440,7 @@ class TriggerMonitor:
                 (protocol_name, timestamp, reset_seconds)
             )
             print(f"[TriggerMonitor] Scheduled reset for {protocol_name} in {reset_pattern}")
+            self.recompute_satisfied()
 
     def check_and_reset_protocols(self):
         """Check all protocols scheduled for auto-reset and reset those whose timer expired."""

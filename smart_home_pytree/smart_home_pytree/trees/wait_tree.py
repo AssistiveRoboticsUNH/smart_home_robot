@@ -20,7 +20,7 @@ import argparse
 from smart_home_pytree.robot_interface import get_robot_interface
 from smart_home_pytree.behaviors.set_protocol_bb import SetProtocolBB
 from smart_home_pytree.behaviors.action_behaviors import  wait
-from smart_home_pytree.trees.charge_robot_tree import ChargeRobotTree
+from smart_home_pytree.protocols.charge_robot import ChargeRobotTree
 
 ## launch file is using
 def required_actions_():
