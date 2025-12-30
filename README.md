@@ -23,7 +23,7 @@ source install/setup.bash
 the yaml file to be used that contains information about the house should be stored as an env variable under 
 ** house_yaml_path**
 
-If you plan on using the smart plug you need to defiin ethe plug_ip  as an environment variable
+If you plan on using the smart plug you need to define the plug_ip  as an environment variable
 ```
 
 
