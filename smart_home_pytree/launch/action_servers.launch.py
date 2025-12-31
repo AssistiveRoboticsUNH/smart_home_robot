@@ -19,7 +19,7 @@ def generate_launch_description():
     # docking_launch_cmd = IncludeLaunchDescription(
     #         PythonLaunchDescriptionSource(docking_launch_file_path)
     #     )
-    
+
     play_video_node_cmd = Node(
         package='smart_home_pytree',
         executable='play_video',
@@ -50,7 +50,7 @@ def generate_launch_description():
     #     name='question_response_action',
     #     output='screen'
     # )
-    
+
     ld = LaunchDescription()
 
     ld.add_action(play_video_node_cmd)

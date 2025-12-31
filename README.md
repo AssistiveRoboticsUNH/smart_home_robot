@@ -105,3 +105,6 @@ Install the application in https://github.com/AssistiveRoboticsUNH/Hello_Face on
 1. Connect the tablet to your laptop and copy the Hello_Face.apk in the apk folder to the Download folder on your tablet.
 2. go to the Download folder on your tablet and click on the apk file to install it.
 3. Set your Robot IP & Help Number (Swipe from left → Settings → enter values → Save.)
+
+### Linting command
+autopep8 --in-place --recursive --aggressive smart_home_pytree/

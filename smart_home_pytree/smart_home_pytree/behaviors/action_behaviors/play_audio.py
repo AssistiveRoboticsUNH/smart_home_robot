@@ -3,6 +3,7 @@ import py_trees
 import subprocess
 import time
 
+
 class PlayAudio(py_trees.behaviour.Behaviour):
     """
     Non-blocking audio playback using mpg321.
@@ -67,8 +68,9 @@ class PlayAudio(py_trees.behaviour.Behaviour):
 
 
 def main():
-    play_audio = PlayAudio("/home/olagh48652/smart-home/src/smart-home-robot/shr_resources/resources/food_reminder.mp3")
-    
+    play_audio = PlayAudio(
+        "/home/olagh48652/smart-home/src/smart-home-robot/shr_resources/resources/food_reminder.mp3")
+
     play_audio.initialise()
 
     while True:
@@ -82,6 +84,6 @@ def main():
 
     play_audio.terminate(status)
 
-        
+
 if __name__ == "__main__":
     main()

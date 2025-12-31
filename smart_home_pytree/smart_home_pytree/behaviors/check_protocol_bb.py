@@ -8,11 +8,13 @@ import operator
 
 from datetime import datetime
 
+
 class CheckProtocolBB(py_trees.behaviour.Behaviour):
     """
     takes  information sepearted with "." and checks what their value is from blackboard
     e.g. (Note: expects 2 for now) takes "medicine_am.first_text" and compares wuith expected value
     """
+
     def __init__(self, name: str, key: str, expected_value, comparison=operator.eq):
         super().__init__(name)
         self.key = key
@@ -22,22 +24,22 @@ class CheckProtocolBB(py_trees.behaviour.Behaviour):
     def update(self):
         blackboard = py_trees.blackboard.Blackboard()
         keys = self.key.split(".")
-        
+
         if len(keys) != 2:
-                self.logger.warning(f"Expected key with one '.', got '{self.key}'")
-                return py_trees.common.Status.FAILURE
-            
+            self.logger.warning(f"Expected key with one '.', got '{self.key}'")
+            return py_trees.common.Status.FAILURE
+
         print("CheckProtocolBB keys: ", keys)
-        
+
         protocol_info = blackboard.get(keys[0])
         print("CheckProtocolBB protocol_info: ", protocol_info)
-        
-        ## missing key results in with a None
+
+        # missing key results in with a None
         value = protocol_info.get(keys[1], None)
         if value is None:
             self.logger.warning(f"{keys[0]}: '{keys[1]}' not found in BlackBoard")
             return py_trees.common.Status.FAILURE
-        
+
         print("CheckProtocolBB value: ", value)
         # Compare and return
         if self.comparison(value, self.expected_value):

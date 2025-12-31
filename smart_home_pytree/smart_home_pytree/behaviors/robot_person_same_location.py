@@ -8,11 +8,14 @@ import operator
 import math
 from datetime import datetime
 
+
 class RobotPersonSameLocation(py_trees.behaviour.Behaviour):
     """
     Node that checks if robot and person are in the same location
     """
-    def __init__(self, robot_interface, name="RobotPersonSameLocation", distance_threshold=0.5, debug=True):
+
+    def __init__(self, robot_interface, name="RobotPersonSameLocation",
+                 distance_threshold=0.5, debug=True):
         super().__init__(name)
         self.robot_interface = robot_interface
         self.debug_enabled = debug
@@ -20,7 +23,7 @@ class RobotPersonSameLocation(py_trees.behaviour.Behaviour):
         self.blackboard = py_trees.blackboard.Blackboard()
         self.locations = self.blackboard.get("locations")
         print("self.locations", self.locations)
-        
+
     def debug(self, msg):
         if self.debug_enabled:
             print(f"[DEBUG - {self.name}] {msg}")
@@ -62,24 +65,26 @@ class RobotPersonSameLocation(py_trees.behaviour.Behaviour):
                 return py_trees.common.Status.FAILURE
 
             if person_location == robot_location:
-                print(f"[INFO] [{self.name}] Person and robot are in the SAME location: {person_location}")
+                print(
+                    f"[INFO] [{self.name}] Person and robot are in the SAME location: {person_location}")
                 return py_trees.common.Status.SUCCESS
             else:
                 print(f"[INFO] [{self.name}] Person and robot are in DIFFERENT locations -> "
-                  f"Person: {person_location}, Robot: {robot_location}")
+                      f"Person: {person_location}, Robot: {robot_location}")
                 return py_trees.common.Status.FAILURE
 
         # Compute distance
         dx = robot_x - target_x
         dy = robot_y - target_y
-        distance = math.sqrt(dx*dx + dy*dy)
+        distance = math.sqrt(dx * dx + dy * dy)
 
         self.debug(f"Distance = {distance:.3f} meters")
 
         # --- Within threshold ---
         if distance <= self.distance_threshold:
             state.update("robot_location", person_location)
-            self.debug(f"Robot is within {self.distance_threshold} meter → setting robot_location = {person_location}")
+            self.debug(
+                f"Robot is within {self.distance_threshold} meter → setting robot_location = {person_location}")
             return py_trees.common.Status.SUCCESS
 
         self.debug("Robot not close enough → FAILURE")

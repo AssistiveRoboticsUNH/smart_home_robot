@@ -6,6 +6,7 @@ from std_msgs.msg import Bool
 # Importing based on your provided snippet
 import stretch_body_ii.robot.robot_client as rc
 
+
 class ChargingMonitor(Node):
     def __init__(self):
         super().__init__('charging_monitor')
@@ -31,7 +32,7 @@ class ChargingMonitor(Node):
 
         # 4. State tracking
         self.last_charging_state = None
-        
+
         # 5. Timer to check status (Check every 0.5 seconds)
         self.timer = self.create_timer(0.5, self.check_charging_status)
         self.get_logger().info('Charging Monitor Node Started.')
@@ -39,22 +40,22 @@ class ChargingMonitor(Node):
     def check_charging_status(self):
         try:
             # This pulls the latest data
-            self.robot.pull_status() 
-            
+            self.robot.pull_status()
+
             # Access the Pimu status
-            pimu=self.robot.status["pimu"]
+            pimu = self.robot.status["pimu"]
             is_charging = pimu['charger_is_charging']
 
             # Check if state has changed
             if is_charging != self.last_charging_state:
                 msg = Bool()
                 msg.data = bool(is_charging)
-                
+
                 self.publisher_.publish(msg)
-                
+
                 state_str = "CHARGING" if is_charging else "NOT CHARGING"
                 self.get_logger().info(f'State Change Detected: {state_str}')
-                
+
                 # Update tracker
                 self.last_charging_state = is_charging
 
@@ -68,6 +69,7 @@ class ChargingMonitor(Node):
         self.robot.stop()
         super().destroy_node()
 
+
 def main(args=None):
     rclpy.init(args=args)
     node = ChargingMonitor()
@@ -79,6 +81,7 @@ def main(args=None):
     finally:
         node.destroy_node()
         rclpy.shutdown()
+
 
 if __name__ == '__main__':
     main()
