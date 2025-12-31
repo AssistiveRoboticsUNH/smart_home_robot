@@ -18,7 +18,8 @@ Raises:
     NotImplementedError: if execute_callabck is not implemented in your class
 
 """
-    
+
+
 class GenericActionServer(Node):
     """
     Generic Action Server template to be inherited for all actions.
@@ -78,10 +79,10 @@ class GenericActionServer(Node):
 
         end_time = datetime.now()
         duration = (end_time - start_time).total_seconds()
-        self.get_logger().info(f"[{self._action_name}] Execution finished at {end_time} ({duration:.2f}s) Status: {status}")
+        self.get_logger().info(
+            f"[{self._action_name}] Execution finished at {end_time} ({duration:.2f}s) Status: {status}")
 
         return result
-    
 
     def execute_callback(self, goal_handle):
         """
@@ -102,6 +103,7 @@ class GenericActionServer(Node):
 USE MultiThreadedExecutor to allow for cancelling the goal
 """
 
+
 def run_action_server(action_server_class):
     """
     Generic main function to run an action server.
@@ -110,7 +112,7 @@ def run_action_server(action_server_class):
         server_class: The class of the action server (must inherit GenericActionServer)
         *args, **kwargs: Arguments to pass to the server_class constructor
     """
-    
+
     rclpy.init(args=None)
 
     server_instance = action_server_class()
@@ -120,7 +122,8 @@ def run_action_server(action_server_class):
     try:
         executor.spin()
     except KeyboardInterrupt:
-        server_instance.get_logger().info(f"[{server_instance._action_name}] Shutdown requested by user")
+        server_instance.get_logger().info(
+            f"[{server_instance._action_name}] Shutdown requested by user")
     finally:
         server_instance.shutdown()
         rclpy.try_shutdown()

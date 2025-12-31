@@ -1,7 +1,13 @@
+from smart_home_pytree.registry import load_protocols_to_bb
+import pprint
+import os
+import time
+import rclpy
 import py_trees
 import py_trees_ros
-from shr_msgs.action import QuestionRequest # Ensure this import is correct
+from shr_msgs.action import QuestionRequest  # Ensure this import is correct
 from smart_home_pytree.behaviors.set_protocol_bb import SetProtocolBB
+
 
 class AskQuestionBehavior(py_trees_ros.actions.ActionClient):
     """
@@ -18,7 +24,7 @@ class AskQuestionBehavior(py_trees_ros.actions.ActionClient):
         data_key (str): The specific task key (e.g., 'first_dose').
         blackboard (py_trees.blackboard.Blackboard): Local handle to the global blackboard.
     """
-    
+
     def __init__(self, name, action_goal, protocol_name, data_key):
         """
         Initializes the AskQuestionBehavior.
@@ -40,14 +46,13 @@ class AskQuestionBehavior(py_trees_ros.actions.ActionClient):
         self.data_key = data_key
         self.blackboard = py_trees.blackboard.Blackboard()
         self.blackboard.goal = action_goal
-    
-    
+
     def update(self) -> py_trees.common.Status:
         """
         Check the status of the action and evaluate the result on success.
 
         Returns:
-            py_trees.common.Status: SUCCESS if 'yes', FAILURE if 'no' or error, 
+            py_trees.common.Status: SUCCESS if 'yes', FAILURE if 'no' or error,
                                    otherwise the current action status (RUNNING).
         """
         status = super().update()
@@ -67,46 +72,39 @@ class AskQuestionBehavior(py_trees_ros.actions.ActionClient):
         answer = (result_msg.result.response or "").strip().lower()
         self.logger.info(f"User answered: {answer}")
 
-        # Mark wait as done so selector skips it 
+        # Mark wait as done so selector skips it
         set_bb_node = SetProtocolBB(
-                name="MarkAskQuestionDone",
-                key=f"{self.protocol_name}_done.{self.data_key}_done",
-                value=True
+            name="MarkAskQuestionDone",
+            key=f"{self.protocol_name}_done.{self.data_key}_done",
+            value=True
         )
-        
+
         if answer == "yes":
-            set_bb_node.update() 
+            set_bb_node.update()
             return py_trees.common.Status.SUCCESS
         elif answer == "no":
             # set_bb_node.update() ## no need to set it will just fail the tree
             return py_trees.common.Status.FAILURE
         else:
-            ## done not updated
+            # done not updated
             self.logger.error("Unexpected answer")
             return py_trees.common.Status.FAILURE
-    
 
-import rclpy
-import py_trees
-import time
-from smart_home_pytree.registry import load_protocols_to_bb 
-import os
-import pprint
 
 def main():
     rclpy.init()
     # 1. Create the node manually
     node = rclpy.create_node("test_node")
-    yaml_file_path = os.getenv("house_yaml_path", None) 
-    
+    yaml_file_path = os.getenv("house_yaml_path", None)
+
     blackboard = py_trees.blackboard.Blackboard()
     load_protocols_to_bb(yaml_file_path, debug=False)
-    
+
     protocol_name = "exercise"
     protocol_info = blackboard.get(protocol_name)
-    data_key = "get_confirmation" 
+    data_key = "get_confirmation"
     question_text = protocol_info[data_key]
-    
+
     question_goal = QuestionRequest.Goal()
     question_goal.question = question_text
     print(question_goal)
@@ -120,14 +118,14 @@ def main():
     )
 
     # 3. CRITICAL: Setup requires the ROS node
-    behavior.setup(node=node) 
-    
+    behavior.setup(node=node)
+
     behavior.initialise()
 
     while rclpy.ok():
         # 4. Process ROS messages (listen for the action answer)
         rclpy.spin_once(node, timeout_sec=0.01)
-        
+
         status = behavior.update()
         print(f"STATUS: {status}")
 
@@ -138,9 +136,10 @@ def main():
 
     print("\n=== Blackboard contents ===")
     pprint.pprint(blackboard.storage, width=120)
-    
+
     behavior.terminate(status)
     rclpy.shutdown()
+
 
 if __name__ == "__main__":
     main()

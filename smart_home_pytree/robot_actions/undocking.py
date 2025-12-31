@@ -10,10 +10,11 @@ import time
 from geometry_msgs.msg import Twist
 import os
 
+
 class DockingActionServer(GenericActionServer):
     def __init__(self):
         super().__init__(DockingRequest, "undocking")
-        
+
         self.vel_pub = self.create_publisher(Twist, os.getenv("cmd_vel"), 10)
 
         self.time_out = 2
@@ -24,7 +25,7 @@ class DockingActionServer(GenericActionServer):
         feedback = self._action_type.Feedback()
         result = self._action_type.Result()
         for i in range(100):
-            print("i",i)
+            print("i", i)
             if goal_handle.is_cancel_requested:
                 goal_handle.canceled()
                 return self._action_type.Result()
@@ -32,23 +33,23 @@ class DockingActionServer(GenericActionServer):
             goal_handle.publish_feedback(feedback)
         time.sleep(0.01)
         goal_handle.succeed()
-        result.result = True 
+        result.result = True
         print("result: ", result)
         return result
 
-    
-  
+
 def main():
-    run_action_server(DockingActionServer)  
-    
+    run_action_server(DockingActionServer)
+
+
 # ----------------------------
 # Use generic main to run the server
 # ----------------------------
 if __name__ == "__main__":
     main()
-    
-    
-## this works
+
+
+# this works
 # if __name__ == "__main__":
 #      # Replace with your actual action
 #     rclpy.init()

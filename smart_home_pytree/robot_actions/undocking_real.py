@@ -11,15 +11,16 @@ from geometry_msgs.msg import Twist
 import os
 from std_msgs.msg import Bool
 
+
 class DockingActionServer(GenericActionServer):
     def __init__(self):
         super().__init__(DockingRequest, "undocking")
-        
+
         self.vel_pub = self.create_publisher(Twist, os.getenv("cmd_vel"), 10)
 
         self.time_out = 2
         # self.min_range = None
-        
+
         self.charging_sub = self.create_subscription(
             Bool,
             "charging",
@@ -35,52 +36,53 @@ class DockingActionServer(GenericActionServer):
     def execute_callback(self, goal_handle):
         # Do the docking logic here
         print(" Starting undocking! ")
-        
+
         feedback = self._action_type.Feedback()
         result = self._action_type.Result()
-        
+
         start_time = time.time()
         speed = 3.14 / 15.0
         msg = Twist()
-        
+
         while time.time() - start_time < self.time_out:
             if goal_handle.is_cancel_requested:
                 goal_handle.canceled()
                 return self._action_type.Result()
-            
-            msg.linear.x = speed # Go forward to undock
+
+            msg.linear.x = speed  # Go forward to undock
             self.vel_pub.publish(msg)
-            
+
             feedback.running = True
             goal_handle.publish_feedback(feedback)
-        
+
         # stop the robot after undocking
         msg.linear.x = 0.0
-        self.vel_pub.publish(msg)  
-        
+        self.vel_pub.publish(msg)
+
         if not self.is_robot_charging:
             goal_handle.succeed()
-            result.result = True 
+            result.result = True
             print('undocking is successful')
         else:
             goal_handle.abort()
-            result.result = False 
+            result.result = False
             print('undocking failed, robot is still charging')
-    
+
         return result
 
-  
+
 def main():
-    run_action_server(DockingActionServer)  
-    
+    run_action_server(DockingActionServer)
+
+
 # ----------------------------
 # Use generic main to run the server
 # ----------------------------
 if __name__ == "__main__":
-    run_action_server(DockingActionServer)  
-    
-    
-## this works
+    run_action_server(DockingActionServer)
+
+
+# this works
 # if __name__ == "__main__":
 #      # Replace with your actual action
 #     rclpy.init()

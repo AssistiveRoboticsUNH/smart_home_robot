@@ -8,12 +8,15 @@ import operator
 
 from datetime import datetime
 
+
 class CheckRobotStateKey(py_trees.behaviour.Behaviour):
     """
     Checks a key in RobotState and returns SUCCESS/FAILURE
     based on a comparison operator and expected value.
     """
-    def __init__(self, name: str, robot_interface, key: str, expected_value, comparison=operator.eq):
+
+    def __init__(self, name: str, robot_interface, key: str,
+                 expected_value, comparison=operator.eq):
         super().__init__(name)
         self.robot_interface = robot_interface
         self.key = key
@@ -22,14 +25,14 @@ class CheckRobotStateKey(py_trees.behaviour.Behaviour):
 
     def update(self):
         # Retrieve safely
-        print("CheckRobotStateKey robot_interface ",self.robot_interface)
+        print("CheckRobotStateKey robot_interface ", self.robot_interface)
         print("CheckRobotStateKey self id:", id(self))
-        
+
         value = self.robot_interface.state.get(self.key, None)
         if value is None:
             self.logger.warning(f"{self.name}: '{self.key}' not found in RobotState")
             return py_trees.common.Status.FAILURE
-        
+
         print("charging value: ", value)
         # Compare and return
         if self.comparison(value, self.expected_value):

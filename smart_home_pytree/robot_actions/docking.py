@@ -5,6 +5,7 @@ from rclpy.action import ActionServer, CancelResponse, GoalResponse
 
 from shr_msgs.action import DockingRequest  # using as a placeholder action
 
+
 class DockingActionServer(Node):
     def __init__(self):
         super().__init__('docking_action_server')
@@ -31,7 +32,8 @@ class DockingActionServer(Node):
         self.get_logger().info('Executing docking goal...')
 
         # Ask user whether to succeed or fail
-        user_input = input("Docking goal received. Type 'y' to succeed, 'n' to fail: ").strip().lower()
+        user_input = input(
+            "Docking goal received. Type 'y' to succeed, 'n' to fail: ").strip().lower()
 
         # feedback_msg = DockingRequest.Feedback()
 

@@ -8,41 +8,44 @@ import rclpy
 from rclpy.action import ActionClient
 import tf_transformations
 
+
 def yaw_to_quaternion(yaw):
     # Convert yaw to quaternion (roll=0, pitch=0)
     q = tf_transformations.quaternion_from_euler(0, 0, yaw)
     return Quaternion(x=q[0], y=q[1], z=q[2], w=q[3])
+
 
 class MoveToLandmark(py_trees.behaviour.Behaviour):
     """
     Dynamic ActionClient behavior that reads target location from blackboard/state and sends a navigation goal to Nav2's /navigate_to_pose action server.
     Uses the ROS2 native ActionClient (not py_trees_ros).
     """
-    def __init__(self, robot_interface, location="", location_key="person_location", name="MoveToLandmark"):
+
+    def __init__(self, robot_interface, location="",
+                 location_key="person_location", name="MoveToLandmark"):
         super().__init__(name)
         self.robot_interface = robot_interface
-        
+
         self.location = location
         self.location_key = location_key
-        
+
         self.blackboard = py_trees.blackboard.Blackboard()
-        
+
         self.goal_future = None
         self.result_future = None
         self.goal_handle = None
         self.sent_goal = False
-        
-        self.debug = False   
-        
-        
+
+        self.debug = False
+
     def setup(self, **kwargs):
-        
-        print("MoveTO behavior robot_interface ",self.robot_interface)
+
+        print("MoveTO behavior robot_interface ", self.robot_interface)
         print("MoveTO behavior self id:", id(self))
-        
+
         if not self.robot_interface:
             raise RuntimeError("MoveToLandmark requires a ROS2 node during setup.")
-        
+
         # Initialize ROS2 node and action client shell
         self.action_client = ActionClient(self.robot_interface, NavigateToPose, '/navigate_to_pose')
 
@@ -50,14 +53,13 @@ class MoveToLandmark(py_trees.behaviour.Behaviour):
         if not self.action_client.wait_for_server(timeout_sec=10.0):
             print(f"[ERROR] [{self.name}] Action server not available after waiting")
             return py_trees.common.Status.FAILURE
-        
+
         print(f"[INFO] [{self.name}] Setup complete.")
-        
 
     def initialise(self):
         # Get target location from state/blackboard and Send the goal request.
         locations = self.blackboard.get("locations")
-        
+
         if self.debug:
             print(f"[DEBUG] [{self.name}] Preparing to send goal")
 
@@ -65,12 +67,11 @@ class MoveToLandmark(py_trees.behaviour.Behaviour):
             target_name = self.location
         else:
             target_name = self.blackboard.get(self.location_key)
-            
-        self.blackboard.set("going_to_location",target_name)
-        
+
+        self.blackboard.set("going_to_location", target_name)
+
         # target_name = self.location or self.blackboard.get(self.location_key)
 
-        
         if target_name not in locations:
             self.logger.error(f"Target {target_name} not in locations.")
             self.feedback_message = "Invalid target location"
@@ -90,9 +91,9 @@ class MoveToLandmark(py_trees.behaviour.Behaviour):
         goal_msg.pose = pose
 
         if self.debug:
-            print(f"[DEBUG] [{self.name}] Sending goal -> x={pose.pose.position.x}, y={pose.pose.position.y}")
+            print(
+                f"[DEBUG] [{self.name}] Sending goal -> x={pose.pose.position.x}, y={pose.pose.position.y}")
 
-            
         self.goal_future = self.action_client.send_goal_async(
             goal_msg,
             feedback_callback=self.feedback_callback
@@ -104,7 +105,8 @@ class MoveToLandmark(py_trees.behaviour.Behaviour):
         """Handle feedback from the action server."""
         feedback = feedback_msg.feedback
         if self.debug:
-            print(f"[DEBUG] [{self.name}] Feedback: distance_remaining={feedback.distance_remaining:.2f}")
+            print(
+                f"[DEBUG] [{self.name}] Feedback: distance_remaining={feedback.distance_remaining:.2f}")
 
     def goal_response_callback(self, future):
         """Handle goal acceptance or rejection."""
@@ -116,14 +118,14 @@ class MoveToLandmark(py_trees.behaviour.Behaviour):
             try:
                 self.blackboard.unset("going_to_location")
                 # print("goal_response_callback unset self.blackboard ")
-            except:
+            except BaseException:
                 print("goal_response_callback: going_to_location not set so couldnt unset")
             return py_trees.common.Status.FAILURE
 
         if self.debug:
             print(f"[DEBUG] [{self.name}] Goal accepted. Waiting for result...")
         self.result_future = self.goal_handle.get_result_async()
-            
+
     def update(self):
         """Periodic tick. Check goal progress and result."""
         if not self.sent_goal:
@@ -132,7 +134,7 @@ class MoveToLandmark(py_trees.behaviour.Behaviour):
             self.blackboard.unset("going_to_location")
             return py_trees.common.Status.FAILURE
 
-        # its already 
+        # its already
         # rclpy.spin_once(self.robot_interface, timeout_sec=0.1)
 
         if self.result_future and self.result_future.done():
@@ -144,18 +146,18 @@ class MoveToLandmark(py_trees.behaviour.Behaviour):
                 try:
                     self.blackboard.unset("going_to_location")
                     # print(" update unset self.blackboard ")
-                except:
+                except BaseException:
                     print("update going_to_location not set so couldnt unset")
                 return py_trees.common.Status.SUCCESS
             else:
                 print(f"[WARN] [{self.name}] Goal failed with status {status}.")
                 self.sent_goal = False
-                
+
                 try:
                     self.blackboard.unset("going_to_location")
                     print("update unset self.blackboard ")
-                except:
-                    print("update going_to_location not set so couldnt unset")            
+                except BaseException:
+                    print("update going_to_location not set so couldnt unset")
 
                 return py_trees.common.Status.FAILURE
 
@@ -170,11 +172,10 @@ class MoveToLandmark(py_trees.behaviour.Behaviour):
             try:
                 self.blackboard.unset("going_to_location")
                 # print("in cancel unset self.blackboard ")
-            except:
+            except BaseException:
                 print("in cancel going_to_location not set so couldnt unset")
         else:
             print(f"[DEBUG] [{self.name}] No active goal to cancel on terminate.")
-     
 
     def _cancel_done_callback(self, future):
         """Confirm goal cancellation."""
@@ -186,4 +187,3 @@ class MoveToLandmark(py_trees.behaviour.Behaviour):
                 print(f"[WARN] [{self.name}] No active goals were cancelled.")
         except Exception as e:
             print(f"[ERROR] [{self.name}] Exception during cancel: {e}")
-

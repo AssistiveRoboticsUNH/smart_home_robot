@@ -5,6 +5,7 @@ This script is responsible for running the two reminder protocol.
 
 """
 
+import os
 import py_trees
 
 import rclpy
@@ -21,21 +22,24 @@ import py_trees_ros
 
 from smart_home_pytree.trees.tree_utils import make_reminder_tree
 
+
 class UpdateRobotStateKey_(py_trees.behaviour.Behaviour):
     def __init__(self, name: str, robot_interface, key: str):
         super().__init__(name)
         self.robot_interface = robot_interface
         self.key = key
 
-    def update(self):  
+    def update(self):
         value = self.robot_interface.state.get(self.key, None)
         print("[UpdateRobotStateKey_] value: ", value)
-        ## set value ot false
+        # set value ot false
         self.robot_interface.state.update(self.key, False)
         return py_trees.common.Status.SUCCESS
-        
+
 # move_away_protocol
-class MoveAwayProtocolTree(BaseTreeRunner):      
+
+
+class MoveAwayProtocolTree(BaseTreeRunner):
     def __init__(self, node_name: str, robot_interface=None, **kwargs):
         """
         Initialize the MoveAwayProtocolTree.
@@ -49,7 +53,7 @@ class MoveAwayProtocolTree(BaseTreeRunner):
             robot_interface=robot_interface,
             **kwargs
         )
-    
+
     def create_tree(self) -> py_trees.behaviour.Behaviour:
         """
         Creates the MoveAwayProtocolTree tree:
@@ -59,37 +63,36 @@ class MoveAwayProtocolTree(BaseTreeRunner):
         Returns:
             the root of the tree
         """
-        
+
         protocol_name = self.kwargs.get("protocol_name", "")
         blackboard = py_trees.blackboard.Blackboard()
         protocol_info = blackboard.get(protocol_name)
-       
+
         if protocol_info is None:
             raise RuntimeError(f"Protocol '{protocol_name}' not found in blackboard")
 
         # Extract the types
         position_key = "position_state_key"
-        
+
         state_key = protocol_info[position_key]
         update_key = protocol_info["state_key"]
-        
+
         state = self.robot_interface.state
         position_loc = state.get(state_key, None)
-        
+
         print(f"&&& postion loc using key {state_key} is {position_loc}")
         print(f"&&& protocol_info using key {protocol_info['away_location']}")
-
 
         if position_loc == "home":
             target_location = "home"
         else:
             target_location = protocol_info["away_location"]
-        
+
         print(f"&&& target_location loc using key {target_location} ")
-        
+
         # Root sequence
         root_sequence = py_trees.composites.Sequence(name="MoveAwaySequence", memory=True)
-                
+
         move_to_position_tree = MoveToLocationTree(
             node_name=f"{protocol_name}_move_to_position",
             robot_interface=self.robot_interface,
@@ -99,9 +102,11 @@ class MoveAwayProtocolTree(BaseTreeRunner):
         wait_time = 5
         wait_behavior = wait.Wait(name="wait", duration_in_sec=wait_time)
 
-        ## set it to false  
-        update_key_beh = UpdateRobotStateKey_(name="update_beh", robot_interface=self.robot_interface, key=update_key)
-
+        # set it to false
+        update_key_beh = UpdateRobotStateKey_(
+            name="update_beh",
+            robot_interface=self.robot_interface,
+            key=update_key)
 
         # Add behaviors in order
         root_sequence.add_children([
@@ -111,41 +116,43 @@ class MoveAwayProtocolTree(BaseTreeRunner):
         ])
 
         return root_sequence
-    
+
 
 def str2bool(v):
     return str(v).lower() in ('true', '1', 't', 'yes')
 
-import os
-def main(args=None):    
+
+def main(args=None):
     parser = argparse.ArgumentParser(
-        description="""Move Away Protocol Tree 
-        
+        description="""Move Away Protocol Tree
+
         """,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
-    parser.add_argument('--run_continuous', type=str2bool, default=False, help="Run tree continuously (default: False)")
+    parser.add_argument('--run_continuous', type=str2bool, default=False,
+                        help="Run tree continuously (default: False)")
     parser.add_argument("--num_attempts", type=int, default=3, help="retry attempts (default: 3)")
-    parser.add_argument("--protocol_name", type=str, default="medicine_am", help="name of the protocol that needs to run (ex: medicine_am)")
+    parser.add_argument("--protocol_name", type=str, default="medicine_am",
+                        help="name of the protocol that needs to run (ex: medicine_am)")
 
     args, unknown = parser.parse_known_args()
     protocol_name = args.protocol_name
     print("protocol_name: ", protocol_name)
-    
+
     # yaml_path = "/home/olagh48652/smart_home_pytree_ws/src/smart_home_pytree/config/house_info.yaml"
-    yaml_file_path = os.getenv("house_yaml_path", None) 
-    
+    yaml_file_path = os.getenv("house_yaml_path", None)
+
     blackboard = py_trees.blackboard.Blackboard()
-    
+
     load_protocols_to_bb(yaml_file_path)
-    
+
     tree_runner = MoveAwayProtocolTree(
         node_name="move_away_protocol_tree",
         protocol_name=protocol_name,
     )
     tree_runner.setup()
-    
+
     print("run_continuous", args.run_continuous)
     try:
         if args.run_continuous:
@@ -155,7 +162,7 @@ def main(args=None):
     finally:
         for key, value in blackboard.storage.items():
             print(f"{key} : {value}")
-    
+
         tree_runner.cleanup()
 
     rclpy.shutdown()
@@ -163,5 +170,5 @@ def main(args=None):
 
 if __name__ == "__main__":
     main()
-    
+
 # python3 two_reminder_protocol.py --protocol_name medicine_am
