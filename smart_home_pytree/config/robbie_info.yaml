@@ -28,8 +28,6 @@ robot_location_state: "robot_location"
 # available type: ## todo set it in a way to verifiy that yaml doesnt include 
 ## undefined types: text, audio, video, question_answer 
 protocols:
-
-
   MoveAwayProtocol:
     move_away:
       low_level:
@@ -65,6 +63,22 @@ protocols:
           time: {from: "15:00", to: "16:00"}
           permissible_locations: [living_room]
 
+    pm_routine:
+      low_level:
+        reminder_1: "BE it is time for your PM routine- steps are on your poster in the bathroom"
+        type_1: text
+        wait_1: 45*60 ## 45 minutes
+        reminder_2:  "BE this the second reminder for your PM routine- steps are on your poster in the bathroom"
+        type_2: text
+        number_of_protocols: 2
+      high_level:
+        priority: 3
+        success_on: {'state': 'bathroom_sensor', 'value': True}
+        requirements:
+          time: {from: "10:00", to: "11:00"}
+          permissible_locations: [living_room]
+          
+
   ExerciseProtocol:
     exercise:
       low_level:
@@ -72,28 +86,32 @@ protocols:
         video_dir_path: "file:///storage/emulated/0/Download/Exercise_Videos" ## path on the tablet 
         start_state_key: "start_exercise"
         stop_state_key: "stop_exercise"
+        get_confirmation: "Do you want to exercise now?" ## if empty then dont ask to indictae whther the protocol should start after the person asks
       high_level:
         reset_pattern:
           type: instant ## if triggered should play directly
-        priority: 3
+        priority: 4
         requirements: 
           event: 
             - {'state': 'start_exercise', 'value': True}
           day: [thursday, saturday, sunday]
           time: {'from': "9:30", to: "10:30"}
 
+  ChargeRobot:
+    charge_robot: 
+      high_level:
+        priority: 100
+        reset_pattern:
+          type: instant 
+        requirements:
+          event: 
+              - {'state': 'charging', 'value': False}
+
  
 
 # 3 days a week- 9.30 am- Thursday, Saturday and Sunday 
 
-# BE is spotted in the living area 
-
-# Robbie moves to protocol location 
-
-# “Hey BE, it is time for your exercises now. Are you ready? Say Yes or No 
-
-# If no, Robbie goes back to docking 
-
+## to be incorporased
 # If yes, our exercise videos will start playing for a 10-15 minute session- Different set of exercises each day 
 
 # 7 pm everyday 

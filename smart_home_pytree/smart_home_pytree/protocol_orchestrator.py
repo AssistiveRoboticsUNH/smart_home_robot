@@ -2,14 +2,15 @@ import os
 import time
 import threading
 import rclpy
-from smart_home_pytree.robot_interface import get_robot_interface
-import py_trees
-from smart_home_pytree.registry import load_protocols_to_bb
+import argparse
 import re
 import importlib
+from datetime import datetime
+from smart_home_pytree.robot_interface import get_robot_interface
+from smart_home_pytree.registry import load_protocols_to_bb
 from smart_home_pytree.trigger_monitor import TriggerMonitor
 from smart_home_pytree.human_interface import HumanInterface
-
+import py_trees
 
 # PROTOCOL ORCHESTRATOR
 class ProtocolOrchestrator:
@@ -20,7 +21,7 @@ class ProtocolOrchestrator:
     This class runs a main event loop that monitors triggers, handles human 
     interruptions, and manages the execution threads of specific protocol trees.
     """
-    def __init__(self, robot_interface=None, test_time=None, debug=False):
+    def __init__(self, robot_interface=None, test_time: str="", debug=False):
         """
         Initialize the Orchestrator.
 
@@ -28,7 +29,7 @@ class ProtocolOrchestrator:
             robot_interface (object, optional): Pre-existing robot interface. 
                 Defaults to None (will create new one).
             test_time (str, optional): Simulated time for testing (e.g., "09:00"). 
-                Defaults to None.
+                Defaults to "".
             debug (bool, optional): Enable verbose logging. Defaults to False.
         """
         self.rclpy_initialized_here = False
@@ -119,7 +120,7 @@ class ProtocolOrchestrator:
         return True
 
     
-    def orchestrator_loop(self, mock: bool = False):
+    def orchestrator_loop(self):
         """
         Reactive Event Loop. 
         Blocks until an event occurs (Human Voice or Trigger Change), then acts.
@@ -255,36 +256,6 @@ class ProtocolOrchestrator:
         s2 = re.sub(r'([a-z0-9])([A-Z])', r'\1_\2', s1)
         return s2.lower()
 
-    def start_protocol_mock(self, protocol_tuple):
-        """Start the protocol in its own thread."""
-        if protocol_tuple is None:
-            print("[Orchestrator] Warning: Tried to start None protocol — skipping.")
-            return
-
-        print("protocol_tuple: ", protocol_tuple)
-        protocol_name, priority = protocol_tuple
-        sub_name = protocol_name.split(".")[-1]
-        print(f"[Orchestrator] Starting: {protocol_name} (priority {priority})")
-        print("sub_name", sub_name)
-        print("protocol_name mega", protocol_name.split(".")[0])
-
-        if "TwoReminderProtocol" in protocol_name:
-            print(f"[Orchestrator]  two_reminder_protocol_tree for {protocol_name}")
-            self.trigger_monitor.set_complete_specific_protocol(sub_name)
-            self.trigger_monitor.mark_completed(protocol_name)
-
-        elif "CoffeeProtocol" in protocol_name:
-            print(f"[Orchestrator]  coffee_protocol_tree for {protocol_name}")
-            self.trigger_monitor.set_complete_specific_protocol(sub_name)
-            self.trigger_monitor.mark_completed(protocol_name)
-        elif "MoveAwayProtocol" in protocol_name:
-            self.trigger_monitor.set_complete_specific_protocol(sub_name)
-            self.trigger_monitor.mark_completed(protocol_name)
-        elif "ChargeRobotTree" in protocol_name:
-            print(f"[Orchestrator]  charge_robot_tree for {protocol_name}")
-        else:
-            print(f"[Orchestrator] No matching tree for {protocol_name}")
-            return
 
     def start_protocol(self, protocol_tuple):
         """Start the protocol in its own thread."""
@@ -297,12 +268,6 @@ class ProtocolOrchestrator:
 
         if self.debug:
             print(f"[Orchestrator] Starting: {class_protocol_name} (priority {priority})")
-
-        # using charging as protocl now for polling
-        # if "ChargeRobotTree" in class_protocol_name:
-        #     protocol_name = "" ## charge robot doesnt take a protocol name cause it doesnt depend on it
-        #     tree_runner = ChargeRobotTree(node_name="charge_robot_tree",robot_interface=self.robot_interface)
-        # else:
 
         # import tree dynamically
         tree_class_name = class_protocol_name.split(".")[0]  # example MoveAwayProtocolTree
@@ -334,7 +299,7 @@ class ProtocolOrchestrator:
         tree_runner.setup()
         thread = threading.Thread(
             target=self._run_protocol,
-            args=(tree_runner, class_protocol_name, priority),
+            args=(tree_runner, class_protocol_name),
             daemon=True,
         )
         thread.start()
@@ -386,15 +351,81 @@ class ProtocolOrchestrator:
 
         print("[Orchestrator] Shutdown complete.")
 
+def str2bool(v):
+    """Convert string to boolean."""
+    return str(v).lower() in ('true', '1', 't', 'yes')
+
+def validate_time_arg(time_str: str) -> str:
+    """
+    Validate HH:MM (24-hour) time format.
+
+    Returns:
+        The original string if valid.
+
+    Raises:
+        argparse.ArgumentTypeError if invalid.
+    """
+    try:
+        datetime.strptime(time_str, "%H:%M")
+        return time_str
+    except ValueError:
+        raise argparse.ArgumentTypeError(
+            f"Invalid time format '{time_str}'. Expected HH:MM (24-hour), e.g. 10:30."
+        )
+
 def main():
     """Main function to run the Protocol Orchestrator."""
+    parser = argparse.ArgumentParser(
+        description=""" Protocol Orchestrator that runs the behavior tree based on the requirements 
+
+        """,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+
+    parser.add_argument(
+        "--test_time",
+        type=validate_time_arg,
+        default="",
+        help="Optional protocol time (string) override in HH:MM format (e.g., 10:30).",
+    )
+
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Enable debug output.",
+    )
     
-    yaml_file_path = os.getenv("house_yaml_path", "")
+    parser.add_argument(
+        "--env_yaml_file_name",
+        type=str,
+        default="house_yaml_path",
+        help=(
+            "Name of the environment variable that stores the YAML file path "
+            "(default: house_yaml_path)."
+        ),
+    )
+
+    args, unknown = parser.parse_known_args()
+    test_time = args.test_time
+
+    
+
+    # Resolve YAML file path from environment variable
+    yaml_file_path = os.getenv(args.env_yaml_file_name)
+    if yaml_file_path is None:
+        raise RuntimeError(
+            f"Environment variable '{args.env_yaml_file_name}' is not set."
+        )
     # blackboard = py_trees.blackboard.Blackboard()
     load_protocols_to_bb(yaml_file_path)
 
+    if test_time:
+        print(f"[INFO] Using overridden time: {test_time}")
+    else:
+        print("[INFO] Using system time")
+
     # For testing:
-    orch = ProtocolOrchestrator(test_time="9:30", debug=True)
+    orch = ProtocolOrchestrator(test_time=test_time, debug=args.debug)
     # orch = ProtocolOrchestrator()
     # For live use:
     # orch = ProtocolOrchestrator()
@@ -405,7 +436,7 @@ def main():
     # ]
 
     try:
-        orch.orchestrator_loop(mock=False)
+        orch.orchestrator_loop()
     except KeyboardInterrupt:
         print("Shutting down orchestrator...")
         orch.shutdown()
@@ -417,3 +448,10 @@ if __name__ == "__main__":
 
 # ros2 topic pub /display_rx std_msgs/msg/String "data: 'exercise_requested'"
 # ros2 topic pub /display_rx std_msgs/msg/String "data: 'exercise_stop'"
+
+
+# cd ~/smarthome_ws/src/smart_home_robot/smart_home_pytree/smart_home_pytree
+# python3 protocol_orchestrator.py \
+#   --debug \
+#   --test_time 10:30 \
+#   --env_yaml_file_name house_yaml_path

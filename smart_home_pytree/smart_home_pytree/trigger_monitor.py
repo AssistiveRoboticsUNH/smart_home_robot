@@ -144,8 +144,8 @@ class TriggerMonitor:
             bb.set("wait_requests", {})
 
         wait_requests = bb.get("wait_requests")
-
-        print(f"[Yield wait] from collect_wait_requests got wait_requests: {wait_requests} ")
+        if self.debug and wait_requests:
+            print(f"[Yield wait] from collect_wait_requests got wait_requests: {wait_requests} ")
 
         for full_name, req in list(wait_requests.items()):
             seconds = req["seconds"]
@@ -205,8 +205,9 @@ class TriggerMonitor:
         key = f"{protocol_name}_done"
 
         # Ensure it exists
-        value = self.blackboard.get(key)
-        if value is None:
+        try:
+            value = self.blackboard.get(key)
+        except KeyError:
             print(f"[reset] No such protocol done key: {key}")
             return
 
@@ -297,11 +298,11 @@ class TriggerMonitor:
 
         return True
 
-    def check_time_requirement(self, time_req, current_time=None):
+    def check_time_requirement(self, time_req, current_time:str= ""):
         """Check if the current time satisfies the time requirement."""
         if not time_req:
             return True
-        if current_time is None:
+        if not current_time:
             current_time = datetime.now().strftime("%H:%M")
 
         fmt = "%H:%M"
@@ -327,10 +328,10 @@ class TriggerMonitor:
                 return False
         return True
 
-    def recompute_satisfied(self, current_time=None):
+    def recompute_satisfied(self, current_time:str=""):
         """Recompute the list of satisfied protocols based on current events, day, and time.
         Args:
-            current_time (str, optional): current time in "HH:MM" format. Defaults to None which uses the actually time.
+            current_time (str, optional): current time in "HH:MM" format. Defaults to "" which uses the actually time.
         Returns:
             bool: True if the set of satisfied protocols changed, False otherwise.
         """
@@ -345,6 +346,7 @@ class TriggerMonitor:
             self.current_satisfied_protocols = new_satisfied
 
         if changed or new_satisfied:  # trigger if not empty and if change happened might be redundant
+            # if self.debug and changed:
             print("Satisfied change event : ", new_satisfied)
             self.satisfied_changed_event.set()
 
@@ -352,12 +354,12 @@ class TriggerMonitor:
 
     # A protocol is satisfied if (normal requirements are met) OR (it has a pending wait whose resume time has passed).
     # only called in recompute_satisfied
-    def satisfied_protocols(self, current_events, current_day=None, current_time=None):
+    def satisfied_protocols(self, current_events, current_day=None, current_time:str = ""):
         """Determine which protocols have their requirements satisfied.
         Args:
             current_events (dict): current event states.
             current_day (str, optional): current day name. Defaults to None which uses the actually time.
-            current_time (str, optional): current time in "HH:MM" format. Defaults to None which uses the actually time.
+            current_time (str, optional): current time in "HH:MM" format. Defaults to "" which uses the actually time.
 
             Returns:
                 list of (protocol_name, priority) tuples that are satisfied.    
@@ -400,12 +402,12 @@ class TriggerMonitor:
 
     # -------- Main function to get the satisfied protocols --------
     # TODO: trigger updates when events change
-    def start_monitor(self, current_time: str = None):
+    def start_monitor(self, current_time: str = ""):
         """
         Method to be invoked in a separate thread to monitor triggers.
         It periodically checks for trigger conditions and updates the satisfied protocols. Also handles daily resets, and finishing waiting protocols with success_on conditions met.
         Args:
-            current_time (str, optional): _description_. Defaults to None which uses the actually time.
+            current_time (str, optional): _description_. Defaults to "" which uses the actually time.
         """
         last_day = datetime.now().strftime("%Y-%m-%d")
 
@@ -492,7 +494,7 @@ class TriggerMonitor:
                 self.completed_protocols.add(protocol_name)
                 return
 
-            pattern_type = reset_pattern.get("type", "periodic")  # default to periodic if not given
+            pattern_type = reset_pattern.get("type", "")  # default to "" if not given
             # INSTANT -> DONT ADD IT TO COMPLETED
             print("pattern_type: ", pattern_type)
             if pattern_type == "instant":

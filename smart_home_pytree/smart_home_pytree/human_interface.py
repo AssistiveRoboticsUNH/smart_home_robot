@@ -13,7 +13,7 @@ class HumanInterface(Node):
     a safety timeout to ensure the system doesn't remain paused indefinitely.
     """
     def __init__(self, human_interrupt_event: threading.Event, orchestrator_wakeup: threading.Event,
-                 node_name: str = 'voice_trigger', robot_interface=None):
+                 node_name: str = 'voice_trigger', robot_interface=None, debug:bool = True):
         """
         Initialize the HumanInterface node.
 
@@ -29,6 +29,7 @@ class HumanInterface(Node):
         self.human_interrupt_event = human_interrupt_event
         self.orchestrator_wakeup = orchestrator_wakeup
         self.robot_interface = robot_interface
+        self.debug = debug
 
         # Timer handle for the safety timeout
         self.timeout_timer = None
@@ -62,6 +63,8 @@ class HumanInterface(Node):
         )
         self.timeout_timer.start()
         self.get_logger().info(f"[HumanInterface] Native Safety Timer started ({self.timeout_duration_sec}s)")
+        if self.debug:
+            print(f"[HumanInterface] Native Safety Timer started ({self.timeout_duration_sec}s)")
     
     def _cancel_safety_timer(self):
         """Cancels the native timer."""
@@ -72,10 +75,15 @@ class HumanInterface(Node):
     def _safety_timeout_callback(self):
         """Fires from a separate native thread."""
         self.get_logger().error("[HumanInterface] TIMEOUT! System resuming automatically.")
+        if self.debug:
+            print(f"[HumanInterface] Native Safety Timer started ({self.timeout_duration_sec}s)")
         
         if self.human_interrupt_event.is_set():
             self.human_interrupt_event.clear()
             self.orchestrator_wakeup.set()
+            if self.debug:
+                print( "[HumanInterface] orchestrator_wakeup SET")
+                print( "[HumanInterface] human_interrupt_event clear")
             
     def voice_status_callback(self, msg: String):
         """
@@ -94,20 +102,32 @@ class HumanInterface(Node):
                 self.human_interrupt_event.set()
                 self.orchestrator_wakeup.set()
 
+                if self.debug:
+                    print( "[HumanInterface] orchestrator_wakeup SET")
+                    print( "[HumanInterface] human_interrupt_event SET")
+
+
                 # Start safety timer in case we never get an IDLE within timeout
                 self._start_safety_timer()
                 
         elif msg.data == done_waking:
             if self.human_interrupt_event.is_set():
                 self.get_logger().info("[HumanInterface] Voice IDLE. Resuming Orchestrator.")
+                if self.debug:
+                    print( "[HumanInterface] Voice IDLE. Resuming Orchestrator.")
+
                 self.human_interrupt_event.clear()
                 self.orchestrator_wakeup.set()
+                if self.debug:
+                    print("[HumanInterface] orchestrator_wakeup SET")
+                    print("[HumanInterface] human_interrupt_event clear")
                 
                 # Interaction successful, we don't need the fallback timer anymore
                 self._cancel_safety_timer()
 
         self.get_logger().info(f"[VOICE STATUS] {msg.data}")
 
+    ## move is hard to pick up todo fix
     def voice_user_callback(self, msg: String):
         """
         Parses natural language intents and updates the robot's shared state.
@@ -118,17 +138,25 @@ class HumanInterface(Node):
         text = msg.data.lower()
         self.get_logger().info(f"[VOICE USER] '{text}'")
 
-        if "move home" in text:
+        if "home" in text:
             self.get_logger().info(
-                "[DECISION] User said 'move home', set move_away=True, position='home'"
+                "[DECISION] User said 'home', set move_away=True, position='home'"
             )
-            self.robot_interface.state.update('move_away', True)
+
+            if self.debug:
+                print( "[DECISION] User said 'home', set move_away=True, position='home'")
+        
+            self.robot_interface.state.update('move_away', True) ## to trigger the protocol, positoin decides the location
             self.robot_interface.state.update('position', "home")
 
-        elif "move away" in text:
+        elif "away" in text:
             self.get_logger().info(
-                "[DECISION] User said 'move away' → set move_away=True, position='away'"
+                "[DECISION] User said 'away' → set move_away=True, position='away'"
             )
+
+            if self.debug:
+                print( "[DECISION] User said 'away' → set move_away=True, position='away'")
+
             self.robot_interface.state.update('move_away', True)
             self.robot_interface.state.update('position', "away")
 
