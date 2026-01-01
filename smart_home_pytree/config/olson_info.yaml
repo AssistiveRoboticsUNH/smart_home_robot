@@ -10,15 +10,14 @@ locations:
     y: 1.9037660360336304
     yaw: 0.0       # facing forward
   home:
-    x: 2.6955928802490234 #0.85 #
-    y: 3.3216073513031006 #1.014 #
-    yaw: -1.5708   # -90 degrees
-
+    x: 2.67 #0.85 #
+    y: 3.0 #1.014 #
+    yaw:  0.554899   
   dining:
     x: 5.066422939300537
     y: 3.4881248474121094
     yaw: -1.5708   # -90 degrees
-
+## home location same as that in docking
 
 
 ## need to be integerated to have robot interface get its info 
@@ -29,21 +28,33 @@ robot_location_state: "robot_location"
 ## undefined types: text, audio, video, question_answer 
 protocols:
   XReminderProtocol:
-    medicine_am_2:
+    medicine_am:
       low_level:
         reminder_1: "/home/hello-robot/smarthome_ws/src/smart_home_robot/smart_home_pytree/audio_resources/food_reminder_dain.mp3"
         type_1: audio
-        wait_1: 300 ## 5 minutes
+        wait_1: 100 ## 5 minutes
         reminder_2:  "please take your night medicine"
         type_2: text
         number_of_protocols: 2
       high_level:
         priority: 2
-        reset_pattern:
-          type: periodic
-          minutes: 60
         requirements:
-          time: {from: "10:00", to: "11:00"}
+          time: {from: "11:00", to: "12:00"}
+          permissible_locations: [living_room]
+
+    medicine_pm:
+      low_level:
+        reminder_1: "please take your night medicine"
+        type_1: text
+        wait_1: 50
+        reminder_2: "This is the second reminder to take your night medicine"
+        type_2: text
+        number_of_protocols: 2
+      high_level:
+        priority: 2
+        success_on: {'state': 'coffee', 'value': True}
+        requirements: 
+          time: {'from': '10:00', 'to': '15:00'}
           permissible_locations: [living_room]
 
 ## add states with /
@@ -87,16 +98,18 @@ protocols:
       high_level:
         reset_pattern:
           type: instant ## if triggered should play directly
-        priority: 3
+        priority: 4
         requirements: 
           event: 
             - {'state': 'start_exercise', 'value': True}
-          time: {'from': '15:00', 'to': '17:00'}
+          time: {'from': '10:00', 'to': '12:00'}
 
   ChargeRobot:
     charge_robot: 
       high_level:
         priority: 100
+        reset_pattern:
+          type: instant 
         requirements:
           event: 
               - {'state': 'charging', 'value': False}

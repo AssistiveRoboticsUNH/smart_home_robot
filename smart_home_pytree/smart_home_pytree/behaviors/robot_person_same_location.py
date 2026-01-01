@@ -15,7 +15,7 @@ class RobotPersonSameLocation(py_trees.behaviour.Behaviour):
     """
 
     def __init__(self, robot_interface, name="RobotPersonSameLocation",
-                 distance_threshold=0.5, debug=True):
+                 distance_threshold=0.75, debug=True):
         super().__init__(name)
         self.robot_interface = robot_interface
         self.debug_enabled = debug

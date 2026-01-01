@@ -4,7 +4,7 @@ import rclpy
 from smart_home_pytree.behaviors.check_robot_state_key import CheckRobotStateKey
 from smart_home_pytree.behaviors.logging_behavior import LoggingBehavior
 from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
-# from smart_home_pytree.trees.move_to_tree import MoveToLocationTree
+from smart_home_pytree.trees.move_to_tree import MoveToLocationTree
 import py_trees
 import py_trees_ros
 
@@ -51,7 +51,7 @@ class ChargeRobotTree(BaseTreeRunner):
             the root of the tree
         """
         
-        # target_location = "home"
+        target_location = "home"
         num_attempts = self.kwargs.get("num_attempts", 3)
         print("num_attempts", num_attempts)
 
@@ -81,13 +81,13 @@ class ChargeRobotTree(BaseTreeRunner):
         )
 
         # # takes position as input x, y, theta 
-        # handled by the docking routine
-        # move_to_home_tree = MoveToLocationTree(
-        #     node_name="move_to_location_tree",
-        #     robot_interface=self.robot_interface,
-        #     location=target_location  # pass any location here
-        # )
-        # move_to_home = move_to_home_tree.create_tree()
+        # docking routine doesnt have cancellation until then i will be moving to location then trigger docking
+        move_to_home_tree = MoveToLocationTree(
+            node_name="move_to_location_tree",
+            robot_interface=self.robot_interface,
+            location=target_location  # pass any location here
+        )
+        move_to_home = move_to_home_tree.create_tree()
 
         # Dock robot action (empty goal)
         docking_goal = DockRobot.Goal()

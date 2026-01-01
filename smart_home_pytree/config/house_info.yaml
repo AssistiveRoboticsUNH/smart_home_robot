@@ -120,6 +120,8 @@ protocols:
     charge_robot: 
       high_level:
         priority: 100
+        reset_pattern:
+          type: instant 
         requirements:
           event: 
               - {'state': 'charging', 'value': False}

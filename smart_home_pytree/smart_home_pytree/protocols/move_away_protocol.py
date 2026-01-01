@@ -36,8 +36,6 @@ class UpdateRobotStateKey_(py_trees.behaviour.Behaviour):
         self.robot_interface.state.update(self.key, False)
         return py_trees.common.Status.SUCCESS
 
-# move_away_protocol
-
 
 class MoveAwayProtocolTree(BaseTreeRunner):
     def __init__(self, node_name: str, robot_interface=None, **kwargs):
@@ -51,6 +49,7 @@ class MoveAwayProtocolTree(BaseTreeRunner):
         super().__init__(
             node_name=node_name,
             robot_interface=robot_interface,
+            debug=True,
             **kwargs
         )
 
