@@ -1,24 +1,13 @@
-#!/usr/bin/env python3
-
-"""
-This script is responsible for creating the charge robot tree.
-
-The tree should check if the is charging and exit. else it moves the robot to home position then dock the robot and checks if it succcessfully charged. It will try for num_attempts then log if it fails
-"""
-
-
-import py_trees
-import rclpy
-import py_trees_ros
 import operator
+import argparse
+import rclpy
 from smart_home_pytree.behaviors.check_robot_state_key import CheckRobotStateKey
 from smart_home_pytree.behaviors.logging_behavior import LoggingBehavior
 from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
-from smart_home_pytree.trees.move_to_tree import MoveToLocationTree
-import argparse
+# from smart_home_pytree.trees.move_to_tree import MoveToLocationTree
+import py_trees
+import py_trees_ros
 
-
-# from nav2_msgs.action import DockRobot
 try:
     # ROS 2 Jazzy / Rolling (Standard)
     from nav2_msgs.action import DockRobot
@@ -26,16 +15,20 @@ except ImportError:
     # ROS 2 Humble (Requires 'ros-humble-opennav-docking-msgs')
     from opennav_docking_msgs.action import DockRobot
 
-# same names as in action_name of the action clients
-
 
 def required_actions_():
+    """Return required actions for the ChargeRobotTree. Should match action client names."""
     return {
         "smart_home_pytree": ["dock_robot", "undock_robot "]
     }
 
 
 class ChargeRobotTree(BaseTreeRunner):
+    """
+    This class is responsible for creating the charge robot tree.
+
+    The tree should check if the robot is charging and exit. Otherwise it moves the robot to home position then dock the robot and checks if it succcessfully charged. It will try for num_attempts then log if it fails
+    """
     def __init__(self, node_name: str, robot_interface=None, **kwargs):
         """
         Initialize the ChargeRobotTree.
@@ -57,11 +50,8 @@ class ChargeRobotTree(BaseTreeRunner):
         Returns:
             the root of the tree
         """
-
-        # Get the blackboard
-        blackboard = py_trees.blackboard.Blackboard()
-
-        target_location = "home"
+        
+        # target_location = "home"
         num_attempts = self.kwargs.get("num_attempts", 3)
         print("num_attempts", num_attempts)
 
@@ -155,10 +145,12 @@ class ChargeRobotTree(BaseTreeRunner):
 
 
 def str2bool(v):
+    """Convert string to boolean."""
     return str(v).lower() in ('true', '1', 't', 'yes')
 
 
 def main(args=None):
+    """Main function to run the ChargeRobotTree."""
     parser = argparse.ArgumentParser(
         description="""Robot Charging Behavior Tree
 
@@ -176,7 +168,7 @@ def main(args=None):
     parser.add_argument("--num_attempts", type=int, default=3,
                         help="Docking retry attempts (default: 3)")
 
-    args, unknown = parser.parse_known_args()
+    args, _ = parser.parse_known_args()
 
     # Start robot interface singleton (spins in its own thread)
     # robot_interface = get_robot_interface()
