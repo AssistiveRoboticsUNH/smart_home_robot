@@ -13,7 +13,7 @@ class TriggerMonitor:
     # pylint: disable=too-many-instance-attributes
     """
     Monitors robot state and reports which protocol has its requirements satisfied, the requirements can be time or event based and they are defined in a YAML file.
-    It supports periodic resets, monitoring waiting of protocols, and checking success conditions for waiting protocols. 
+    It supports periodic resets, monitoring waiting of protocols, and checking success conditions for waiting protocols.
     """
 
     def __init__(self, robot_interface, wake_event: threading.Event,
@@ -24,7 +24,7 @@ class TriggerMonitor:
             robot_interface: Interface to access robot state.
             wake_event (threading.Event): Event to signal when satisfied protocols change.
             yaml_path (str, optional): Path to the protocols YAML file. Defaults to environment variable house_yaml_path.
-            debug (bool, optional): Enable debug logging. Defaults to False. 
+            debug (bool, optional): Enable debug logging. Defaults to False.
         """
 
         self.robot_interface = robot_interface
@@ -360,7 +360,7 @@ class TriggerMonitor:
             current_time (str, optional): current time in "HH:MM" format. Defaults to None which uses the actually time.
 
             Returns:
-                list of (protocol_name, priority) tuples that are satisfied.    
+                list of (protocol_name, priority) tuples that are satisfied.
         """
         satisfied = []
         for protocol_name, protocol_data in self.protocols_yaml['protocols'].items():

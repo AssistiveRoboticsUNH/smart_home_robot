@@ -12,6 +12,7 @@ class HumanInterface(Node):
     and parses specific user intents to update the robot's shared state. It includes
     a safety timeout to ensure the system doesn't remain paused indefinitely.
     """
+
     def __init__(self, human_interrupt_event: threading.Event, orchestrator_wakeup: threading.Event,
                  node_name: str = 'voice_trigger', robot_interface=None):
         """
@@ -33,7 +34,7 @@ class HumanInterface(Node):
         # Timer handle for the safety timeout
         self.timeout_timer = None
         self.timeout_duration_sec = 120.0  # 2 minutes
-       
+
         # Voice Subscriptions
         self.create_subscription(
             String,
@@ -54,15 +55,16 @@ class HumanInterface(Node):
     def _start_safety_timer(self):
         """Starts a native Python thread timer."""
         self._cancel_safety_timer()
-        
+
         # This creates a new thread that sleeps for 120s then runs the function
         self.timeout_timer = threading.Timer(
-            self.timeout_duration_sec, 
+            self.timeout_duration_sec,
             self._safety_timeout_callback
         )
         self.timeout_timer.start()
-        self.get_logger().info(f"[HumanInterface] Native Safety Timer started ({self.timeout_duration_sec}s)")
-    
+        self.get_logger().info(
+            f"[HumanInterface] Native Safety Timer started ({self.timeout_duration_sec}s)")
+
     def _cancel_safety_timer(self):
         """Cancels the native timer."""
         if self.timeout_timer is not None:
@@ -72,11 +74,11 @@ class HumanInterface(Node):
     def _safety_timeout_callback(self):
         """Fires from a separate native thread."""
         self.get_logger().error("[HumanInterface] TIMEOUT! System resuming automatically.")
-        
+
         if self.human_interrupt_event.is_set():
             self.human_interrupt_event.clear()
             self.orchestrator_wakeup.set()
-            
+
     def voice_status_callback(self, msg: String):
         """
         Handles status updates from the voice engine (Waking vs Idle).
@@ -96,13 +98,13 @@ class HumanInterface(Node):
 
                 # Start safety timer in case we never get an IDLE within timeout
                 self._start_safety_timer()
-                
+
         elif msg.data == done_waking:
             if self.human_interrupt_event.is_set():
                 self.get_logger().info("[HumanInterface] Voice IDLE. Resuming Orchestrator.")
                 self.human_interrupt_event.clear()
                 self.orchestrator_wakeup.set()
-                
+
                 # Interaction successful, we don't need the fallback timer anymore
                 self._cancel_safety_timer()
 
@@ -111,7 +113,7 @@ class HumanInterface(Node):
     def voice_user_callback(self, msg: String):
         """
         Parses natural language intents and updates the robot's shared state.
-
+git 
         Args:
             msg (String): The user's transcribed text.
         """
@@ -139,6 +141,7 @@ class HumanInterface(Node):
         # Additional cleanup if needed
         self.destroy_node()
 
+
 def main(args=None):
     """Main function to run the HumanInterface node."""
     rclpy.init(args=args)
@@ -147,7 +150,7 @@ def main(args=None):
     human_event = threading.Event()
     wakeup_event = threading.Event()
 
-    node = HumanInterface(human_interrupt_event=human_event, orchestrator_wakeup=wakeup_event)    
+    node = HumanInterface(human_interrupt_event=human_event, orchestrator_wakeup=wakeup_event)
 
     try:
         rclpy.spin(node)
@@ -156,6 +159,7 @@ def main(args=None):
     finally:
         node.shutdown()
         rclpy.shutdown()
+
 
 if __name__ == '__main__':
     main()

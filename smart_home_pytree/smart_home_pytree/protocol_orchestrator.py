@@ -2,14 +2,13 @@ import os
 import time
 import threading
 import rclpy
-from smart_home_pytree.robot_interface import get_robot_interface
-import py_trees
-from smart_home_pytree.registry import load_protocols_to_bb
 import re
 import importlib
+from smart_home_pytree.registry import load_protocols_to_bb
+from smart_home_pytree.robot_interface import get_robot_interface
 from smart_home_pytree.trigger_monitor import TriggerMonitor
 from smart_home_pytree.human_interface import HumanInterface
-
+import py_trees
 
 # PROTOCOL ORCHESTRATOR
 class ProtocolOrchestrator:
@@ -17,17 +16,18 @@ class ProtocolOrchestrator:
     """
     Manages the lifecycle of Behavior Tree protocols based on triggers and events.
 
-    This class runs a main event loop that monitors triggers, handles human 
+    This class runs a main event loop that monitors triggers, handles human
     interruptions, and manages the execution threads of specific protocol trees.
     """
+
     def __init__(self, robot_interface=None, test_time=None, debug=False):
         """
         Initialize the Orchestrator.
 
         Args:
-            robot_interface (object, optional): Pre-existing robot interface. 
+            robot_interface (object, optional): Pre-existing robot interface.
                 Defaults to None (will create new one).
-            test_time (str, optional): Simulated time for testing (e.g., "09:00"). 
+            test_time (str, optional): Simulated time for testing (e.g., "09:00").
                 Defaults to None.
             debug (bool, optional): Enable verbose logging. Defaults to False.
         """
@@ -118,17 +118,16 @@ class ProtocolOrchestrator:
                 return False
         return True
 
-    
-    def orchestrator_loop(self, mock: bool = False):
+    def orchestrator_loop(self):
         """
-        Reactive Event Loop. 
+        Reactive Event Loop.
         Blocks until an event occurs (Human Voice or Trigger Change), then acts.
         """
         if self.debug:
             print("[Orchestrator] Starting reactive loop")
 
         while not self.stop_flag:
-            
+
             # 1. Gatekeeper: Doesn't do anything if robot isn't ready
             if not self._state_is_ready():
                 if self.debug:
@@ -139,12 +138,12 @@ class ProtocolOrchestrator:
             # 2. THE BLOCK: Wait here until HumanInterface or TriggerMonitor wakes the event
             self.orchestrator_wakeup.wait()
             self.orchestrator_wakeup.clear()
-            
+
             if self.stop_flag:
                 break
 
             # 3. PRIORITY 1: Human Interruption
-            #    If the interrupt flag is set, we stop everything and trap execution 
+            #    If the interrupt flag is set, we stop everything and trap execution
             #    here until the human releases us.
             if self.human_interrupt_event.is_set():
                 self._handle_human_interrupt()
@@ -154,7 +153,7 @@ class ProtocolOrchestrator:
 
             # 4. PRIORITY 2: Protocol Management
             self._reconcile_protocols()
-        
+
     def _handle_human_interrupt(self):
         """
         Stops the running protocol and blocks until human clears the interrupt.
@@ -168,27 +167,28 @@ class ProtocolOrchestrator:
             self.stop_protocol()
 
         # 2. Trap the orchestrator here.
-        #    We loop/wait until the human_interrupt_event is CLEARED by the voice node.
-        #    The voice node triggers 'orchestrator_wakeup' when it clears the flag, 
+        #    Wait until the human_interrupt_event is CLEARED by the voice node.
+        #    The voice node triggers 'orchestrator_wakeup' when it clears the flag,
         #    breaking this wait.
         while not self.stop_flag and self.human_interrupt_event.is_set():
             if self.debug:
-                print("[Orchestrator] System Paused. Waiting for Human IDLE...")
+                pass
+                # print("[Orchestrator] System Paused. Waiting for Human IDLE...")
             self.orchestrator_wakeup.wait()
             self.orchestrator_wakeup.clear()
 
         if self.debug:
             print("[Orchestrator] Human released control. Resuming operations.")
-        
+
     def _reconcile_protocols(self):
         """
-        Compares currently running tree against satisfied triggers 
+        Compares currently running tree against satisfied triggers
         to decide if we should Start, Stop, or Swap tasks.
         """
-        
+
         if self.stop_flag:
             return
-        
+
         # A. Cleanup: If a thread finished naturally, clear our memory of it
         if self.running_thread and not self.running_thread.is_alive():
             if self.debug:
@@ -199,23 +199,23 @@ class ProtocolOrchestrator:
 
         # B. Get Candidates
         satisfied = self.trigger_monitor.get_satisfied()
-        
+
         # Sort by priority (lowest number = highest priority)
         # satisfied is list of tuples: [("Name", priority_int), ...]
         best_candidate = min(satisfied, key=lambda x: x[1], default=None)
 
         if not best_candidate:
-            if self.debug: 
+            if self.debug:
                 print("[Orchestrator] No protocols satisfied.")
             return
 
         # C. Decision Logic
         if not self.running_tree:
             # Case 1: Nothing running -> Start the best one
-            if self.debug: 
+            if self.debug:
                 print(f"[Orchestrator] Idle. Starting {best_candidate}")
             self.start_protocol(best_candidate)
-       
+
         else:
             # Case 2: Something running -> Check for Preemption
             current_priority = self.running_tree["priority"]
@@ -223,10 +223,10 @@ class ProtocolOrchestrator:
 
             if new_priority < current_priority:
                 if self.debug:
-                    print(f"[Orchestrator] Preempting Priority {current_priority} for Priority {new_priority}")
+                    print(
+                        f"[Orchestrator] Preempting Priority {current_priority} for Priority {new_priority}")
                 self.stop_protocol()
                 self.start_protocol(best_candidate)
-
 
     def _run_protocol(self, tree_runner, class_protocol_name):
         """Run a protocol tree and clean up when done."""
@@ -255,37 +255,6 @@ class ProtocolOrchestrator:
         s2 = re.sub(r'([a-z0-9])([A-Z])', r'\1_\2', s1)
         return s2.lower()
 
-    def start_protocol_mock(self, protocol_tuple):
-        """Start the protocol in its own thread."""
-        if protocol_tuple is None:
-            print("[Orchestrator] Warning: Tried to start None protocol — skipping.")
-            return
-
-        print("protocol_tuple: ", protocol_tuple)
-        protocol_name, priority = protocol_tuple
-        sub_name = protocol_name.split(".")[-1]
-        print(f"[Orchestrator] Starting: {protocol_name} (priority {priority})")
-        print("sub_name", sub_name)
-        print("protocol_name mega", protocol_name.split(".")[0])
-
-        if "TwoReminderProtocol" in protocol_name:
-            print(f"[Orchestrator]  two_reminder_protocol_tree for {protocol_name}")
-            self.trigger_monitor.set_complete_specific_protocol(sub_name)
-            self.trigger_monitor.mark_completed(protocol_name)
-
-        elif "CoffeeProtocol" in protocol_name:
-            print(f"[Orchestrator]  coffee_protocol_tree for {protocol_name}")
-            self.trigger_monitor.set_complete_specific_protocol(sub_name)
-            self.trigger_monitor.mark_completed(protocol_name)
-        elif "MoveAwayProtocol" in protocol_name:
-            self.trigger_monitor.set_complete_specific_protocol(sub_name)
-            self.trigger_monitor.mark_completed(protocol_name)
-        elif "ChargeRobotTree" in protocol_name:
-            print(f"[Orchestrator]  charge_robot_tree for {protocol_name}")
-        else:
-            print(f"[Orchestrator] No matching tree for {protocol_name}")
-            return
-
     def start_protocol(self, protocol_tuple):
         """Start the protocol in its own thread."""
         if protocol_tuple is None:
@@ -297,12 +266,6 @@ class ProtocolOrchestrator:
 
         if self.debug:
             print(f"[Orchestrator] Starting: {class_protocol_name} (priority {priority})")
-
-        # using charging as protocl now for polling
-        # if "ChargeRobotTree" in class_protocol_name:
-        #     protocol_name = "" ## charge robot doesnt take a protocol name cause it doesnt depend on it
-        #     tree_runner = ChargeRobotTree(node_name="charge_robot_tree",robot_interface=self.robot_interface)
-        # else:
 
         # import tree dynamically
         tree_class_name = class_protocol_name.split(".")[0]  # example MoveAwayProtocolTree
@@ -365,7 +328,7 @@ class ProtocolOrchestrator:
         print("[Orchestrator] Shutting down...")
         self.stop_flag = True
         self.orchestrator_wakeup.set()
-        
+
         self.trigger_monitor.stop_monitor()
         self.monitor_thread.join(timeout=10)
 
@@ -386,9 +349,10 @@ class ProtocolOrchestrator:
 
         print("[Orchestrator] Shutdown complete.")
 
+
 def main():
     """Main function to run the Protocol Orchestrator."""
-    
+
     yaml_file_path = os.getenv("house_yaml_path", "")
     # blackboard = py_trees.blackboard.Blackboard()
     load_protocols_to_bb(yaml_file_path)
@@ -405,7 +369,7 @@ def main():
     # ]
 
     try:
-        orch.orchestrator_loop(mock=False)
+        orch.orchestrator_loop()
     except KeyboardInterrupt:
         print("Shutting down orchestrator...")
         orch.shutdown()

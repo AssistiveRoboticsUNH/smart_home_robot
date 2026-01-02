@@ -11,14 +11,12 @@ from smart_home_pytree.behaviors.set_protocol_bb import SetProtocolBB
 
 from smart_home_pytree.registry import load_protocols_to_bb
 
-"""
-
-This script is responsible for reading a script to the person at their location and then charging the robot.
-
-"""
-
 
 class ReadScriptTree(BaseTreeRunner):
+    """
+    ReadScriptTree class. Inherits from BaseTreeRunner.
+    Handles the logic for reading a script to a person at their location.
+    """
     def __init__(self, node_name: str, robot_interface=None,
                  protocol_name: str = None,  # for tests
                  data_key: str = None,
@@ -102,10 +100,12 @@ class ReadScriptTree(BaseTreeRunner):
 
 
 def str2bool(v):
+    """Convert string to boolean."""
     return str(v).lower() in ('true', '1', 't', 'yes')
 
 
 def main(args=None):
+    """Main function to run the ReadScriptTree."""
     parser = argparse.ArgumentParser(
         description="""Read Script  Tree
 
@@ -130,7 +130,6 @@ def main(args=None):
 
     yaml_file_path = os.getenv("house_yaml_path", None)
 
-    blackboard = py_trees.blackboard.Blackboard()
     load_protocols_to_bb(yaml_file_path)
 
     tree_runner = ReadScriptTree(

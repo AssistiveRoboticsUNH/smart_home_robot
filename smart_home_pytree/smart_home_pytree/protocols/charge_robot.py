@@ -29,6 +29,7 @@ class ChargeRobotTree(BaseTreeRunner):
 
     The tree should check if the robot is charging and exit. Otherwise it moves the robot to home position then dock the robot and checks if it succcessfully charged. It will try for num_attempts then log if it fails
     """
+
     def __init__(self, node_name: str, robot_interface=None, **kwargs):
         """
         Initialize the ChargeRobotTree.
@@ -50,7 +51,7 @@ class ChargeRobotTree(BaseTreeRunner):
         Returns:
             the root of the tree
         """
-        
+
         # target_location = "home"
         num_attempts = self.kwargs.get("num_attempts", 3)
         print("num_attempts", num_attempts)
@@ -80,7 +81,7 @@ class ChargeRobotTree(BaseTreeRunner):
             comparison=operator.eq
         )
 
-        # # takes position as input x, y, theta 
+        # # takes position as input x, y, theta
         # handled by the docking routine
         # move_to_home_tree = MoveToLocationTree(
         #     node_name="move_to_location_tree",

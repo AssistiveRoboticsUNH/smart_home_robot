@@ -1,0 +1,10 @@
+--pytest-args -s: This tells pytest to show the print statements in your console (useful for debugging).
+colcon test --packages-select smart_home_pytree --pytest-args -s
+
+colcon test --packages-select smart_home_pytree --event-handlers console_direct+
+
+## to check failed tests
+colcon test-result --all --verbose
+
+
+Every new subfolder you create inside test/ should contain an empty __init__.py file.
