@@ -18,10 +18,11 @@ import argparse
 from smart_home_pytree.trees.read_script_tree import ReadScriptTree
 from smart_home_pytree.registry import load_locations_to_blackboard, load_protocols_to_bb
 from smart_home_pytree.behaviors.check_protocol_bb import CheckProtocolBB
+from smart_home_pytree.utils import str2bool
 
 
 class CoffeeProtocolTree(BaseTreeRunner):
-    def __init__(self, node_name: str, robot_interface=None, **kwargs):
+    def __init__(self, node_name: str, robot_interface=None, executor=None, debug=False, **kwargs):
         """
         Initialize the CoffeeProtocolTree.
         currently on reminder protocol
@@ -33,6 +34,8 @@ class CoffeeProtocolTree(BaseTreeRunner):
         super().__init__(
             node_name=node_name,
             robot_interface=robot_interface,
+            debug=debug,
+            executor=executor,
             **kwargs
         )
 
@@ -63,7 +66,9 @@ class CoffeeProtocolTree(BaseTreeRunner):
 
         read_script_tree_1 = ReadScriptTree(
             node_name=f"{self.node_name}_read_first_script",
-            robot_interface=self.robot_interface)
+            robot_interface=self.robot_interface,
+            debug=self.debug,
+            executor=self.executor)
         read_script_reminder_1 = read_script_tree_1.create_tree(
             protocol_name=protocol_name, data_key=text_1)
 
@@ -80,10 +85,6 @@ class CoffeeProtocolTree(BaseTreeRunner):
         ])
 
         return root_sequence
-
-
-def str2bool(v):
-    return str(v).lower() in ('true', '1', 't', 'yes')
 
 
 def main(args=None):

@@ -21,6 +21,7 @@ from smart_home_pytree.behaviors.action_behaviors import wait
 import py_trees_ros
 
 from smart_home_pytree.trees.tree_utils import make_reminder_tree
+from smart_home_pytree.utils import str2bool
 
 
 class UpdateRobotStateKey_(py_trees.behaviour.Behaviour):
@@ -38,7 +39,7 @@ class UpdateRobotStateKey_(py_trees.behaviour.Behaviour):
 
 
 class MoveAwayProtocolTree(BaseTreeRunner):
-    def __init__(self, node_name: str, robot_interface=None, **kwargs):
+    def __init__(self, node_name: str, robot_interface=None, executor=None, debug=False, **kwargs):
         """
         Initialize the MoveAwayProtocolTree.
 
@@ -49,7 +50,8 @@ class MoveAwayProtocolTree(BaseTreeRunner):
         super().__init__(
             node_name=node_name,
             robot_interface=robot_interface,
-            debug=True,
+            debug=debug,
+            executor=executor,
             **kwargs
         )
 
@@ -95,7 +97,9 @@ class MoveAwayProtocolTree(BaseTreeRunner):
         move_to_position_tree = MoveToLocationTree(
             node_name=f"{protocol_name}_move_to_position",
             robot_interface=self.robot_interface,
-            location=target_location  # pass any location here
+            location=target_location,
+            debug=self.debug,
+            executor=self.executor
         )
         move_to_person = move_to_position_tree.create_tree()
         wait_time = 5
@@ -115,10 +119,6 @@ class MoveAwayProtocolTree(BaseTreeRunner):
         ])
 
         return root_sequence
-
-
-def str2bool(v):
-    return str(v).lower() in ('true', '1', 't', 'yes')
 
 
 def main(args=None):

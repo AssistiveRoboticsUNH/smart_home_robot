@@ -7,7 +7,7 @@ from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
 from smart_home_pytree.trees.move_to_tree import MoveToLocationTree
 import py_trees
 import py_trees_ros
-
+from smart_home_pytree.utils import str2bool
 try:
     # ROS 2 Jazzy / Rolling (Standard)
     from nav2_msgs.action import DockRobot
@@ -29,7 +29,8 @@ class ChargeRobotTree(BaseTreeRunner):
 
     The tree should check if the robot is charging and exit. Otherwise it moves the robot to home position then dock the robot and checks if it succcessfully charged. It will try for num_attempts then log if it fails
     """
-    def __init__(self, node_name: str, robot_interface=None, **kwargs):
+
+    def __init__(self, node_name: str, robot_interface=None, executor=None, debug=False, **kwargs):
         """
         Initialize the ChargeRobotTree.
 
@@ -40,6 +41,8 @@ class ChargeRobotTree(BaseTreeRunner):
         super().__init__(
             node_name=node_name,
             robot_interface=robot_interface,
+            debug=debug,
+            executor=executor,
             **kwargs
         )
 
@@ -50,7 +53,7 @@ class ChargeRobotTree(BaseTreeRunner):
         Returns:
             the root of the tree
         """
-        
+
         target_location = "home"
         num_attempts = self.kwargs.get("num_attempts", 3)
         print("num_attempts", num_attempts)
@@ -80,12 +83,15 @@ class ChargeRobotTree(BaseTreeRunner):
             comparison=operator.eq
         )
 
-        # # takes position as input x, y, theta 
-        # docking routine doesnt have cancellation until then i will be moving to location then trigger docking
+        # # takes position as input x, y, theta
+        # docking routine doesnt have cancellation until then i will be moving to
+        # location then trigger docking
         move_to_home_tree = MoveToLocationTree(
             node_name="move_to_location_tree",
             robot_interface=self.robot_interface,
-            location=target_location  # pass any location here
+            location=target_location,  # pass any location here
+            debug=self.debug,
+            executor=self.executor
         )
         move_to_home = move_to_home_tree.create_tree()
 
@@ -118,8 +124,9 @@ class ChargeRobotTree(BaseTreeRunner):
         # Charge sequence
         charge_sequence = py_trees.composites.Sequence(name="Charge Sequence", memory=True)
         # handled by the docking routine
-        # charge_sequence.add_children([move_to_home, dock_robot, charging_status, log_message_success])
-        charge_sequence.add_children([dock_robot, charging_status, log_message_success])
+        charge_sequence.add_children(
+            [move_to_home, dock_robot, charging_status, log_message_success])
+        # charge_sequence.add_children([dock_robot, charging_status, log_message_success])
 
         # Retry decorator around charge sequence
         charge_sequence_with_retry = py_trees.decorators.Retry(
@@ -144,11 +151,6 @@ class ChargeRobotTree(BaseTreeRunner):
         ]
 
 
-def str2bool(v):
-    """Convert string to boolean."""
-    return str(v).lower() in ('true', '1', 't', 'yes')
-
-
 def main(args=None):
     """Main function to run the ChargeRobotTree."""
     parser = argparse.ArgumentParser(
@@ -169,9 +171,6 @@ def main(args=None):
                         help="Docking retry attempts (default: 3)")
 
     args, _ = parser.parse_known_args()
-
-    # Start robot interface singleton (spins in its own thread)
-    # robot_interface = get_robot_interface()
 
     # Pass the same instance into the tree
     tree_runner = ChargeRobotTree(

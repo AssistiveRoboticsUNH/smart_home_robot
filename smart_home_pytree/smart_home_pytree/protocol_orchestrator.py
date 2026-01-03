@@ -6,29 +6,33 @@ import argparse
 import re
 import importlib
 from datetime import datetime
-from smart_home_pytree.robot_interface import get_robot_interface
+from smart_home_pytree.robot_interface import RobotInterface
 from smart_home_pytree.registry import load_protocols_to_bb
 from smart_home_pytree.trigger_monitor import TriggerMonitor
 from smart_home_pytree.human_interface import HumanInterface
 import py_trees
+from rclpy.executors import MultiThreadedExecutor
 
 # PROTOCOL ORCHESTRATOR
+
+
 class ProtocolOrchestrator:
     # pylint: disable=too-many-instance-attributes
     """
     Manages the lifecycle of Behavior Tree protocols based on triggers and events.
 
-    This class runs a main event loop that monitors triggers, handles human 
+    This class runs a main event loop that monitors triggers, handles human
     interruptions, and manages the execution threads of specific protocol trees.
     """
-    def __init__(self, robot_interface=None, test_time: str="", debug=False):
+
+    def __init__(self, robot_interface=None, test_time: str = "", debug=False):
         """
         Initialize the Orchestrator.
 
         Args:
-            robot_interface (object, optional): Pre-existing robot interface. 
+            robot_interface (object, optional): Pre-existing robot interface.
                 Defaults to None (will create new one).
-            test_time (str, optional): Simulated time for testing (e.g., "09:00"). 
+            test_time (str, optional): Simulated time for testing (e.g., "09:00").
                 Defaults to "".
             debug (bool, optional): Enable verbose logging. Defaults to False.
         """
@@ -44,7 +48,7 @@ class ProtocolOrchestrator:
                 self.rclpy_initialized_here = False
                 print(" self.rclpy_initialized_here should be false: ", self.rclpy_initialized_here)
 
-        # Setup Events FIRST
+        # Events
         self.orchestrator_wakeup = threading.Event()
         self.human_interrupt_event = threading.Event()
 
@@ -56,62 +60,41 @@ class ProtocolOrchestrator:
         self.required_state_keys = ["charging"]
         self.last_satisfied = None
 
+        self.robot_interface = robot_interface or RobotInterface()
         # Setup HumanInterface (CRITICAL: Create BEFORE Robot Interface spins)
         self.human_interface_node = HumanInterface(
             human_interrupt_event=self.human_interrupt_event,
             orchestrator_wakeup=self.orchestrator_wakeup,
-            robot_interface=None  # Pass None for now to prevent dependency loop
+            robot_interface=self.robot_interface  # Pass None for now to prevent dependency loop
         )
 
-        # 4. Setup RobotInterface (Starts the background thread)
-        if robot_interface is None:
-            self.robot_interface = get_robot_interface()
-        else:
-            self.robot_interface = robot_interface
-
-        # Patch the Link
-        self.human_interface_node.robot_interface = self.robot_interface
-
+        print("[orchi ]test_time:", test_time)
         # Setup TriggerMonitor
         self.trigger_monitor = TriggerMonitor(
             self.robot_interface,
-            wake_event=self.orchestrator_wakeup
+            wake_event=self.orchestrator_wakeup,
+            test_time=test_time,
+            debug=debug
         )
 
-        # Start Threads
-        self.monitor_thread = threading.Thread(
-            target=self.trigger_monitor.start_monitor,
-            kwargs={"current_time": test_time},
-            daemon=True
-        )
-        self.monitor_thread.start()
+        # ---- SINGLE executor for EVERYTHING ----
+        self.executor = MultiThreadedExecutor(num_threads=4)
+        self.executor.add_node(self.robot_interface)
+        self.executor.add_node(self.human_interface_node)
 
+        # ---- ONE spin thread ----
         self.ros_spin_thread = threading.Thread(
-            target=self._spin_human_interface,
+            target=self.executor.spin,
             daemon=True
         )
         self.ros_spin_thread.start()
 
-    # TODO: use multi thread executor but robot interface need to stop spinning itself
-    # Create one executor for EVERYTHING
-    # self.executor = MultiThreadedExecutor()
-    # self.executor.add_node(self.human_interface_node)
-    # self.executor.add_node(self.robot_interface) # Assuming it inherits form Node
-
-    # # Run the executor in a background thread
-    # self.ros_spin_thread = threading.Thread(
-    #     target=self.executor.spin,
-    #     daemon=True
-    # )
-    # self.ros_spin_thread.start()
-
-    def _spin_human_interface(self):
-        """Runs the ROS node for Human Interface."""
-        print("[Orchestrator] Starting Human Interface Listener Thread...")
-        try:
-            rclpy.spin(self.human_interface_node)
-        except Exception as e:
-            print(f"[Orchestrator] Human Interface Thread Error: {e}")
+        # Non-ROS threads are fine
+        self.monitor_thread = threading.Thread(
+            target=self.trigger_monitor.start_monitor,
+            daemon=True
+        )
+        self.monitor_thread.start()
 
     def _state_is_ready(self):
         for key in self.required_state_keys:
@@ -119,17 +102,18 @@ class ProtocolOrchestrator:
                 return False
         return True
 
-    
     def orchestrator_loop(self):
         """
-        Reactive Event Loop. 
+        Reactive Event Loop.
         Blocks until an event occurs (Human Voice or Trigger Change), then acts.
         """
         if self.debug:
             print("[Orchestrator] Starting reactive loop")
 
         while not self.stop_flag:
-            
+            if self.debug:
+                print("[Orchestrator] while of orchestrator_loop...")
+
             # 1. Gatekeeper: Doesn't do anything if robot isn't ready
             if not self._state_is_ready():
                 if self.debug:
@@ -140,12 +124,12 @@ class ProtocolOrchestrator:
             # 2. THE BLOCK: Wait here until HumanInterface or TriggerMonitor wakes the event
             self.orchestrator_wakeup.wait()
             self.orchestrator_wakeup.clear()
-            
+
             if self.stop_flag:
                 break
 
             # 3. PRIORITY 1: Human Interruption
-            #    If the interrupt flag is set, we stop everything and trap execution 
+            #    If the interrupt flag is set, we stop everything and trap execution
             #    here until the human releases us.
             if self.human_interrupt_event.is_set():
                 self._handle_human_interrupt()
@@ -155,7 +139,7 @@ class ProtocolOrchestrator:
 
             # 4. PRIORITY 2: Protocol Management
             self._reconcile_protocols()
-        
+
     def _handle_human_interrupt(self):
         """
         Stops the running protocol and blocks until human clears the interrupt.
@@ -170,7 +154,7 @@ class ProtocolOrchestrator:
 
         # 2. Trap the orchestrator here.
         #    We loop/wait until the human_interrupt_event is CLEARED by the voice node.
-        #    The voice node triggers 'orchestrator_wakeup' when it clears the flag, 
+        #    The voice node triggers 'orchestrator_wakeup' when it clears the flag,
         #    breaking this wait.
         while not self.stop_flag and self.human_interrupt_event.is_set():
             if self.debug:
@@ -180,16 +164,16 @@ class ProtocolOrchestrator:
 
         if self.debug:
             print("[Orchestrator] Human released control. Resuming operations.")
-        
+
     def _reconcile_protocols(self):
         """
-        Compares currently running tree against satisfied triggers 
+        Compares currently running tree against satisfied triggers
         to decide if we should Start, Stop, or Swap tasks.
         """
-        
+
         if self.stop_flag:
             return
-        
+
         # A. Cleanup: If a thread finished naturally, clear our memory of it
         if self.running_thread and not self.running_thread.is_alive():
             if self.debug:
@@ -200,34 +184,41 @@ class ProtocolOrchestrator:
 
         # B. Get Candidates
         satisfied = self.trigger_monitor.get_satisfied()
-        
+        print("(((((((((((( &&****** satisfied: ", satisfied)
         # Sort by priority (lowest number = highest priority)
         # satisfied is list of tuples: [("Name", priority_int), ...]
         best_candidate = min(satisfied, key=lambda x: x[1], default=None)
 
         if not best_candidate:
-            if self.debug: 
+            if self.debug:
                 print("[Orchestrator] No protocols satisfied.")
             return
 
+        with self.lock:
+            current_run = self.running_tree
+
         # C. Decision Logic
-        if not self.running_tree:
+        if not current_run:
             # Case 1: Nothing running -> Start the best one
-            if self.debug: 
+            if self.debug:
                 print(f"[Orchestrator] Idle. Starting {best_candidate}")
             self.start_protocol(best_candidate)
-       
+
         else:
             # Case 2: Something running -> Check for Preemption
-            current_priority = self.running_tree["priority"]
+            if self.debug:
+                print("[Orchestrator] Something is running.")
+
+            current_priority = current_run["priority"]
+            print("current_priority: ", current_priority)
             new_priority = best_candidate[1]
 
             if new_priority < current_priority:
                 if self.debug:
-                    print(f"[Orchestrator] Preempting Priority {current_priority} for Priority {new_priority}")
+                    print(
+                        f"[Orchestrator] Preempting Priority {current_priority} for Priority {new_priority}")
                 self.stop_protocol()
                 self.start_protocol(best_candidate)
-
 
     def _run_protocol(self, tree_runner, class_protocol_name):
         """Run a protocol tree and clean up when done."""
@@ -236,17 +227,13 @@ class ProtocolOrchestrator:
         finally:
             print("tree_runner.final_status", tree_runner.final_status)
             if (tree_runner.final_status == py_trees.common.Status.SUCCESS):
-
-                if "ChargeRobotTree" not in class_protocol_name:
-                    print("************** mark_completed *************")
-                    self.trigger_monitor.mark_completed(class_protocol_name)
+                print(f"************** mark_completed {class_protocol_name} *************")
+                self.trigger_monitor.mark_completed(class_protocol_name)
 
             with self.lock:
-                self.orchestrator_wakeup.set()
-                # time.sleep(3) ## updated mark_completed to update the current satisfied protocols
                 print(f"[Orchestrator] Finished: {class_protocol_name}")
-                tree = self.running_tree["tree"]
-                tree.nodes_cleanup()
+                # tree = self.running_tree["tree"]
+                # tree.nodes_cleanup() ## script does on its own
                 self.running_tree = None
                 self.running_thread = None
 
@@ -256,12 +243,11 @@ class ProtocolOrchestrator:
         s2 = re.sub(r'([a-z0-9])([A-Z])', r'\1_\2', s1)
         return s2.lower()
 
-
     def start_protocol(self, protocol_tuple):
         """Start the protocol in its own thread."""
         if protocol_tuple is None:
             if self.debug:
-                print("[Orchestrator] Warning: Tried to start None protocol — skipping.")
+                print("[Orchestrator] Warning: Tried to start None protocol — skipping. HARMLESS")
             return
 
         class_protocol_name, priority = protocol_tuple
@@ -293,7 +279,8 @@ class ProtocolOrchestrator:
         tree_runner = tree_class(
             node_name=snake_case_class_name,
             protocol_name=protocol_name,
-            robot_interface=self.robot_interface
+            robot_interface=self.robot_interface,
+            executor=self.executor
         )
 
         tree_runner.setup()
@@ -319,41 +306,54 @@ class ProtocolOrchestrator:
 
         tree.stop_tree()
         self.running_thread.join(timeout=5)
-        tree.cleanup()
+        # tree.cleanup() ## cleans up on its own with stop tree
 
         with self.lock:
             self.running_tree = None
             self.running_thread = None
 
     def shutdown(self):
-        """Gracefully stop everything."""
+        """Gracefully stop everything (ROS-safe)."""
         print("[Orchestrator] Shutting down...")
+
+        # 1. Stop orchestrator logic
         self.stop_flag = True
         self.orchestrator_wakeup.set()
-        
-        self.trigger_monitor.stop_monitor()
-        self.monitor_thread.join(timeout=10)
 
-        if self.human_interface_node:
-            self.human_interface_node.shutdown()
+        # 2. Stop non-ROS threads
+        if self.trigger_monitor:
+            self.trigger_monitor.stop_monitor()
+
+        if self.monitor_thread and self.monitor_thread.is_alive():
+            self.monitor_thread.join(timeout=10)
 
         if self.running_tree:
             self.stop_protocol()
 
-        if self.rclpy_initialized_here:
-            print("[Orchestrator] rclpy Shutdown.")
-            rclpy.shutdown()
+        # 3. STOP EXECUTOR FIRST (CRITICAL)
+        if hasattr(self, "executor") and self.executor:
+            print("[Orchestrator] Shutting down executor...")
+            self.executor.shutdown()
 
-        # Since ROS is down, spin() has returned, and the thread is ready to exit.
-        # if self.ros_spin_thread.is_alive():
-        # self.ros_spin_thread.join() # will die automatically since deamon is set
-        # to true and rlcpy .shutdown is triggered
+        # 4. Destroy nodes AFTER executor stops
+        if self.human_interface_node:
+            self.human_interface_node.shutdown()
+            self.human_interface_node.destroy_node()
+
+        if self.robot_interface:
+            self.robot_interface.destroy_node()
+
+        # 5. Join spin thread
+        if self.ros_spin_thread and self.ros_spin_thread.is_alive():
+            self.ros_spin_thread.join(timeout=5)
+
+        # 6. Shutdown rclpy ONCE
+        if rclpy.ok() and self.rclpy_initialized_here:
+            print("[Orchestrator] rclpy shutdown")
+            rclpy.shutdown()
 
         print("[Orchestrator] Shutdown complete.")
 
-def str2bool(v):
-    """Convert string to boolean."""
-    return str(v).lower() in ('true', '1', 't', 'yes')
 
 def validate_time_arg(time_str: str) -> str:
     """
@@ -365,6 +365,8 @@ def validate_time_arg(time_str: str) -> str:
     Raises:
         argparse.ArgumentTypeError if invalid.
     """
+    if time_str == "":
+        return time_str
     try:
         datetime.strptime(time_str, "%H:%M")
         return time_str
@@ -373,10 +375,11 @@ def validate_time_arg(time_str: str) -> str:
             f"Invalid time format '{time_str}'. Expected HH:MM (24-hour), e.g. 10:30."
         )
 
+
 def main():
     """Main function to run the Protocol Orchestrator."""
     parser = argparse.ArgumentParser(
-        description=""" Protocol Orchestrator that runs the behavior tree based on the requirements 
+        description=""" Protocol Orchestrator that runs the behavior tree based on the requirements
 
         """,
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -394,7 +397,7 @@ def main():
         action="store_true",
         help="Enable debug output.",
     )
-    
+
     parser.add_argument(
         "--env_yaml_file_name",
         type=str,
@@ -405,10 +408,8 @@ def main():
         ),
     )
 
-    args, unknown = parser.parse_known_args()
+    args, _ = parser.parse_known_args()
     test_time = args.test_time
-
-    
 
     # Resolve YAML file path from environment variable
     yaml_file_path = os.getenv(args.env_yaml_file_name)
@@ -438,7 +439,8 @@ def main():
     try:
         orch.orchestrator_loop()
     except KeyboardInterrupt:
-        print("Shutting down orchestrator...")
+        print("[Main] KeyboardInterrupt received.")
+    finally:
         orch.shutdown()
 
 

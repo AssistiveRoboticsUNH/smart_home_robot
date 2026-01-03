@@ -22,7 +22,7 @@ import threading
 # Replace these with your actual action types
 from shr_msgs.action import DockingRequest
 from nav2_msgs.action import NavigateToPose
-
+from smart_home_pytree.utils import str2bool
 import argparse
 
 
@@ -33,7 +33,7 @@ def required_actions_():
 
 
 class GuardedMoveToPersonLocationTree(BaseTreeRunner):
-    def __init__(self, node_name: str, robot_interface=None, **kwargs):
+    def __init__(self, node_name: str, robot_interface=None, executor=None, debug=False, **kwargs):
         """
         Initialize the MoveToPersonLocation.
 
@@ -44,11 +44,13 @@ class GuardedMoveToPersonLocationTree(BaseTreeRunner):
         super().__init__(
             node_name=node_name,
             robot_interface=robot_interface,
+            debug=debug,
+            executor=executor,
             **kwargs
         )
 
     def check(self):
-        # Is the robot currently navigating toward a person location?
+        """ Checks if the robot currently navigating toward a person location"""
         try:
             going_to = self.blackboard.get("going_to_location")
 
@@ -95,7 +97,9 @@ class GuardedMoveToPersonLocationTree(BaseTreeRunner):
         move_to_home_tree = MoveToLocationTree(
             node_name="move_to_location_tree",
             robot_interface=self.robot_interface,
-            location_key="person_location"
+            location_key="person_location",
+            debug=self.debug,
+            executor=self.executor
         )
         move_to_room = move_to_home_tree.create_tree()
 
@@ -133,10 +137,6 @@ class GuardedMoveToPersonLocationTree(BaseTreeRunner):
         ]
 
 
-def str2bool(v):
-    return str(v).lower() in ('true', '1', 't', 'yes')
-
-
 def main(args=None):
     parser = argparse.ArgumentParser(
         description="""Move to Person Location Behavior Tree
@@ -155,7 +155,7 @@ def main(args=None):
     parser.add_argument("--num_attempts", type=int, default=3,
                         help="Docking retry attempts (default: 3)")
 
-    args, unknown = parser.parse_known_args()
+    args, _ = parser.parse_known_args()
 
     tree_runner = GuardedMoveToPersonLocationTree(
         node_name="move_to_person_location_tree",
@@ -164,15 +164,11 @@ def main(args=None):
     tree_runner.setup()
 
     print("run_continuous", args.run_continuous)
-    try:
-        if args.run_continuous:
-            tree_runner.run_continuous()
-        else:
-            tree_runner.run_until_done()
-    finally:
-        tree_runner.cleanup()
 
-    rclpy.shutdown()
+    if args.run_continuous:
+        tree_runner.run_continuous()
+    else:
+        tree_runner.run_until_done()
 
 
 if __name__ == "__main__":

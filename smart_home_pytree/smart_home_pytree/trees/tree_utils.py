@@ -17,26 +17,31 @@ def make_reminder_tree(reminder_type: str,
                        node_name: str,
                        robot_interface,
                        protocol_name: str,
-                       data_key: str):
+                       data_key: str, executor=None, debug=False):
     """
     Returns a behavior tree subtree for the given reminder type.
     """
 
     if reminder_type == "text":
         tree = ReadScriptTree(node_name=node_name,
-                              robot_interface=robot_interface)
+                              robot_interface=robot_interface,
+                              debug=debug,
+                              executor=executor)
         return tree.create_tree(protocol_name=protocol_name,
                                 data_key=data_key)
 
     elif reminder_type == "audio":
         tree = PlayAudioTree(node_name=node_name,
-                             robot_interface=robot_interface)
+                             robot_interface=robot_interface,
+                             debug=debug,
+                             executor=executor)
         return tree.create_tree(protocol_name=protocol_name,
                                 data_key=data_key)
 
     elif reminder_type == "video":
         tree = PlayVideoTree(node_name=node_name,
-                             robot_interface=robot_interface)
+                             robot_interface=robot_interface, debug=debug,
+                             executor=executor)
         return tree.create_tree(protocol_name=protocol_name,
                                 data_key=data_key)
     else:

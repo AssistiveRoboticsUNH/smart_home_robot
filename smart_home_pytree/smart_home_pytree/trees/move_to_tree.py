@@ -6,18 +6,15 @@ This script is responsible for creating the robot tree to move the robot to a lo
 The tree receives an string location representing the target pose for the robot. Before initiating movement, it checks whether the robot is currently charging and, if so, commands it to undock first.
 """
 
+import argparse
+import operator
+from smart_home_pytree.behaviors.check_robot_state_key import CheckRobotStateKey
+from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
+from smart_home_pytree.behaviors.move_to_behavior import MoveToLandmark
+from smart_home_pytree.utils import str2bool
 import py_trees
 import py_trees_ros
 import rclpy
-import operator
-
-
-from smart_home_pytree.behaviors.check_robot_state_key import CheckRobotStateKey
-
-from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
-from smart_home_pytree.behaviors.move_to_behavior import MoveToLandmark
-import argparse
-from smart_home_pytree.robot_interface import get_robot_interface
 
 # from nav2_msgs.action import UndockRobot
 try:
@@ -45,7 +42,7 @@ def required_actions_():
 
 
 class MoveToLocationTree(BaseTreeRunner):
-    def __init__(self, node_name: str, robot_interface=None, **kwargs):
+    def __init__(self, node_name: str, robot_interface=None, executor=None, debug=False, **kwargs):
         """
         Initialize the MoveToLocationTree.
 
@@ -56,6 +53,8 @@ class MoveToLocationTree(BaseTreeRunner):
         super().__init__(
             node_name=node_name,
             robot_interface=robot_interface,
+            debug=debug,
+            executor=executor,
             **kwargs
         )
 
@@ -66,8 +65,9 @@ class MoveToLocationTree(BaseTreeRunner):
         Returns:
             the root of the tree
         """
-        print("MoveTOtree robot_interface ", self.robot_interface)
-        print("MoveTOtree self id:", id(self))
+        if self.debug:
+            print("MoveTOtree robot_interface ", self.robot_interface)
+            print("MoveTOtree self id:", id(self))
 
         # # Get the blackboard
         # blackboard = py_trees.blackboard.Blackboard()
@@ -140,10 +140,6 @@ class MoveToLocationTree(BaseTreeRunner):
         ]
 
 
-def str2bool(v):
-    return str(v).lower() in ('true', '1', 't', 'yes')
-
-
 def main(args=None):
     parser = argparse.ArgumentParser(
         description="Run move_to_location tree for robot navigation",
@@ -159,7 +155,7 @@ def main(args=None):
         default="person_location",
         help="key to use with blackboard")
 
-    args, unknown = parser.parse_known_args()
+    args, _ = parser.parse_known_args()
 
     # Print all active threads
     # import threading
@@ -176,22 +172,17 @@ def main(args=None):
     tree_runner.setup()
 
     print("run_continuous", args.run_continuous)
-    try:
-        if args.run_continuous:
-            tree_runner.run_continuous()
-        else:
-            final_status = tree_runner.run_until_done()
-            print("final_status", final_status)
-    finally:
-        print("clean up")
-        tree_runner.cleanup()
+
+    if args.run_continuous:
+        tree_runner.run_continuous()
+    else:
+        final_status = tree_runner.run_until_done()
+        print("final_status", final_status)
 
     # print("Active threads after cleanup:")
     # for t in threading.enumerate():
     #     print(f" - {t.name} (alive={t.is_alive()})")
     # print(f"Total threads: {len(threading.enumerate())}")
-
-    rclpy.shutdown()
 
 
 if __name__ == "__main__":

@@ -16,14 +16,14 @@ from shr_msgs.action import QuestionRequest
 import py_trees_ros
 from smart_home_pytree.behaviors.action_behaviors.ask_question import AskQuestionBehavior
 from smart_home_pytree.behaviors.check_protocol_bb import CheckProtocolBB
-"""
-
-
-"""
+from smart_home_pytree.utils import str2bool
 
 
 class AskQuestionTree(BaseTreeRunner):
+    """Class creates a tree get an answer from the user"""
+
     def __init__(self, node_name: str, robot_interface=None,
+                 executor=None, debug=False,
                  protocol_name: str = None,
                  data_key: str = None,
                  **kwargs):
@@ -37,6 +37,8 @@ class AskQuestionTree(BaseTreeRunner):
         super().__init__(
             node_name=node_name,
             robot_interface=robot_interface,
+            debug=debug,
+            executor=executor,
             **kwargs
         )
 
@@ -78,7 +80,9 @@ class AskQuestionTree(BaseTreeRunner):
         # 1. Subtree: Navigation logic
         move_to_person_tree = MoveToPersonLocationTree(
             node_name=f"{protocol_name}_move_to_person",
-            robot_interface=self.robot_interface
+            robot_interface=self.robot_interface,
+            debug=self.debug,
+            executor=self.executor
         )
         move_to_person = move_to_person_tree.create_tree()
 
@@ -121,10 +125,6 @@ class AskQuestionTree(BaseTreeRunner):
         return selector
 
 
-def str2bool(v):
-    return str(v).lower() in ('true', '1', 't', 'yes')
-
-
 def main(args=None):
     parser = argparse.ArgumentParser(
         description="""Play Video Tree
@@ -143,14 +143,13 @@ def main(args=None):
     parser.add_argument("--data_key", type=str, default="get_confirmation",
                         help="name of the key in the protocol that needs to run (ex: medicine_am)")
 
-    args, unknown = parser.parse_known_args()
+    args, _ = parser.parse_known_args()
     protocol_name = args.protocol_name
     data_key = args.data_key
     print("protocol_name: ", protocol_name)
 
     yaml_file_path = os.getenv("house_yaml_path", None)
 
-    blackboard = py_trees.blackboard.Blackboard()
     load_protocols_to_bb(yaml_file_path)
 
     tree_runner = AskQuestionTree(
@@ -161,16 +160,11 @@ def main(args=None):
     tree_runner.setup()
 
     print("run_continuous", args.run_continuous)
-    try:
-        if args.run_continuous:
-            tree_runner.run_continuous()
-        else:
-            tree_runner.run_until_done()
-    finally:
-        # remove_protocol_info_from_bb(yaml_file_path, protocol_name)
-        tree_runner.cleanup()
 
-    rclpy.shutdown()
+    if args.run_continuous:
+        tree_runner.run_continuous()
+    else:
+        tree_runner.run_until_done()
 
 
 if __name__ == "__main__":

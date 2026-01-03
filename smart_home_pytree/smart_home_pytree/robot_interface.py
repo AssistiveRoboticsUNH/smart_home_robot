@@ -68,9 +68,6 @@ class RobotInterface(Node):
         if getattr(self, "_initialized", False):
             return
 
-        if not rclpy.ok():
-            rclpy.init()
-
         super().__init__('robot_interface')
         self.state = RobotState()
         self.qos_profile = QoSProfile(
@@ -112,10 +109,6 @@ class RobotInterface(Node):
         self.create_subscription(String, 'display_rx', self.display_callback, 10)
 
         self.create_subscription(String, 'sim_time', self.sim_time_callback, 10)
-        # Background spinning thread
-        self._stop_event = threading.Event()
-        self.spin_thread = threading.Thread(target=self._spin_background, daemon=True)
-        self.spin_thread.start()
 
         self._initialized = True
         self.get_logger().info("RobotInterface initialized and spinning in background thread.")
@@ -130,16 +123,9 @@ class RobotInterface(Node):
         y = msg.pose.pose.position.y
         self.state.update('robot_location_xy', (x, y))
 
-    # --- Spinning ---
-    def _spin_background(self):
-        while rclpy.ok() and not self._stop_event.is_set():
-            rclpy.spin_once(self, timeout_sec=0.1)
-
     def shutdown(self):
         """Gracefully stop the background spinner."""
         self.get_logger().info("Shutting down RobotInterface...")
-        self._stop_event.set()
-        self.spin_thread.join(timeout=1.0)
         self.destroy_node()
         self.get_logger().info("RobotInterface shutdown complete.")
 
@@ -188,22 +174,21 @@ class RobotInterface(Node):
 # ros2 topic pub /sim_time std_msgs/msg/String "{data: '10:30'}"
 
 
-def get_robot_interface():
-    if not rclpy.ok():
-        rclpy.init()
-    return RobotInterface()
-
-
 def main():
+    """for standalone testing ONLY"""
     rclpy.init()
-    robot_interface = get_robot_interface()
+
+    robot_interface = RobotInterface()
+    executor = MultiThreadedExecutor()
+    executor.add_node(robot_interface)
+
     try:
-        while rclpy.ok():
-            pass
+        executor.spin()
     except KeyboardInterrupt:
         pass
     finally:
-        robot_interface.shutdown()
+        executor.shutdown()
+        robot_interface.destroy_node()
         rclpy.shutdown()
 
 
