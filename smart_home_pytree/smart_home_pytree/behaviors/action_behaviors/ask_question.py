@@ -1,12 +1,14 @@
-from smart_home_pytree.registry import load_protocols_to_bb
-import pprint
 import os
+import pprint
 import time
-import rclpy
+
 import py_trees
 import py_trees_ros
+import rclpy
+
 from shr_msgs.action import QuestionRequest  # Ensure this import is correct
 from smart_home_pytree.behaviors.set_protocol_bb import SetProtocolBB
+from smart_home_pytree.registry import load_protocols_to_bb
 
 
 class AskQuestionBehavior(py_trees_ros.actions.ActionClient):
@@ -40,7 +42,7 @@ class AskQuestionBehavior(py_trees_ros.actions.ActionClient):
             action_type=QuestionRequest,
             action_name="ask_question",
             action_goal=action_goal,
-            wait_for_server_timeout_sec=120.0
+            wait_for_server_timeout_sec=120.0,
         )
         self.protocol_name = protocol_name
         self.data_key = data_key
@@ -76,7 +78,7 @@ class AskQuestionBehavior(py_trees_ros.actions.ActionClient):
         set_bb_node = SetProtocolBB(
             name="MarkAskQuestionDone",
             key=f"{self.protocol_name}_done.{self.data_key}_done",
-            value=True
+            value=True,
         )
 
         if answer == "yes":
@@ -114,7 +116,7 @@ def main():
         name="test_ask",
         action_goal=question_goal,
         protocol_name=protocol_name,
-        data_key=data_key
+        data_key=data_key,
     )
 
     # 3. CRITICAL: Setup requires the ROS node

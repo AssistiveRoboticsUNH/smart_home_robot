@@ -1,24 +1,28 @@
+import time
+
 import rclpy
 from rclpy.action import CancelResponse
-from shr_msgs.action import PlayVideoRequest
-from std_msgs.msg import String
-import time
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup, ReentrantCallbackGroup
-from .generic_action_server import run_action_server, GenericActionServer
+from std_msgs.msg import String
+
+from shr_msgs.action import PlayVideoRequest
+
+from .generic_action_server import GenericActionServer, run_action_server
 
 
 class PlayVideoActionServer(GenericActionServer):
     def __init__(self):
-        super().__init__(PlayVideoRequest, 'play_video')
+        super().__init__(PlayVideoRequest, "play_video")
         self.display_cb_group = MutuallyExclusiveCallbackGroup()
 
-        self.display_pub = self.create_publisher(String, 'display_tx', 10)
+        self.display_pub = self.create_publisher(String, "display_tx", 10)
         self.display_sub = self.create_subscription(
             String,
-            'display_rx',
+            "display_rx",
             self.display_callback,
             10,
-            callback_group=self.display_cb_group)
+            callback_group=self.display_cb_group,
+        )
 
     def display_callback(self, msg):
         # print(f"[Received] {msg.data}")  # print the message content

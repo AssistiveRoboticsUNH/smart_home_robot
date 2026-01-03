@@ -1,17 +1,20 @@
-from smart_home_pytree.registry import load_protocols_to_bb
+import argparse
 import os
+
 import py_trees
+import py_trees_ros
+import rclpy
+import yaml
+
+from shr_msgs.action import PlayVideoRequest
 from smart_home_pytree.behaviors.action_behaviors.read_script import ReadScript
 from smart_home_pytree.behaviors.action_behaviors.wait import Wait
-import yaml
-from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
-import py_trees_ros
-from shr_msgs.action import PlayVideoRequest
-from smart_home_pytree.trees.move_to_person_location import MoveToPersonLocationTree
+from smart_home_pytree.registry import load_protocols_to_bb
 from smart_home_pytree.trees.ask_question_tree import AskQuestionTree
-import argparse
-import rclpy
+from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
+from smart_home_pytree.trees.move_to_person_location import MoveToPersonLocationTree
 from smart_home_pytree.utils import str2bool
+
 # Blackboard helper behaviors
 
 
@@ -26,8 +29,9 @@ class CheckDoneBB(py_trees.behaviour.Behaviour):
     def update(self):
         bb = py_trees.blackboard.Blackboard()
         value = bb.storage.get(self.key, False)
-        return (py_trees.common.Status.SUCCESS
-                if value else py_trees.common.Status.FAILURE)
+        return (
+            py_trees.common.Status.SUCCESS if value else py_trees.common.Status.FAILURE
+        )
 
 
 class SetDoneBB(py_trees.behaviour.Behaviour):
@@ -42,8 +46,13 @@ class SetDoneBB(py_trees.behaviour.Behaviour):
 
 
 class ClearExerciseProgressBB(py_trees.behaviour.Behaviour):
-    def __init__(self, name="ClearExerciseProgressBB", robot_interface=None,
-                 start_key="start_exercise", key_prefix="exercise_key"):
+    def __init__(
+        self,
+        name="ClearExerciseProgressBB",
+        robot_interface=None,
+        start_key="start_exercise",
+        key_prefix="exercise_key",
+    ):
         super().__init__(name)
         self.key_prefix = key_prefix
         self.robot_interface = robot_interface
@@ -82,11 +91,14 @@ class CheckRobotStateKey_(py_trees.behaviour.Behaviour):
             self.logger.debug(f"Not STOP EXERCISE, SUCCESS ")
             return py_trees.common.Status.SUCCESS
 
+
 # MAIN PROTOCOL TREE
 
 
 class ExerciseProtocolTree(BaseTreeRunner):
-    def __init__(self, node_name: str, robot_interface=None, executor=None, debug=False, **kwargs):
+    def __init__(
+        self, node_name: str, robot_interface=None, executor=None, debug=False, **kwargs
+    ):
         """
         Initialize the ExerciseProtocolTree.
 
@@ -99,7 +111,7 @@ class ExerciseProtocolTree(BaseTreeRunner):
             robot_interface=robot_interface,
             debug=debug,
             executor=executor,
-            **kwargs
+            **kwargs,
         )
 
         # self.node_name = node_name
@@ -122,10 +134,11 @@ class ExerciseProtocolTree(BaseTreeRunner):
         return data
 
     def create_tree(self):
-
         protocol_name = self.kwargs.get("protocol_name", "")
         if protocol_name == "":
-            raise ValueError("protocol_name is empty. Please specify one (e.g., 'medicine_am').")
+            raise ValueError(
+                "protocol_name is empty. Please specify one (e.g., 'medicine_am')."
+            )
 
         protocol_info = self.bb.get(protocol_name)
 
@@ -151,7 +164,7 @@ class ExerciseProtocolTree(BaseTreeRunner):
 
         protocol = py_trees.composites.Sequence(
             name="ExerciseProtocolCore",
-            memory=True  # False
+            memory=True,  # False
         )
 
         # INTRO
@@ -162,14 +175,15 @@ class ExerciseProtocolTree(BaseTreeRunner):
                 memory=True,  # False
                 children=[
                     CheckDoneBB("IntroAlreadyDone?", intro_flag),
-                    py_trees.composites.Sequence(name=f"{intro_flag}_Intro",
-                                                 memory=True,  # False
-                                                 children=[
-                                                     ReadScript(
-                                                         data["introduction"], "IntroScript"),
-                                                     SetDoneBB("MarkIntroDone", intro_flag),
-                                                 ])
-                ]
+                    py_trees.composites.Sequence(
+                        name=f"{intro_flag}_Intro",
+                        memory=True,  # False
+                        children=[
+                            ReadScript(data["introduction"], "IntroScript"),
+                            SetDoneBB("MarkIntroDone", intro_flag),
+                        ],
+                    ),
+                ],
             )
         )
 
@@ -193,22 +207,26 @@ class ExerciseProtocolTree(BaseTreeRunner):
                     memory=True,  # False
                     children=[
                         CheckDoneBB("SeriesIntroDone?", s_intro_flag),
-                        py_trees.composites.Sequence(name="DoIntroSequence",
-                                                     memory=True,  # False
-                                                     children=[
-                                                         ReadScript(
-                                                             series["introduction"], f"{series_key}_Intro"),
-                                                         SetDoneBB(
-                                                             f"{series_key}_MarkIntroDone", s_intro_flag),
-                                                     ])
-                    ]
+                        py_trees.composites.Sequence(
+                            name="DoIntroSequence",
+                            memory=True,  # False
+                            children=[
+                                ReadScript(
+                                    series["introduction"], f"{series_key}_Intro"
+                                ),
+                                SetDoneBB(f"{series_key}_MarkIntroDone", s_intro_flag),
+                            ],
+                        ),
+                    ],
                 )
             )
 
             # EXERCISES
             for ex_key, ex in series.items():
                 if ex_key.startswith("ex"):
-                    series_seq.add_child(self.build_exercise_block(series_key, ex_key, series, ex))
+                    series_seq.add_child(
+                        self.build_exercise_block(series_key, ex_key, series, ex)
+                    )
 
             protocol.add_child(series_seq)
 
@@ -221,7 +239,9 @@ class ExerciseProtocolTree(BaseTreeRunner):
             ClearExerciseProgressBB(
                 key_prefix=key_prefix,
                 robot_interface=self.robot_interface,
-                start_key=self.start_key))
+                start_key=self.start_key,
+            )
+        )
 
         guarded_protocol = py_trees.composites.Parallel(
             name="StopExerciseGuard",
@@ -230,8 +250,8 @@ class ExerciseProtocolTree(BaseTreeRunner):
             ),
             children=[
                 CheckRobotStateKey_("StopCheck", self.robot_interface, self.stop_key),
-                protocol
-            ]
+                protocol,
+            ],
         )
 
         # STOP HANDLER — runs when guard blocks protocol
@@ -244,15 +264,16 @@ class ExerciseProtocolTree(BaseTreeRunner):
                     name="StopHandlerClearExerciseProgressBB",
                     key_prefix=key_prefix,
                     robot_interface=self.robot_interface,
-                    start_key=self.start_key),
-            ]
+                    start_key=self.start_key,
+                ),
+            ],
         )
 
         # Selector: If guard passes: run protocol ELSE If guard blocks: run stop handler
         exercise_block = py_trees.composites.Selector(
             name="ExerciseOrStop",
             memory=True,  # False,
-            children=[guarded_protocol, stop_handler]
+            children=[guarded_protocol, stop_handler],
         )
 
         # return exercise_block
@@ -261,7 +282,8 @@ class ExerciseProtocolTree(BaseTreeRunner):
             node_name=f"{protocol_name}_move_to_person",
             robot_interface=self.robot_interface,
             debug=self.debug,
-            executor=self.executor)
+            executor=self.executor,
+        )
         move_to_person = move_to_person_tree.create_tree()
 
         # charge_robot_tree = ChargeRobotTree(node_name=f"{protocol_name}_charge_robot", robot_interface=self.robot_interface)
@@ -274,19 +296,17 @@ class ExerciseProtocolTree(BaseTreeRunner):
                 protocol_name=protocol_name,
                 data_key="get_confirmation",
                 debug=self.debug,
-                executor=self.executor
+                executor=self.executor,
             )
             ask_question = ask_question_tree.create_tree()
             inverted_ask_question = py_trees.decorators.Inverter(
-                name="InvertConfirmation",
-                child=ask_question
+                name="InvertConfirmation", child=ask_question
             )  # if success then should go to fallbakc and play the protocol
 
         # Full pipeline
         if self.get_confirmation:
             selector = py_trees.composites.Selector(
-                name=f"Run Question If Needed",
-                memory=True
+                name=f"Run Question If Needed", memory=True
             )
 
             # ask first
@@ -310,7 +330,7 @@ class ExerciseProtocolTree(BaseTreeRunner):
                     move_to_person,
                     exercise_block,
                     # charge_robot ## not really needed
-                ]
+                ],
             )
 
             return root
@@ -321,7 +341,7 @@ class ExerciseProtocolTree(BaseTreeRunner):
         prefix = f"{self.key_word}_{series_key}_{ex_key}"
         seq = py_trees.composites.Sequence(
             name=f"{series_key}_{ex_key}",
-            memory=True  # False
+            memory=True,  # False
         )
 
         # Exercise description (resumable)
@@ -332,14 +352,15 @@ class ExerciseProtocolTree(BaseTreeRunner):
                 memory=True,  # False
                 children=[
                     CheckDoneBB("DescDone?", desc_flag),
-                    py_trees.composites.Sequence(name="Do_{ex_key}_DescSelector",
-                                                 memory=True,  # False
-                                                 children=[
-                                                     ReadScript(
-                                                         ex["text"], f"{ex_key}_Description"),
-                                                     SetDoneBB(f"{ex_key}_MarkDescDone", desc_flag)
-                                                 ])
-                ]
+                    py_trees.composites.Sequence(
+                        name="Do_{ex_key}_DescSelector",
+                        memory=True,  # False
+                        children=[
+                            ReadScript(ex["text"], f"{ex_key}_Description"),
+                            SetDoneBB(f"{ex_key}_MarkDescDone", desc_flag),
+                        ],
+                    ),
+                ],
             )
         )
 
@@ -351,34 +372,36 @@ class ExerciseProtocolTree(BaseTreeRunner):
         video_path = f"{self.video_dir_path}/{series['type']}/{ex['video_name']}"
 
         for i in range(rep):
-            rep_flag = f"{prefix}_rep_{i+1}_done"
+            rep_flag = f"{prefix}_rep_{i + 1}_done"
 
             video_goal = PlayVideoRequest.Goal()
             video_goal.file_name = video_path
 
             play_video_reminder = py_trees_ros.actions.ActionClient(
-                name=f"{ex_key}_Video_{i+1}",
+                name=f"{ex_key}_Video_{i + 1}",
                 action_type=PlayVideoRequest,
                 action_name="play_video",
                 action_goal=video_goal,
-                wait_for_server_timeout_sec=120.0
+                wait_for_server_timeout_sec=120.0,
             )
 
             rep_selector = py_trees.composites.Selector(
-                name=f"{ex_key}_Rep_{i+1}",
+                name=f"{ex_key}_Rep_{i + 1}",
                 memory=True,  # False
                 children=[
-                    CheckDoneBB(f"Rep{i+1}Done?", rep_flag),
-                    py_trees.composites.Sequence(name="Do_Rep_{ex_key}_Rep_{i+1}",
-                                                 memory=True,  # False
-                                                 children=[
-                                                     play_video_reminder,
-                                                     SetDoneBB(
-                                                         f"{ex_key}_MarkRep{i+1}Done", rep_flag),
-                                                     Wait(
-                                                         wait_time, f"{ex_key}_Wait_{i+1}") if i < rep - 1 else py_trees.behaviours.Success()
-                                                 ])
-                ]
+                    CheckDoneBB(f"Rep{i + 1}Done?", rep_flag),
+                    py_trees.composites.Sequence(
+                        name="Do_Rep_{ex_key}_Rep_{i+1}",
+                        memory=True,  # False
+                        children=[
+                            play_video_reminder,
+                            SetDoneBB(f"{ex_key}_MarkRep{i + 1}Done", rep_flag),
+                            Wait(wait_time, f"{ex_key}_Wait_{i + 1}")
+                            if i < rep - 1
+                            else py_trees.behaviours.Success(),
+                        ],
+                    ),
+                ],
             )
 
             seq.add_child(rep_selector)
@@ -395,10 +418,18 @@ def main(args=None):
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
-    parser.add_argument('--run_continuous', type=str2bool, default=False,
-                        help="Run tree continuously (default: False)")
-    parser.add_argument("--protocol_name", type=str, default="exercise",
-                        help="name of the protocol that needs to run (ex: medicine_am)")
+    parser.add_argument(
+        "--run_continuous",
+        type=str2bool,
+        default=False,
+        help="Run tree continuously (default: False)",
+    )
+    parser.add_argument(
+        "--protocol_name",
+        type=str,
+        default="exercise",
+        help="name of the protocol that needs to run (ex: medicine_am)",
+    )
 
     args, unknown = parser.parse_known_args()
     protocol_name = args.protocol_name
@@ -408,8 +439,7 @@ def main(args=None):
     blackboard = py_trees.blackboard.Blackboard()
     load_protocols_to_bb(yaml_file_path, debug=False)
     tree_runner = ExerciseProtocolTree(
-        node_name="exercise_protocol_tree",
-        protocol_name=protocol_name
+        node_name="exercise_protocol_tree", protocol_name=protocol_name
     )
     tree_runner.setup()
 

@@ -1,9 +1,10 @@
 import os
-import yaml
-import time
 import threading
-import py_trees
+import time
 from datetime import datetime, timedelta
+
+import py_trees
+import yaml
 
 # TODO: unify naming class name protocol name
 #  TRIGGER MONITOR
@@ -16,8 +17,14 @@ class TriggerMonitor:
     It supports periodic resets, monitoring waiting of protocols, and checking success conditions for waiting protocols.
     """
 
-    def __init__(self, robot_interface, wake_event: threading.Event,
-                 yaml_path=None, debug: bool = False, test_time: str = ""):
+    def __init__(
+        self,
+        robot_interface,
+        wake_event: threading.Event,
+        yaml_path=None,
+        debug: bool = False,
+        test_time: str = "",
+    ):
         """
         Initialize the TriggerMonitor.
         Args:
@@ -70,14 +77,17 @@ class TriggerMonitor:
 
             # 2. Create a datetime object for the target test_time (e.g. Today at 10:30)
             t_struct = datetime.strptime(test_time, "%H:%M").time()
-            target_time = now.replace(hour=t_struct.hour, minute=t_struct.minute, second=0)
+            target_time = now.replace(
+                hour=t_struct.hour, minute=t_struct.minute, second=0
+            )
 
             # 3. Calculate the difference (Offset = Target - Real)
             self.time_offset = target_time - now
 
             if self.debug:
                 print(
-                    f"[TriggerMonitor] Time Simulation Active. Starts at {test_time} (Offset: {self.time_offset})")
+                    f"[TriggerMonitor] Time Simulation Active. Starts at {test_time} (Offset: {self.time_offset})"
+                )
 
     # --- TIME HELPER ---
     def get_current_time_string(self):
@@ -143,22 +153,13 @@ class TriggerMonitor:
         """
         # single condition (legacy)
         if "state" in success_on:
-            return {
-                "mode": "all",
-                "conditions": [success_on]
-            }
+            return {"mode": "all", "conditions": [success_on]}
 
         if "all" in success_on:
-            return {
-                "mode": "all",
-                "conditions": success_on["all"]
-            }
+            return {"mode": "all", "conditions": success_on["all"]}
 
         if "any" in success_on:
-            return {
-                "mode": "any",
-                "conditions": success_on["any"]
-            }
+            return {"mode": "any", "conditions": success_on["any"]}
 
         raise ValueError(f"Invalid success_on format: {success_on}")
 
@@ -176,7 +177,9 @@ class TriggerMonitor:
 
         wait_requests = bb.get("wait_requests")
         if self.debug and wait_requests:
-            print(f"[Yield wait] from collect_wait_requests got wait_requests: {wait_requests} ")
+            print(
+                f"[Yield wait] from collect_wait_requests got wait_requests: {wait_requests} "
+            )
 
         for full_name, req in list(wait_requests.items()):
             seconds = req["seconds"]
@@ -192,11 +195,15 @@ class TriggerMonitor:
             # only done once
             try:
                 protocol, sub = full_name.split(".")
-                high_level = self.protocols_yaml["protocols"][protocol][sub]["high_level"]
+                high_level = self.protocols_yaml["protocols"][protocol][sub][
+                    "high_level"
+                ]
                 success_on = high_level.get("success_on", None)
 
                 if success_on:
-                    self.monitor_state_success[full_name] = self.normalize_success_on(success_on)
+                    self.monitor_state_success[full_name] = self.normalize_success_on(
+                        success_on
+                    )
                     print(f"[success_on] Monitoring {full_name}: {success_on}")
             except Exception as e:
                 print(f"[success_on] Failed to register {full_name}: {e}")
@@ -313,14 +320,15 @@ class TriggerMonitor:
             if val is None:
                 if self.debug:
                     print(
-                        f"[TriggerMonitor] Topic '{key}' not publishing or None → treating as False")
+                        f"[TriggerMonitor] Topic '{key}' not publishing or None → treating as False"
+                    )
                 current_events[key] = False
             else:
                 current_events[key] = val
         return current_events
 
     def check_day_requirement(self, day_req, current_day=None):
-        """  Check if the current day satisfies the day requirement."""
+        """Check if the current day satisfies the day requirement."""
         if not day_req or len(day_req) == 0:
             return True
 
@@ -339,8 +347,8 @@ class TriggerMonitor:
 
         current_time_str = self.get_current_time_string()
         fmt = "%H:%M"
-        t_from = datetime.strptime(time_req['from'], fmt)
-        t_to = datetime.strptime(time_req['to'], fmt)
+        t_from = datetime.strptime(time_req["from"], fmt)
+        t_to = datetime.strptime(time_req["to"], fmt)
         t_now = datetime.strptime(current_time_str, fmt)
 
         return t_from <= t_now <= t_to
@@ -356,7 +364,7 @@ class TriggerMonitor:
         if not event_reqs:
             return True
         for ev in event_reqs:
-            topic, val = ev['state'], ev['value']
+            topic, val = ev["state"], ev["value"]
             if topic not in current_events or current_events[topic] != val:
                 return False
         return True
@@ -368,9 +376,7 @@ class TriggerMonitor:
             bool: True if the set of satisfied protocols changed, False otherwise.
         """
         current_events = self._collect_current_events()
-        new_satisfied = self.satisfied_protocols(
-            current_events
-        )
+        new_satisfied = self.satisfied_protocols(current_events)
 
         with self.lock:
             changed = new_satisfied != self.current_satisfied_protocols
@@ -378,7 +384,9 @@ class TriggerMonitor:
         print("##############################################################")
         print("$$$$$$$$$$$$$$$$$$$$$ Satisfied new_satisfied event : ", new_satisfied)
         print("##############################################################")
-        if changed or new_satisfied:  # trigger if not empty and if change happened might be redundant
+        if (
+            changed or new_satisfied
+        ):  # trigger if not empty and if change happened might be redundant
             # if self.debug and changed:
             print("Satisfied change event : ", new_satisfied)
             self.satisfied_changed_event.set()
@@ -395,7 +403,7 @@ class TriggerMonitor:
                 list of (protocol_name, priority) tuples that are satisfied.
         """
         satisfied = []
-        for protocol_name, protocol_data in self.protocols_yaml['protocols'].items():
+        for protocol_name, protocol_data in self.protocols_yaml["protocols"].items():
             # print("protocol_name: ", protocol_name)
             for sub_name, sub_data in protocol_data.items():
                 # print("sub_name: ", sub_name)
@@ -413,26 +421,29 @@ class TriggerMonitor:
                     continue
 
                 # Completed Check
-                if full_name in self.completed_protocols:  # skip completed ones ## when resumed it deletes the protocol from completed
+                if (
+                    full_name in self.completed_protocols
+                ):  # skip completed ones ## when resumed it deletes the protocol from completed
                     continue
 
                 if not resumed:
-                    reqs = high_level_subdata.get('requirements', {})
-                    event_reqs = reqs.get('event', [])
-                    time_req = reqs.get('time', {})
-                    day_req = reqs.get('day', [])
+                    reqs = high_level_subdata.get("requirements", {})
+                    event_reqs = reqs.get("event", [])
+                    time_req = reqs.get("time", {})
+                    day_req = reqs.get("day", [])
                     # print("$$$$$ time_req: ", time_req)
 
-                    if self.check_day_requirement(day_req, current_day) and \
-                            self.check_event_requirement(event_reqs, current_events) and \
-                            self.check_time_requirement(time_req):
-
-                        priority = high_level_subdata.get('priority', 1)
+                    if (
+                        self.check_day_requirement(day_req, current_day)
+                        and self.check_event_requirement(event_reqs, current_events)
+                        and self.check_time_requirement(time_req)
+                    ):
+                        priority = high_level_subdata.get("priority", 1)
                         satisfied.append((full_name, priority))
                 else:
                     # resume  dont check for req thye were already satisfied
                     # modify to track keys for req resuming.
-                    priority = high_level_subdata.get('priority', 1)
+                    priority = high_level_subdata.get("priority", 1)
                     satisfied.append((full_name, priority))
 
         satisfied.sort(key=lambda x: x[1])
@@ -510,23 +521,27 @@ class TriggerMonitor:
 
             # Retrieve YAML Config
             try:
-                sub_data = self.protocols_yaml['protocols'][main][sub]
+                sub_data = self.protocols_yaml["protocols"][main][sub]
                 high_level = sub_data["high_level"]
-                reset_pattern = high_level.get('reset_pattern', None)  # None if missing
+                reset_pattern = high_level.get("reset_pattern", None)  # None if missing
             except KeyError:
                 print(f"[ERROR] Protocol not found in YAML: {protocol_name}")
                 return
 
             # Determine Type
             # If no pattern exists, we treat it as "default" (run once)
-            pattern_type = reset_pattern.get("type", "default") if reset_pattern else "default"
+            pattern_type = (
+                reset_pattern.get("type", "default") if reset_pattern else "default"
+            )
 
             # --- CASE 1: INSTANT ---
             if pattern_type == "instant":
                 # Logic: Don't block triggers (completed_protocols).
                 # Reset Blackboard flags so the behavior tree can tick again immediately.
                 if self.debug:
-                    print(f"[TriggerMonitor] Type INSTANT: Resetting flags for {sub} immediately.")
+                    print(
+                        f"[TriggerMonitor] Type INSTANT: Resetting flags for {sub} immediately."
+                    )
                 self.reset_specific_protocol_dones(sub)
                 return
 
@@ -538,20 +553,25 @@ class TriggerMonitor:
                 reset_seconds = self.parse_reset_pattern(reset_pattern)
                 if reset_seconds:
                     timestamp = datetime.now()
-                    self.protocols_to_reset.add((protocol_name, timestamp, reset_seconds))
+                    self.protocols_to_reset.add(
+                        (protocol_name, timestamp, reset_seconds)
+                    )
                     if self.debug:
                         print(
-                            f"[TriggerMonitor] Type PERIODIC: Scheduled reset for {protocol_name} in {reset_seconds}s")
+                            f"[TriggerMonitor] Type PERIODIC: Scheduled reset for {protocol_name} in {reset_seconds}s"
+                        )
                 else:
                     if self.debug:
                         print(
-                            f"[ERROR] Periodic protocol {protocol_name} has invalid time settings.")
+                            f"[ERROR] Periodic protocol {protocol_name} has invalid time settings."
+                        )
 
             # --- CASE 3: DEFAULT (No Pattern) ---
             elif pattern_type == "default":
                 if self.debug:
                     print(
-                        f"[TriggerMonitor] Type DEFAULT: {protocol_name} marked complete (no auto-reset).")
+                        f"[TriggerMonitor] Type DEFAULT: {protocol_name} marked complete (no auto-reset)."
+                    )
 
             # Update satisfied list because one protocol just became "Complete" (blocked)
             self.recompute_satisfied()
@@ -561,7 +581,7 @@ class TriggerMonitor:
         now = datetime.now()
         to_remove = []
 
-        for (name, finished_time, reset_seconds) in list(self.protocols_to_reset):
+        for name, finished_time, reset_seconds in list(self.protocols_to_reset):
             if (now - finished_time).total_seconds() >= reset_seconds:
                 print(f"[TriggerMonitor] Auto-resetting protocol: {name}")
 
@@ -572,7 +592,9 @@ class TriggerMonitor:
                     print(f"self.completed_protocols {name}")
                     self.completed_protocols.remove(name)
                 else:
-                    print(f"[TriggerMonitor] Warning protocol {name} not in completed_protocols")
+                    print(
+                        f"[TriggerMonitor] Warning protocol {name} not in completed_protocols"
+                    )
 
                 to_remove.append((name, finished_time, reset_seconds))
 

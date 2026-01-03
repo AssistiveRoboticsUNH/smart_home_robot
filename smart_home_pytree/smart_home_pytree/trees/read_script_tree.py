@@ -1,25 +1,32 @@
 #!/usr/bin/env python3
 
+import argparse
 import os
+
 import py_trees
 import rclpy
-from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
-import argparse
+
 from smart_home_pytree.behaviors.action_behaviors import read_script
-from smart_home_pytree.trees.move_to_person_location import MoveToPersonLocationTree
 from smart_home_pytree.behaviors.set_protocol_bb import SetProtocolBB
-from smart_home_pytree.utils import str2bool
 from smart_home_pytree.registry import load_protocols_to_bb
+from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
+from smart_home_pytree.trees.move_to_person_location import MoveToPersonLocationTree
+from smart_home_pytree.utils import str2bool
 
 
 class ReadScriptTree(BaseTreeRunner):
-    """This script is responsible for reading a script to the person at their location. """
+    """This script is responsible for reading a script to the person at their location."""
 
-    def __init__(self, node_name: str, robot_interface=None,
-                 executor=None, debug=False,
-                 protocol_name: str = None,  # for tests
-                 data_key: str = None,
-                 **kwargs):
+    def __init__(
+        self,
+        node_name: str,
+        robot_interface=None,
+        executor=None,
+        debug=False,
+        protocol_name: str = None,  # for tests
+        data_key: str = None,
+        **kwargs,
+    ):
         """
         Initialize the ReadScriptTree.
 
@@ -32,15 +39,16 @@ class ReadScriptTree(BaseTreeRunner):
             robot_interface=robot_interface,
             debug=debug,
             executor=executor,
-            **kwargs
+            **kwargs,
         )
 
         # Store optional configuration ONLY USED FOR TESTING
         self.protocol_name = protocol_name
         self.data_key = data_key
 
-    def create_tree(self, protocol_name: str = None,
-                    data_key: str = None) -> py_trees.behaviour.Behaviour:
+    def create_tree(
+        self, protocol_name: str = None, data_key: str = None
+    ) -> py_trees.behaviour.Behaviour:
         """
         Creates the ReadScriptTree tree:
         Sequence:
@@ -68,7 +76,8 @@ class ReadScriptTree(BaseTreeRunner):
             node_name=f"{protocol_name}_move_to_person",
             robot_interface=self.robot_interface,
             debug=self.debug,
-            executor=self.executor)
+            executor=self.executor,
+        )
         move_to_person = move_to_person_tree.create_tree()
 
         # charge_robot_tree = ChargeRobotTree(node_name=f"{protocol_name}_charge_robot", robot_interface=self.robot_interface)
@@ -76,7 +85,8 @@ class ReadScriptTree(BaseTreeRunner):
 
         # Custom behaviors
         read_script_reminder = read_script.ReadScript(
-            name=f"{protocol_name}_read_script", text=text)
+            name=f"{protocol_name}_read_script", text=text
+        )
 
         # Set blackboard to indicate reading script is done
         # variable_name: name of the variable to set, may be nested, e.g. battery.percentage
@@ -86,18 +96,22 @@ class ReadScriptTree(BaseTreeRunner):
         set_read_script_success = SetProtocolBB(
             name="read_script_set_bb",
             key=f"{protocol_name}_done.{data_key}_done",
-            value=True)
+            value=True,
+        )
 
         # Root sequence
         root_sequence = py_trees.composites.Sequence(
-            name=f"{protocol_name}_read_script", memory=True)
+            name=f"{protocol_name}_read_script", memory=True
+        )
 
-        root_sequence.add_children([
-            move_to_person,
-            read_script_reminder,
-            set_read_script_success,
-            # charge_robot,
-        ])
+        root_sequence.add_children(
+            [
+                move_to_person,
+                read_script_reminder,
+                set_read_script_success,
+                # charge_robot,
+            ]
+        )
 
         return root_sequence
 
@@ -112,13 +126,27 @@ def main(args=None):
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
-    parser.add_argument('--run_continuous', type=str2bool, default=False,
-                        help="Run tree continuously (default: False)")
-    parser.add_argument("--num_attempts", type=int, default=3, help="retry attempts (default: 3)")
-    parser.add_argument("--protocol_name", type=str, default="medicine_am",
-                        help="name of the protocol that needs to run (ex: medicine_am)")
-    parser.add_argument("--data_key", type=str, default="reminder_2",
-                        help="name of the key in the protocol that needs to run (ex: medicine_am)")
+    parser.add_argument(
+        "--run_continuous",
+        type=str2bool,
+        default=False,
+        help="Run tree continuously (default: False)",
+    )
+    parser.add_argument(
+        "--num_attempts", type=int, default=3, help="retry attempts (default: 3)"
+    )
+    parser.add_argument(
+        "--protocol_name",
+        type=str,
+        default="medicine_am",
+        help="name of the protocol that needs to run (ex: medicine_am)",
+    )
+    parser.add_argument(
+        "--data_key",
+        type=str,
+        default="reminder_2",
+        help="name of the key in the protocol that needs to run (ex: medicine_am)",
+    )
 
     args, _ = parser.parse_known_args()
     protocol_name = args.protocol_name
@@ -130,9 +158,7 @@ def main(args=None):
     load_protocols_to_bb(yaml_file_path)
 
     tree_runner = ReadScriptTree(
-        node_name="read_script_tree",
-        protocol_name=protocol_name,
-        data_key=data_key
+        node_name="read_script_tree", protocol_name=protocol_name, data_key=data_key
     )
     tree_runner.setup()
 

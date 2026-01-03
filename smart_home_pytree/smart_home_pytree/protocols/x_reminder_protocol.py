@@ -1,13 +1,15 @@
-import os
 import argparse
-from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
-from smart_home_pytree.registry import load_protocols_to_bb
-from smart_home_pytree.behaviors.check_protocol_bb import CheckProtocolBB
+import os
+
+import py_trees
+
 from smart_home_pytree.behaviors.action_behaviors.yield_wait import YieldWait
+from smart_home_pytree.behaviors.check_protocol_bb import CheckProtocolBB
+from smart_home_pytree.registry import load_protocols_to_bb
+from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
 from smart_home_pytree.trees.tree_utils import make_reminder_tree
 from smart_home_pytree.trees.wait_tree import WaitTree
 from smart_home_pytree.utils import parse_duration, str2bool
-import py_trees
 
 
 class XReminderProtocolTree(BaseTreeRunner):
@@ -38,9 +40,16 @@ class XReminderProtocolTree(BaseTreeRunner):
             on the Blackboard is invalid (missing ``number_of_protocols``).
         KeyError: If specific reminder keys (message or type) are missing from the protocol definition.
     """
-    
-    def __init__(self, node_name: str, robot_interface=None,
-                 executor=None, debug=False, test=False, **kwargs):
+
+    def __init__(
+        self,
+        node_name: str,
+        robot_interface=None,
+        executor=None,
+        debug=False,
+        test=False,
+        **kwargs,
+    ):
         """
         Initialize the XReminderProtocolTree.
 
@@ -53,13 +62,12 @@ class XReminderProtocolTree(BaseTreeRunner):
             robot_interface=robot_interface,
             debug=debug,
             executor=executor,
-            **kwargs
+            **kwargs,
         )
 
         self.test = test
 
     def create_tree(self) -> py_trees.behaviour.Behaviour:
-
         protocol_name = self.kwargs.get("protocol_name", "")
         if protocol_name == "":
             raise ValueError("Missing protocol_name in kwargs")
@@ -72,13 +80,11 @@ class XReminderProtocolTree(BaseTreeRunner):
             raise ValueError(f"{protocol_name} has no number_of_protocols set")
 
         root = py_trees.composites.Sequence(
-            name=f"{protocol_name}_XReminderSequence",
-            memory=True
+            name=f"{protocol_name}_XReminderSequence", memory=True
         )
 
         # Iterate through reminders in order
         for i in range(1, n + 1):
-
             reminder_key = f"reminder_{i}"
             type_key = f"type_{i}"
             wait_key = f"wait_{i}"
@@ -97,14 +103,13 @@ class XReminderProtocolTree(BaseTreeRunner):
             # Reminder selector (skip if already done)
             # ------------------------------------------
             selector = py_trees.composites.Selector(
-                name=f"Run {reminder_key} If Needed",
-                memory=True
+                name=f"Run {reminder_key} If Needed", memory=True
             )
 
             condition = CheckProtocolBB(
                 name=f"Should Run {reminder_key}?",
                 key=f"{protocol_name}_done.{reminder_key}_done",
-                expected_value=True
+                expected_value=True,
             )
 
             reminder_tree = make_reminder_tree(
@@ -114,7 +119,7 @@ class XReminderProtocolTree(BaseTreeRunner):
                 protocol_name=protocol_name,
                 data_key=reminder_key,
                 debug=self.debug,
-                executor=self.executor
+                executor=self.executor,
             )
 
             selector.add_children([condition, reminder_tree])
@@ -129,14 +134,13 @@ class XReminderProtocolTree(BaseTreeRunner):
                 wait_flag = f"{wait_key}_done"
 
                 wait_selector = py_trees.composites.Selector(
-                    name=f"Wait After {reminder_key}",
-                    memory=True
+                    name=f"Wait After {reminder_key}", memory=True
                 )
 
                 condition_wait = CheckProtocolBB(
                     name=f"Should Run Wait After {reminder_key}?",
                     key=f"{protocol_name}_done.{wait_flag}",
-                    expected_value=True
+                    expected_value=True,
                 )
 
                 if self.test:
@@ -144,7 +148,7 @@ class XReminderProtocolTree(BaseTreeRunner):
                         node_name=f"{self.node_name}_{wait_key}",
                         robot_interface=self.robot_interface,
                         debug=self.debug,
-                        executor=self.executor
+                        executor=self.executor,
                     )
 
                     wait_tree = wait_tree_init.create_tree(
@@ -156,7 +160,7 @@ class XReminderProtocolTree(BaseTreeRunner):
                         name=f"{self.node_name}_{wait_key}",
                         class_name="XReminderProtocol",  # class name without tree
                         protocol_name=protocol_name,
-                        wait_time_key=wait_key
+                        wait_time_key=wait_key,
                     )
 
                 wait_selector.add_children([condition_wait, wait_tree])
@@ -176,11 +180,21 @@ def main(args=None):
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
-    parser.add_argument('--run_continuous', type=str2bool, default=False,
-                        help="Run tree continuously (default: False)")
-    parser.add_argument("--num_attempts", type=int, default=3, help="retry attempts (default: 3)")
-    parser.add_argument("--protocol_name", type=str, default="medicine_am",
-                        help="name of the protocol that needs to run (ex: medicine_am)")
+    parser.add_argument(
+        "--run_continuous",
+        type=str2bool,
+        default=False,
+        help="Run tree continuously (default: False)",
+    )
+    parser.add_argument(
+        "--num_attempts", type=int, default=3, help="retry attempts (default: 3)"
+    )
+    parser.add_argument(
+        "--protocol_name",
+        type=str,
+        default="medicine_am",
+        help="name of the protocol that needs to run (ex: medicine_am)",
+    )
 
     args, _ = parser.parse_known_args()
     protocol_name = args.protocol_name

@@ -6,22 +6,22 @@ This script is responsible for creating the robot tree to move the robot to a lo
 The tree receives an string location representing the target pose for the robot. Before initiating movement, it checks whether the robot is currently charging and, if so, commands it to undock first.
 """
 
-
-import rclpy
 import argparse
-from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
+
+import py_trees
+import rclpy
+
+from smart_home_pytree.behaviors.action_behaviors import wait
 from smart_home_pytree.behaviors.move_to_behavior import MoveToLandmark
 from smart_home_pytree.behaviors.set_protocol_bb import SetProtocolBB
-from smart_home_pytree.behaviors.action_behaviors import wait
 from smart_home_pytree.protocols.charge_robot import ChargeRobotTree
-import py_trees
-from smart_home_pytree.utils import str2bool, parse_duration
+from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
+from smart_home_pytree.utils import parse_duration, str2bool
 
 
 def required_actions_():
-    return {
-        "smart_home_pytree": ["docking"]
-    }
+    return {"smart_home_pytree": ["docking"]}
+
 
 # reason for this tree is that a robot should never wait unless it is charging
 
@@ -29,8 +29,16 @@ def required_actions_():
 class WaitTree(BaseTreeRunner):
     """Class that has the robot go to charge and then wait. It is different than YieldWait and wait Behaviors"""
 
-    def __init__(self, node_name: str, robot_interface=None,
-                 protocol_name: str = None, wait_time_key: str = None, executor=None, debug=False, **kwargs):
+    def __init__(
+        self,
+        node_name: str,
+        robot_interface=None,
+        protocol_name: str = None,
+        wait_time_key: str = None,
+        executor=None,
+        debug=False,
+        **kwargs,
+    ):
         """
         Initialize the WaitTree.
 
@@ -43,14 +51,15 @@ class WaitTree(BaseTreeRunner):
             robot_interface=robot_interface,
             debug=debug,
             executor=executor,
-            **kwargs
+            **kwargs,
         )
 
         self.protocol_name = protocol_name
         self.wait_time_key = wait_time_key
 
-    def create_tree(self, protocol_name: str = None,
-                    wait_time_key: str = None) -> py_trees.behaviour.Behaviour:
+    def create_tree(
+        self, protocol_name: str = None, wait_time_key: str = None
+    ) -> py_trees.behaviour.Behaviour:
         """
         Create a tree to handle moving the robot to charge then waiting
 
@@ -73,7 +82,7 @@ class WaitTree(BaseTreeRunner):
             node_name=f"{protocol_name}_charge_robot",
             robot_interface=self.robot_interface,
             debug=self.debug,
-            executor=self.executor
+            executor=self.executor,
         )
         charge_robot = charge_robot_tree.create_tree()
 
@@ -81,7 +90,8 @@ class WaitTree(BaseTreeRunner):
         set_wait_success = SetProtocolBB(
             name="wait_set_bb",
             key=f"{protocol_name}_done.{wait_time_key}_done",
-            value=True)
+            value=True,
+        )
 
         root.add_children([charge_robot, wait_behavior, set_wait_success])
 
@@ -93,9 +103,7 @@ class WaitTree(BaseTreeRunner):
         actions = required_actions_()
 
         # Add extra actions not to be run by launch file
-        extra_actions = {
-            "nav2": ["NavigateToPose"]
-        }
+        extra_actions = {"nav2": ["NavigateToPose"]}
 
         # Merge both dictionaries
         for pkg, acts in extra_actions.items():
@@ -107,9 +115,7 @@ class WaitTree(BaseTreeRunner):
         return actions
 
     def required_topics(self):
-        return [
-            "/charging"
-        ]
+        return ["/charging"]
 
 
 def main(args=None):
@@ -118,15 +124,24 @@ def main(args=None):
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
-    parser.add_argument('--run_continuous', type=str2bool, default=False,
-                        help="Run tree continuously (default: False)")
-    parser.add_argument("--protocol_name", type=str, default="medicine_am",
-                        help="name of the protocol that needs to run (ex: medicine_am)")
+    parser.add_argument(
+        "--run_continuous",
+        type=str2bool,
+        default=False,
+        help="Run tree continuously (default: False)",
+    )
+    parser.add_argument(
+        "--protocol_name",
+        type=str,
+        default="medicine_am",
+        help="name of the protocol that needs to run (ex: medicine_am)",
+    )
     parser.add_argument(
         "--wait_time_key",
         type=str,
         default="wait_time_between_reminders",
-        help="name of the key in the protocol that needs to run (ex: medicine_am)")
+        help="name of the key in the protocol that needs to run (ex: medicine_am)",
+    )
 
     args, unknown = parser.parse_known_args()
 

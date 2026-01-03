@@ -1,17 +1,19 @@
-import os
-import time
-import threading
-import rclpy
 import argparse
-import re
 import importlib
+import os
+import re
+import threading
+import time
 from datetime import datetime
-from smart_home_pytree.robot_interface import RobotInterface
-from smart_home_pytree.registry import load_protocols_to_bb
-from smart_home_pytree.trigger_monitor import TriggerMonitor
-from smart_home_pytree.human_interface import HumanInterface
+
 import py_trees
+import rclpy
 from rclpy.executors import MultiThreadedExecutor
+
+from smart_home_pytree.human_interface import HumanInterface
+from smart_home_pytree.registry import load_protocols_to_bb
+from smart_home_pytree.robot_interface import RobotInterface
+from smart_home_pytree.trigger_monitor import TriggerMonitor
 
 # PROTOCOL ORCHESTRATOR
 
@@ -43,10 +45,16 @@ class ProtocolOrchestrator:
             try:
                 rclpy.init(args=None)
                 self.rclpy_initialized_here = True
-                print(" self.rclpy_initialized_here should be true: ", self.rclpy_initialized_here)
+                print(
+                    " self.rclpy_initialized_here should be true: ",
+                    self.rclpy_initialized_here,
+                )
             except RuntimeError:
                 self.rclpy_initialized_here = False
-                print(" self.rclpy_initialized_here should be false: ", self.rclpy_initialized_here)
+                print(
+                    " self.rclpy_initialized_here should be false: ",
+                    self.rclpy_initialized_here,
+                )
 
         # Events
         self.orchestrator_wakeup = threading.Event()
@@ -65,7 +73,7 @@ class ProtocolOrchestrator:
         self.human_interface_node = HumanInterface(
             human_interrupt_event=self.human_interrupt_event,
             orchestrator_wakeup=self.orchestrator_wakeup,
-            robot_interface=self.robot_interface  # Pass None for now to prevent dependency loop
+            robot_interface=self.robot_interface,  # Pass None for now to prevent dependency loop
         )
 
         print("[orchi ]test_time:", test_time)
@@ -74,7 +82,7 @@ class ProtocolOrchestrator:
             self.robot_interface,
             wake_event=self.orchestrator_wakeup,
             test_time=test_time,
-            debug=debug
+            debug=debug,
         )
 
         # ---- SINGLE executor for EVERYTHING ----
@@ -83,16 +91,12 @@ class ProtocolOrchestrator:
         self.executor.add_node(self.human_interface_node)
 
         # ---- ONE spin thread ----
-        self.ros_spin_thread = threading.Thread(
-            target=self.executor.spin,
-            daemon=True
-        )
+        self.ros_spin_thread = threading.Thread(target=self.executor.spin, daemon=True)
         self.ros_spin_thread.start()
 
         # Non-ROS threads are fine
         self.monitor_thread = threading.Thread(
-            target=self.trigger_monitor.start_monitor,
-            daemon=True
+            target=self.trigger_monitor.start_monitor, daemon=True
         )
         self.monitor_thread.start()
 
@@ -149,7 +153,9 @@ class ProtocolOrchestrator:
 
         # 1. Immediately kill any running tasks
         if self.running_tree:
-            print(f"[Orchestrator] Preempting {self.running_tree['name']} due to Human.")
+            print(
+                f"[Orchestrator] Preempting {self.running_tree['name']} due to Human."
+            )
             self.stop_protocol()
 
         # 2. Trap the orchestrator here.
@@ -216,7 +222,8 @@ class ProtocolOrchestrator:
             if new_priority < current_priority:
                 if self.debug:
                     print(
-                        f"[Orchestrator] Preempting Priority {current_priority} for Priority {new_priority}")
+                        f"[Orchestrator] Preempting Priority {current_priority} for Priority {new_priority}"
+                    )
                 self.stop_protocol()
                 self.start_protocol(best_candidate)
 
@@ -226,8 +233,10 @@ class ProtocolOrchestrator:
             tree_runner.run_until_done()
         finally:
             print("tree_runner.final_status", tree_runner.final_status)
-            if (tree_runner.final_status == py_trees.common.Status.SUCCESS):
-                print(f"************** mark_completed {class_protocol_name} *************")
+            if tree_runner.final_status == py_trees.common.Status.SUCCESS:
+                print(
+                    f"************** mark_completed {class_protocol_name} *************"
+                )
                 self.trigger_monitor.mark_completed(class_protocol_name)
 
             with self.lock:
@@ -239,26 +248,36 @@ class ProtocolOrchestrator:
 
     def camel_to_snake(self, name: str) -> str:
         """Convert CamelCase to snake_case."""
-        s1 = re.sub(r'(.)([A-Z][a-z]+)', r'\1_\2', name)
-        s2 = re.sub(r'([a-z0-9])([A-Z])', r'\1_\2', s1)
+        s1 = re.sub(r"(.)([A-Z][a-z]+)", r"\1_\2", name)
+        s2 = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", s1)
         return s2.lower()
 
     def start_protocol(self, protocol_tuple):
         """Start the protocol in its own thread."""
         if protocol_tuple is None:
             if self.debug:
-                print("[Orchestrator] Warning: Tried to start None protocol — skipping. HARMLESS")
+                print(
+                    "[Orchestrator] Warning: Tried to start None protocol — skipping. HARMLESS"
+                )
             return
 
         class_protocol_name, priority = protocol_tuple
 
         if self.debug:
-            print(f"[Orchestrator] Starting: {class_protocol_name} (priority {priority})")
+            print(
+                f"[Orchestrator] Starting: {class_protocol_name} (priority {priority})"
+            )
 
         # import tree dynamically
-        tree_class_name = class_protocol_name.split(".")[0]  # example MoveAwayProtocolTree
-        snake_case_class_name = self.camel_to_snake(tree_class_name)  # turns it to snake case
-        protocol_name = class_protocol_name.split(".")[-1]  # unique for a protocol ex: medicine_am
+        tree_class_name = class_protocol_name.split(".")[
+            0
+        ]  # example MoveAwayProtocolTree
+        snake_case_class_name = self.camel_to_snake(
+            tree_class_name
+        )  # turns it to snake case
+        protocol_name = class_protocol_name.split(".")[
+            -1
+        ]  # unique for a protocol ex: medicine_am
 
         if self.debug:
             print("**** tree_class_name : ", tree_class_name)
@@ -267,12 +286,15 @@ class ProtocolOrchestrator:
 
         #  Dynamically import module & class
         try:
-            module = importlib.import_module(f"smart_home_pytree.protocols.{snake_case_class_name}")
+            module = importlib.import_module(
+                f"smart_home_pytree.protocols.{snake_case_class_name}"
+            )
             # gets the class from the file in module
             tree_class = getattr(module, f"{tree_class_name}Tree")
         except Exception as e:
             print(
-                f"[Orchestrator] Failed to load tree '{tree_class_name}Tree' from module smart_home_pytree.trees.{snake_case_class_name} : {e}")
+                f"[Orchestrator] Failed to load tree '{tree_class_name}Tree' from module smart_home_pytree.trees.{snake_case_class_name} : {e}"
+            )
             return
 
         # Instantiate the tree
@@ -280,7 +302,7 @@ class ProtocolOrchestrator:
             node_name=snake_case_class_name,
             protocol_name=protocol_name,
             robot_interface=self.robot_interface,
-            executor=self.executor
+            executor=self.executor,
         )
 
         tree_runner.setup()
@@ -292,7 +314,11 @@ class ProtocolOrchestrator:
         thread.start()
 
         with self.lock:
-            self.running_tree = {"name": protocol_name, "priority": priority, "tree": tree_runner}
+            self.running_tree = {
+                "name": protocol_name,
+                "priority": priority,
+                "tree": tree_runner,
+            }
             self.running_thread = thread
 
     def stop_protocol(self):

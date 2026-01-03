@@ -1,4 +1,5 @@
 import threading
+
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
@@ -13,8 +14,14 @@ class HumanInterface(Node):
     a safety timeout to ensure the system doesn't remain paused indefinitely.
     """
 
-    def __init__(self, human_interrupt_event: threading.Event, orchestrator_wakeup: threading.Event,
-                 node_name: str = 'voice_trigger', robot_interface=None, debug: bool = True):
+    def __init__(
+        self,
+        human_interrupt_event: threading.Event,
+        orchestrator_wakeup: threading.Event,
+        node_name: str = "voice_trigger",
+        robot_interface=None,
+        debug: bool = True,
+    ):
         """
         Initialize the HumanInterface node.
 
@@ -38,20 +45,12 @@ class HumanInterface(Node):
 
         # Voice Subscriptions
         self.create_subscription(
-            String,
-            '/voice/status',
-            self.voice_status_callback,
-            10
+            String, "/voice/status", self.voice_status_callback, 10
         )
 
         # in the voice_user_callback, implmeemnt the logic in how you want to set
         # it based on the input of the user
-        self.create_subscription(
-            String,
-            '/voice/user',
-            self.voice_user_callback,
-            10
-        )
+        self.create_subscription(String, "/voice/user", self.voice_user_callback, 10)
 
     def _start_safety_timer(self):
         """Starts a native Python thread timer."""
@@ -59,14 +58,16 @@ class HumanInterface(Node):
 
         # This creates a new thread that sleeps for 120s then runs the function
         self.timeout_timer = threading.Timer(
-            self.timeout_duration_sec,
-            self._safety_timeout_callback
+            self.timeout_duration_sec, self._safety_timeout_callback
         )
         self.timeout_timer.start()
         self.get_logger().info(
-            f"[HumanInterface] Native Safety Timer started ({self.timeout_duration_sec}s)")
+            f"[HumanInterface] Native Safety Timer started ({self.timeout_duration_sec}s)"
+        )
         if self.debug:
-            print(f"[HumanInterface] Native Safety Timer started ({self.timeout_duration_sec}s)")
+            print(
+                f"[HumanInterface] Native Safety Timer started ({self.timeout_duration_sec}s)"
+            )
 
     def _cancel_safety_timer(self):
         """Cancels the native timer."""
@@ -76,9 +77,13 @@ class HumanInterface(Node):
 
     def _safety_timeout_callback(self):
         """Fires from a separate native thread."""
-        self.get_logger().error("[HumanInterface] TIMEOUT! System resuming automatically.")
+        self.get_logger().error(
+            "[HumanInterface] TIMEOUT! System resuming automatically."
+        )
         if self.debug:
-            print(f"[HumanInterface] Native Safety Timer started ({self.timeout_duration_sec}s)")
+            print(
+                f"[HumanInterface] Native Safety Timer started ({self.timeout_duration_sec}s)"
+            )
 
         if self.human_interrupt_event.is_set():
             self.human_interrupt_event.clear()
@@ -100,7 +105,9 @@ class HumanInterface(Node):
         if msg.data == wakeup_triggered:
             # Only log and set if we aren't already interrupted
             if not self.human_interrupt_event.is_set():
-                self.get_logger().warn("[HumanInterface] WAKEWORD DETECTED! Pausing Orchestrator.")
+                self.get_logger().warn(
+                    "[HumanInterface] WAKEWORD DETECTED! Pausing Orchestrator."
+                )
                 self.human_interrupt_event.set()
                 self.orchestrator_wakeup.set()
 
@@ -113,7 +120,9 @@ class HumanInterface(Node):
 
         elif msg.data == done_waking:
             if self.human_interrupt_event.is_set():
-                self.get_logger().info("[HumanInterface] Voice IDLE. Resuming Orchestrator.")
+                self.get_logger().info(
+                    "[HumanInterface] Voice IDLE. Resuming Orchestrator."
+                )
                 if self.debug:
                     print("[HumanInterface] Voice IDLE. Resuming Orchestrator.")
 
@@ -145,11 +154,13 @@ class HumanInterface(Node):
             )
 
             if self.debug:
-                print("[DECISION] User said 'home', set move_away=True, position='home'")
+                print(
+                    "[DECISION] User said 'home', set move_away=True, position='home'"
+                )
 
             # to trigger the protocol, positoin decides the location
-            self.robot_interface.state.update('move_away', True)
-            self.robot_interface.state.update('position', "home")
+            self.robot_interface.state.update("move_away", True)
+            self.robot_interface.state.update("position", "home")
 
         elif "away" in text:
             self.get_logger().info(
@@ -157,10 +168,12 @@ class HumanInterface(Node):
             )
 
             if self.debug:
-                print("[DECISION] User said 'away' → set move_away=True, position='away'")
+                print(
+                    "[DECISION] User said 'away' → set move_away=True, position='away'"
+                )
 
-            self.robot_interface.state.update('move_away', True)
-            self.robot_interface.state.update('position', "away")
+            self.robot_interface.state.update("move_away", True)
+            self.robot_interface.state.update("position", "away")
 
     def shutdown(self):
         """Cleanup method to be called by the Orchestrator on exit."""
@@ -178,7 +191,9 @@ def main(args=None):
     human_event = threading.Event()
     wakeup_event = threading.Event()
 
-    node = HumanInterface(human_interrupt_event=human_event, orchestrator_wakeup=wakeup_event)
+    node = HumanInterface(
+        human_interrupt_event=human_event, orchestrator_wakeup=wakeup_event
+    )
 
     try:
         rclpy.spin(node)
@@ -189,5 +204,5 @@ def main(args=None):
         rclpy.shutdown()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

@@ -8,14 +8,15 @@ multiple robot behaviors and orchestrators.
 
 from typing import Union
 
+
 def str2bool(value: Union[str, int, bool]) -> bool:
     """
     Convert a string, integer, or boolean input into a boolean value.
 
     This function is case-insensitive and recognizes common truthy strings.
-    
+
     Args:
-        value (Union[str, int, bool]): The input value to convert. 
+        value (Union[str, int, bool]): The input value to convert.
             Accepts 'true', '1', 't', 'yes' (case-insensitive) as True.
 
     Returns:
@@ -64,7 +65,9 @@ def parse_duration(value: Union[str, int, float]) -> int:
         try:
             return int(float(clean_value))  # float cast handles "50.5" -> 50
         except ValueError:
-            logger.warning("Invalid duration string provided: '%s'. Defaulting to 0.", value)
+            logger.warning(
+                "Invalid duration string provided: '%s'. Defaulting to 0.", value
+            )
             return 0
 
     # 3. Handle unexpected types (lists, dicts, None)

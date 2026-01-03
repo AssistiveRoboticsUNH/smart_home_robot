@@ -1,20 +1,23 @@
 #!/usr/bin/env python3
 import os
-from smart_home_pytree.registry import load_locations_to_blackboard
-from smart_home_pytree.robot_interface import RobotInterface
+import threading
+import time
+from enum import Enum
+
 # from rclpy.executors import MultiThreadedExecutor
 import py_trees
-import py_trees_ros.trees
-from py_trees import display
 import py_trees.console as console
+import py_trees_ros.trees
 import rclpy
-import threading
-from enum import Enum
-import time
+from py_trees import display
+
+from smart_home_pytree.registry import load_locations_to_blackboard
+from smart_home_pytree.robot_interface import RobotInterface
 
 
 class TreeRunMode(Enum):
     """Class to handle Explicitly if Base is responsible for spinning"""
+
     STANDALONE = "standalone"
     EMBEDDED = "embedded"
 
@@ -99,7 +102,9 @@ class BaseTreeRunner:
         """
         Prints required topics and actions defined in required_actions and required_topics functions.
         """
-        console.loginfo(console.bold + f"[{self.node_name}] Required resources:" + console.reset)
+        console.loginfo(
+            console.bold + f"[{self.node_name}] Required resources:" + console.reset
+        )
 
         topics = self.required_topics()
         actions = self.required_actions()
@@ -139,8 +144,7 @@ class BaseTreeRunner:
         # Build the tree
         self.root = self.create_tree()
         self.tree = py_trees_ros.trees.BehaviourTree(
-            root=self.root,
-            unicode_tree_debug=True
+            root=self.root, unicode_tree_debug=True
         )
 
         try:
@@ -160,14 +164,11 @@ class BaseTreeRunner:
             if self.debug:
                 print("[BaseTreeRunner] Starting standalone spin thread")
 
-            self.spin_thread = threading.Thread(
-                target=self.executor.spin,
-                daemon=True
-            )
+            self.spin_thread = threading.Thread(target=self.executor.spin, daemon=True)
             self.spin_thread.start()
 
     def run_until_done(self):
-        """Run until the tree finishes with SUCCESS or FAILURE. Uses tree.root.tick_once """
+        """Run until the tree finishes with SUCCESS or FAILURE. Uses tree.root.tick_once"""
 
         # make sure to overwrite stop flag
         self._stop_tree = False
@@ -175,7 +176,6 @@ class BaseTreeRunner:
 
         def tick_tree_until_done(timer):
             try:
-
                 self.tree.root.tick_once()
 
                 if self.debug:
@@ -185,6 +185,7 @@ class BaseTreeRunner:
 
             except Exception as e:
                 import traceback
+
                 print(f" Exception during tick: {e}")
                 traceback.print_exc()
                 self.cleanup(exit_code=1)
@@ -193,9 +194,13 @@ class BaseTreeRunner:
             current_status = self.tree.root.status
             if self.tree.root.status in [
                 py_trees.common.Status.SUCCESS,
-                py_trees.common.Status.FAILURE
+                py_trees.common.Status.FAILURE,
             ]:
-                color = console.green if current_status == py_trees.common.Status.SUCCESS else console.red
+                color = (
+                    console.green
+                    if current_status == py_trees.common.Status.SUCCESS
+                    else console.red
+                )
 
                 console.loginfo(
                     color
@@ -210,8 +215,7 @@ class BaseTreeRunner:
         # ticking the behavior tree at regular intervals
         timer_period = self.timer_period
         tree_timer = self.tree.node.create_timer(
-            timer_period,
-            lambda: tick_tree_until_done(tree_timer)
+            timer_period, lambda: tick_tree_until_done(tree_timer)
         )
 
         try:
@@ -242,7 +246,7 @@ class BaseTreeRunner:
         self._stop_tree = True
 
     def run_continuous(self):
-        """Run the tree infinetly until user stops. Uses tree.tick_tock """
+        """Run the tree infinetly until user stops. Uses tree.tick_tock"""
         # to be tested
         self.tree.tick_tock(period_ms=1000.0)
         try:
@@ -250,7 +254,9 @@ class BaseTreeRunner:
                 # self.executor.spin()
                 pass  # done in the setup
             else:
-                console.loginfo("[BaseTreeRunner] Embedded mode: executor already spinning")
+                console.loginfo(
+                    "[BaseTreeRunner] Embedded mode: executor already spinning"
+                )
 
         except (KeyboardInterrupt, rclpy.executors.ExternalShutdownException):
             console.logwarn("Executor interrupted.")

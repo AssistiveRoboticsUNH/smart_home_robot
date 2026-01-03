@@ -5,21 +5,19 @@ This script is responsible for running the two reminder protocol.
 
 """
 
-import os
-import py_trees
-
-import rclpy
-
-from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
-import yaml
 import argparse
+import os
 
-from smart_home_pytree.trees.move_to_tree import MoveToLocationTree
-from smart_home_pytree.registry import load_protocols_to_bb
-from smart_home_pytree.behaviors.check_protocol_bb import CheckProtocolBB
-from smart_home_pytree.behaviors.action_behaviors import wait
+import py_trees
 import py_trees_ros
+import rclpy
+import yaml
 
+from smart_home_pytree.behaviors.action_behaviors import wait
+from smart_home_pytree.behaviors.check_protocol_bb import CheckProtocolBB
+from smart_home_pytree.registry import load_protocols_to_bb
+from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
+from smart_home_pytree.trees.move_to_tree import MoveToLocationTree
 from smart_home_pytree.trees.tree_utils import make_reminder_tree
 from smart_home_pytree.utils import str2bool
 
@@ -39,7 +37,9 @@ class UpdateRobotStateKey_(py_trees.behaviour.Behaviour):
 
 
 class MoveAwayProtocolTree(BaseTreeRunner):
-    def __init__(self, node_name: str, robot_interface=None, executor=None, debug=False, **kwargs):
+    def __init__(
+        self, node_name: str, robot_interface=None, executor=None, debug=False, **kwargs
+    ):
         """
         Initialize the MoveAwayProtocolTree.
 
@@ -52,7 +52,7 @@ class MoveAwayProtocolTree(BaseTreeRunner):
             robot_interface=robot_interface,
             debug=debug,
             executor=executor,
-            **kwargs
+            **kwargs,
         )
 
     def create_tree(self) -> py_trees.behaviour.Behaviour:
@@ -92,14 +92,16 @@ class MoveAwayProtocolTree(BaseTreeRunner):
         print(f"&&& target_location loc using key {target_location} ")
 
         # Root sequence
-        root_sequence = py_trees.composites.Sequence(name="MoveAwaySequence", memory=True)
+        root_sequence = py_trees.composites.Sequence(
+            name="MoveAwaySequence", memory=True
+        )
 
         move_to_position_tree = MoveToLocationTree(
             node_name=f"{protocol_name}_move_to_position",
             robot_interface=self.robot_interface,
             location=target_location,
             debug=self.debug,
-            executor=self.executor
+            executor=self.executor,
         )
         move_to_person = move_to_position_tree.create_tree()
         wait_time = 5
@@ -107,16 +109,11 @@ class MoveAwayProtocolTree(BaseTreeRunner):
 
         # set it to false
         update_key_beh = UpdateRobotStateKey_(
-            name="update_beh",
-            robot_interface=self.robot_interface,
-            key=update_key)
+            name="update_beh", robot_interface=self.robot_interface, key=update_key
+        )
 
         # Add behaviors in order
-        root_sequence.add_children([
-            move_to_person,
-            wait_behavior,
-            update_key_beh
-        ])
+        root_sequence.add_children([move_to_person, wait_behavior, update_key_beh])
 
         return root_sequence
 
@@ -129,11 +126,21 @@ def main(args=None):
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
-    parser.add_argument('--run_continuous', type=str2bool, default=False,
-                        help="Run tree continuously (default: False)")
-    parser.add_argument("--num_attempts", type=int, default=3, help="retry attempts (default: 3)")
-    parser.add_argument("--protocol_name", type=str, default="medicine_am",
-                        help="name of the protocol that needs to run (ex: medicine_am)")
+    parser.add_argument(
+        "--run_continuous",
+        type=str2bool,
+        default=False,
+        help="Run tree continuously (default: False)",
+    )
+    parser.add_argument(
+        "--num_attempts", type=int, default=3, help="retry attempts (default: 3)"
+    )
+    parser.add_argument(
+        "--protocol_name",
+        type=str,
+        default="medicine_am",
+        help="name of the protocol that needs to run (ex: medicine_am)",
+    )
 
     args, unknown = parser.parse_known_args()
     protocol_name = args.protocol_name
