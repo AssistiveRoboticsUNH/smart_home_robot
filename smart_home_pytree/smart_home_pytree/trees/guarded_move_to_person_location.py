@@ -6,34 +6,33 @@ This script is repsponsible for getting the person location and moving the robot
 The tree should move to the person if it reaches the location and the person has moved
 """
 
+import argparse
+import threading
 
 import py_trees
 import rclpy
-
-from smart_home_pytree.behaviors.robot_person_same_location import RobotPersonSameLocation
-from smart_home_pytree.behaviors.get_person_location import GetPersonLocation
-
-from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
-from smart_home_pytree.trees.move_to_tree import MoveToLocationTree
-
+from nav2_msgs.action import NavigateToPose
 from rclpy.executors import MultiThreadedExecutor
-import threading
 
 # Replace these with your actual action types
 from shr_msgs.action import DockingRequest
-from nav2_msgs.action import NavigateToPose
+from smart_home_pytree.behaviors.get_person_location import GetPersonLocation
+from smart_home_pytree.behaviors.robot_person_same_location import (
+    RobotPersonSameLocation,
+)
+from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
+from smart_home_pytree.trees.move_to_tree import MoveToLocationTree
 from smart_home_pytree.utils import str2bool
-import argparse
 
 
 def required_actions_():
-    return {
-        "smart_home_pytree": ["docking", "undocking"]
-    }
+    return {"smart_home_pytree": ["docking", "undocking"]}
 
 
 class GuardedMoveToPersonLocationTree(BaseTreeRunner):
-    def __init__(self, node_name: str, robot_interface=None, executor=None, debug=False, **kwargs):
+    def __init__(
+        self, node_name: str, robot_interface=None, executor=None, debug=False, **kwargs
+    ):
         """
         Initialize the MoveToPersonLocation.
 
@@ -46,11 +45,11 @@ class GuardedMoveToPersonLocationTree(BaseTreeRunner):
             robot_interface=robot_interface,
             debug=debug,
             executor=executor,
-            **kwargs
+            **kwargs,
         )
 
     def check(self):
-        """ Checks if the robot currently navigating toward a person location"""
+        """Checks if the robot currently navigating toward a person location"""
         try:
             going_to = self.blackboard.get("going_to_location")
 
@@ -65,7 +64,8 @@ class GuardedMoveToPersonLocationTree(BaseTreeRunner):
             return True  # EternalGuard expects truthy/falsy, not Status
 
         current_person_loc = self.robot_interface.state.get(
-            "person_location", None)  # blackboard only gets updated in the function
+            "person_location", None
+        )  # blackboard only gets updated in the function
         # getattr(self.blackboard, "person_location", None)
         if current_person_loc is None:
             print("current_person_loc  is none")
@@ -87,7 +87,9 @@ class GuardedMoveToPersonLocationTree(BaseTreeRunner):
         get_person_room_pre = GetPersonLocation(self.robot_interface)
 
         # Move only if not already in the same room
-        move_if_not_same_loc = py_trees.composites.Selector(name="MoveIfNotSameLoc", memory=True)
+        move_if_not_same_loc = py_trees.composites.Selector(
+            name="MoveIfNotSameLoc", memory=True
+        )
         robot_same_room_pre = RobotPersonSameLocation(self.robot_interface)
 
         # Get person location
@@ -99,29 +101,33 @@ class GuardedMoveToPersonLocationTree(BaseTreeRunner):
             robot_interface=self.robot_interface,
             location_key="person_location",
             debug=self.debug,
-            executor=self.executor
+            executor=self.executor,
         )
         move_to_room = move_to_home_tree.create_tree()
 
         # Wrap only the navigation action with EternalGuard
         guarded_move_to_room = py_trees.decorators.EternalGuard(
-            name="Guarded_MoveToRoom",
-            condition=self.check,
-            child=move_to_room
+            name="Guarded_MoveToRoom", condition=self.check, child=move_to_room
         )
 
         robot_same_room = RobotPersonSameLocation(self.robot_interface)
 
-        go_to_person_sequence = py_trees.composites.Sequence("GotoPersonRoutine", memory=True)
-        go_to_person_sequence.add_children([get_person_room, guarded_move_to_room, robot_same_room])
+        go_to_person_sequence = py_trees.composites.Sequence(
+            "GotoPersonRoutine", memory=True
+        )
+        go_to_person_sequence.add_children(
+            [get_person_room, guarded_move_to_room, robot_same_room]
+        )
 
         go_to_person_sequence_with_retry = py_trees.decorators.Retry(
             name="Go to Person Sequence with Retry",
             child=go_to_person_sequence,
-            num_failures=num_attempts
+            num_failures=num_attempts,
         )
 
-        move_if_not_same_loc.add_children([robot_same_room_pre, go_to_person_sequence_with_retry])
+        move_if_not_same_loc.add_children(
+            [robot_same_room_pre, go_to_person_sequence_with_retry]
+        )
         root.add_children([get_person_room_pre, move_if_not_same_loc])
 
         return root
@@ -130,11 +136,7 @@ class GuardedMoveToPersonLocationTree(BaseTreeRunner):
         return required_actions_()
 
     def required_topics(self):
-        return [
-            "/charging",
-            "/person_location",
-            "/robot_location"
-        ]
+        return ["/charging", "/person_location", "/robot_location"]
 
 
 def main(args=None):
@@ -150,10 +152,18 @@ def main(args=None):
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
-    parser.add_argument('--run_continuous', type=str2bool, default=False,
-                        help="Run tree continuously (default: False)")
-    parser.add_argument("--num_attempts", type=int, default=3,
-                        help="Docking retry attempts (default: 3)")
+    parser.add_argument(
+        "--run_continuous",
+        type=str2bool,
+        default=False,
+        help="Run tree continuously (default: False)",
+    )
+    parser.add_argument(
+        "--num_attempts",
+        type=int,
+        default=3,
+        help="Docking retry attempts (default: 3)",
+    )
 
     args, _ = parser.parse_known_args()
 

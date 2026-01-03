@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 import os
-import yaml
+
 import py_trees
 import py_trees_ros
+import yaml
 
 
 def load_locations_to_blackboard(yaml_path: str, debug: bool = False):
@@ -14,14 +15,14 @@ def load_locations_to_blackboard(yaml_path: str, debug: bool = False):
     blackboard = py_trees.blackboard.Blackboard()
 
     try:
-        blackboard.get('initialized')
+        blackboard.get("initialized")
         return blackboard
     except BaseException:
         pass
     # ------------------------
 
     # Load YAML
-    with open(yaml_path, 'r') as file:
+    with open(yaml_path, "r") as file:
         data = yaml.safe_load(file)
 
     if "locations" not in data:
@@ -55,10 +56,10 @@ def load_protocols_to_bb(yaml_path: str, debug: bool = False):
     blackboard = py_trees.blackboard.Blackboard()
 
     # Load YAML
-    with open(yaml_path, 'r') as file:
+    with open(yaml_path, "r") as file:
         data = yaml.safe_load(file)
 
-       # Ensure structure is correct
+    # Ensure structure is correct
     if "protocols" not in data:
         raise KeyError("YAML must contain protocols -> TwoReminderProtocol structure.")
 

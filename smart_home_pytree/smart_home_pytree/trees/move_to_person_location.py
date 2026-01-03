@@ -6,27 +6,28 @@ This script is repsponsible for getting the person location and moving the robot
 The tree should move to the person if it reaches the location and the person has moved
 """
 
+import argparse
 
 import py_trees
 import rclpy
 
-from smart_home_pytree.behaviors.robot_person_same_location import RobotPersonSameLocation
 from smart_home_pytree.behaviors.get_person_location import GetPersonLocation
-
+from smart_home_pytree.behaviors.robot_person_same_location import (
+    RobotPersonSameLocation,
+)
 from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
 from smart_home_pytree.trees.move_to_tree import MoveToLocationTree
 from smart_home_pytree.utils import str2bool
-import argparse
 
 
 def required_actions_():
-    return {
-        "smart_home_pytree": ["docking", "undocking"]
-    }
+    return {"smart_home_pytree": ["docking", "undocking"]}
 
 
 class MoveToPersonLocationTree(BaseTreeRunner):
-    def __init__(self, node_name: str, robot_interface=None, executor=None, debug=False, **kwargs):
+    def __init__(
+        self, node_name: str, robot_interface=None, executor=None, debug=False, **kwargs
+    ):
         """
         Initialize the MoveToPersonLocation.
 
@@ -39,7 +40,7 @@ class MoveToPersonLocationTree(BaseTreeRunner):
             robot_interface=robot_interface,
             debug=debug,
             executor=executor,
-            **kwargs
+            **kwargs,
         )
 
     def create_tree(self) -> py_trees.behaviour.Behaviour:
@@ -56,7 +57,9 @@ class MoveToPersonLocationTree(BaseTreeRunner):
         get_person_room_pre = GetPersonLocation(self.robot_interface)
 
         # Move only if not already in the same room
-        move_if_not_same_loc = py_trees.composites.Selector(name="MoveIfNotSameLoc", memory=True)
+        move_if_not_same_loc = py_trees.composites.Selector(
+            name="MoveIfNotSameLoc", memory=True
+        )
         robot_same_room_pre = RobotPersonSameLocation(self.robot_interface)
 
         get_person_room = GetPersonLocation(self.robot_interface)
@@ -67,22 +70,28 @@ class MoveToPersonLocationTree(BaseTreeRunner):
             robot_interface=self.robot_interface,
             location_key="person_location",
             debug=self.debug,
-            executor=self.executor
+            executor=self.executor,
         )
         move_to_room = move_to_room_tree.create_tree()
         robot_same_room_post = RobotPersonSameLocation(self.robot_interface)
 
-        go_to_person_sequence = py_trees.composites.Sequence("GotoPersonRoutine", memory=True)
-        go_to_person_sequence.add_children([get_person_room, move_to_room, robot_same_room_post])
+        go_to_person_sequence = py_trees.composites.Sequence(
+            "GotoPersonRoutine", memory=True
+        )
+        go_to_person_sequence.add_children(
+            [get_person_room, move_to_room, robot_same_room_post]
+        )
         # get_person_room is used within the retry in case the person moves location
 
         go_to_person_sequence_with_retry = py_trees.decorators.Retry(
             name="Go to Person Sequence with Retry",
             child=go_to_person_sequence,
-            num_failures=num_attempts
+            num_failures=num_attempts,
         )
 
-        move_if_not_same_loc.add_children([robot_same_room_pre, go_to_person_sequence_with_retry])
+        move_if_not_same_loc.add_children(
+            [robot_same_room_pre, go_to_person_sequence_with_retry]
+        )
         root.add_children([get_person_room_pre, move_if_not_same_loc])
 
         return root
@@ -91,11 +100,7 @@ class MoveToPersonLocationTree(BaseTreeRunner):
         return required_actions_()
 
     def required_topics(self):
-        return [
-            "/charging",
-            "/person_location",
-            "/robot_location"
-        ]
+        return ["/charging", "/person_location", "/robot_location"]
 
 
 def main(args=None):
@@ -111,17 +116,25 @@ def main(args=None):
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
-    parser.add_argument('--run_continuous', type=str2bool, default=False,
-                        help="Run tree continuously (default: False)")
-    parser.add_argument("--num_attempts", type=int, default=5,
-                        help="Docking retry attempts (default: 5)")
+    parser.add_argument(
+        "--run_continuous",
+        type=str2bool,
+        default=False,
+        help="Run tree continuously (default: False)",
+    )
+    parser.add_argument(
+        "--num_attempts",
+        type=int,
+        default=5,
+        help="Docking retry attempts (default: 5)",
+    )
 
     args, _ = parser.parse_known_args()
 
     tree_runner = MoveToPersonLocationTree(
         node_name="move_to_person_location_tree",
         num_attempts=args.num_attempts,
-        debug=True
+        debug=True,
     )
     # now run in init
     tree_runner.setup()

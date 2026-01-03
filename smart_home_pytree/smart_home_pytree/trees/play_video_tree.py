@@ -1,20 +1,18 @@
 #!/usr/bin/env python3
 
+import argparse
 import os
-import py_trees
 
+import py_trees
+import py_trees_ros
 import rclpy
 
-
-from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
-
-import argparse
-from smart_home_pytree.trees.move_to_person_location import MoveToPersonLocationTree
+from shr_msgs.action import PlayVideoRequest
 from smart_home_pytree.behaviors.set_protocol_bb import SetProtocolBB
 from smart_home_pytree.registry import load_protocols_to_bb
+from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
+from smart_home_pytree.trees.move_to_person_location import MoveToPersonLocationTree
 from smart_home_pytree.utils import str2bool
-from shr_msgs.action import PlayVideoRequest
-import py_trees_ros
 
 
 class PlayVideoTree(BaseTreeRunner):
@@ -24,11 +22,16 @@ class PlayVideoTree(BaseTreeRunner):
     that play audio was successful to true.
     """
 
-    def __init__(self, node_name: str, robot_interface=None,
-                 executor=None, debug=False,
-                 protocol_name: str = None,
-                 data_key: str = None,
-                 **kwargs):
+    def __init__(
+        self,
+        node_name: str,
+        robot_interface=None,
+        executor=None,
+        debug=False,
+        protocol_name: str = None,
+        data_key: str = None,
+        **kwargs,
+    ):
         """
         Initialize the PlayVideoTree.
 
@@ -41,15 +44,16 @@ class PlayVideoTree(BaseTreeRunner):
             robot_interface=robot_interface,
             debug=debug,
             executor=executor,
-            **kwargs
+            **kwargs,
         )
 
         # Store optional configuration ONLY USED FOR TESTING
         self.protocol_name = protocol_name
         self.data_key = data_key
 
-    def create_tree(self, protocol_name: str = None,
-                    data_key: str = None) -> py_trees.behaviour.Behaviour:
+    def create_tree(
+        self, protocol_name: str = None, data_key: str = None
+    ) -> py_trees.behaviour.Behaviour:
         """
         Creates the PlayVideoTree tree:
         Sequence:
@@ -77,7 +81,8 @@ class PlayVideoTree(BaseTreeRunner):
             node_name=f"{protocol_name}_move_to_person",
             robot_interface=self.robot_interface,
             debug=self.debug,
-            executor=self.executor)
+            executor=self.executor,
+        )
         move_to_person = move_to_person_tree.create_tree()
 
         # charge_robot_tree = ChargeRobotTree(node_name=f"{protocol_name}_charge_robot", robot_interface=self.robot_interface)
@@ -92,24 +97,28 @@ class PlayVideoTree(BaseTreeRunner):
             action_type=PlayVideoRequest,
             action_name="play_video",
             action_goal=video_goal,
-            wait_for_server_timeout_sec=120.0
+            wait_for_server_timeout_sec=120.0,
         )
 
         set_play_video_success = SetProtocolBB(
             name="play_video_set_bb",
             key=f"{protocol_name}_done.{data_key}_done",
-            value=True)
+            value=True,
+        )
 
         # Root sequence
         root_sequence = py_trees.composites.Sequence(
-            name=f"{protocol_name}_play_video", memory=True)
+            name=f"{protocol_name}_play_video", memory=True
+        )
 
-        root_sequence.add_children([
-            move_to_person,
-            play_video_reminder,
-            set_play_video_success,
-            # charge_robot,
-        ])
+        root_sequence.add_children(
+            [
+                move_to_person,
+                play_video_reminder,
+                set_play_video_success,
+                # charge_robot,
+            ]
+        )
 
         return root_sequence
 
@@ -125,13 +134,27 @@ def main(args=None):
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
-    parser.add_argument('--run_continuous', type=str2bool, default=False,
-                        help="Run tree continuously (default: False)")
-    parser.add_argument("--num_attempts", type=int, default=3, help="retry attempts (default: 3)")
-    parser.add_argument("--protocol_name", type=str, default="medicine_am",
-                        help="name of the protocol that needs to run (ex: medicine_am)")
-    parser.add_argument("--data_key", type=str, default="first_reminder",
-                        help="name of the key in the protocol that needs to run (ex: medicine_am)")
+    parser.add_argument(
+        "--run_continuous",
+        type=str2bool,
+        default=False,
+        help="Run tree continuously (default: False)",
+    )
+    parser.add_argument(
+        "--num_attempts", type=int, default=3, help="retry attempts (default: 3)"
+    )
+    parser.add_argument(
+        "--protocol_name",
+        type=str,
+        default="medicine_am",
+        help="name of the protocol that needs to run (ex: medicine_am)",
+    )
+    parser.add_argument(
+        "--data_key",
+        type=str,
+        default="first_reminder",
+        help="name of the key in the protocol that needs to run (ex: medicine_am)",
+    )
 
     args, _ = parser.parse_known_args()
     protocol_name = args.protocol_name
@@ -143,9 +166,7 @@ def main(args=None):
     load_protocols_to_bb(yaml_file_path)
 
     tree_runner = PlayVideoTree(
-        node_name="play_video_tree",
-        protocol_name=protocol_name,
-        data_key=data_key
+        node_name="play_video_tree", protocol_name=protocol_name, data_key=data_key
     )
     tree_runner.setup()
 

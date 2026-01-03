@@ -1,18 +1,18 @@
+import os
+
+from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription
+from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
-import os
-from ament_index_python.packages import get_package_share_directory
 from smart_home_pytree.trees.move_to_tree import MoveToLocationTree, required_actions_
-
-from launch.conditions import IfCondition
 
 
 def generate_launch_description():
     # --- Launch arguments ---
-    run_actions = LaunchConfiguration('run_actions', default='true')
+    run_actions = LaunchConfiguration("run_actions", default="true")
 
     # Get required action nodes (these are already Node objects),
     action_servers = required_actions_()
@@ -26,17 +26,19 @@ def generate_launch_description():
                     package=package,
                     executable=executable,
                     name=executable,
-                    output='screen',
+                    output="screen",
                     emulate_tty=True,
-                    condition=IfCondition(run_actions)
+                    condition=IfCondition(run_actions),
                 )
             )
 
     # --- Launch Description ---
-    return LaunchDescription([
-        DeclareLaunchArgument('run_actions', default_value='true'),
-        *action_nodes,
-    ])
+    return LaunchDescription(
+        [
+            DeclareLaunchArgument("run_actions", default_value="true"),
+            *action_nodes,
+        ]
+    )
 
 
 # to run

@@ -8,13 +8,15 @@ The tree receives an string location representing the target pose for the robot.
 
 import argparse
 import operator
-from smart_home_pytree.behaviors.check_robot_state_key import CheckRobotStateKey
-from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
-from smart_home_pytree.behaviors.move_to_behavior import MoveToLandmark
-from smart_home_pytree.utils import str2bool
+
 import py_trees
 import py_trees_ros
 import rclpy
+
+from smart_home_pytree.behaviors.check_robot_state_key import CheckRobotStateKey
+from smart_home_pytree.behaviors.move_to_behavior import MoveToLandmark
+from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
+from smart_home_pytree.utils import str2bool
 
 # from nav2_msgs.action import UndockRobot
 try:
@@ -28,9 +30,8 @@ except ImportError:
 
 
 def required_actions_():
-    return {
-        "smart_home_pytree": ["undock_robot"]
-    }
+    return {"smart_home_pytree": ["undock_robot"]}
+
 
 # Root (Sequence)
 #  ├─ Charging Selector
@@ -42,7 +43,9 @@ def required_actions_():
 
 
 class MoveToLocationTree(BaseTreeRunner):
-    def __init__(self, node_name: str, robot_interface=None, executor=None, debug=False, **kwargs):
+    def __init__(
+        self, node_name: str, robot_interface=None, executor=None, debug=False, **kwargs
+    ):
         """
         Initialize the MoveToLocationTree.
 
@@ -55,7 +58,7 @@ class MoveToLocationTree(BaseTreeRunner):
             robot_interface=robot_interface,
             debug=debug,
             executor=executor,
-            **kwargs
+            **kwargs,
         )
 
     def create_tree(self) -> py_trees.behaviour.Behaviour:
@@ -79,14 +82,16 @@ class MoveToLocationTree(BaseTreeRunner):
 
         # state = robot_interface.state
 
-        undocking_selector = py_trees.composites.Selector(name="undocking_selector", memory=True)
+        undocking_selector = py_trees.composites.Selector(
+            name="undocking_selector", memory=True
+        )
 
         not_charging_status = CheckRobotStateKey(
             name="Check_Charging_Moveto",
             robot_interface=self.robot_interface,
             key="charging",
             expected_value=False,
-            comparison=operator.eq
+            comparison=operator.eq,
         )
 
         undocking_goal = UndockRobot.Goal()
@@ -97,16 +102,15 @@ class MoveToLocationTree(BaseTreeRunner):
             action_type=UndockRobot,
             action_name="undock_robot",
             action_goal=undocking_goal,
-            wait_for_server_timeout_sec=120.0
+            wait_for_server_timeout_sec=120.0,
         )
 
         root.add_child(undocking_selector)
         undocking_selector.add_children([not_charging_status, undock_robot])
 
         move_to_position = MoveToLandmark(
-            self.robot_interface,
-            location=location,
-            location_key=location_key)
+            self.robot_interface, location=location, location_key=location_key
+        )
 
         # move_to_position =
         # py_trees.behaviours.Success(name="Move_to_Pose_Success")  # Placeholder
@@ -121,9 +125,7 @@ class MoveToLocationTree(BaseTreeRunner):
         actions = required_actions_()
 
         # Add extra actions not to be run by launch file
-        extra_actions = {
-            "nav2": ["NavigateToPose"]
-        }
+        extra_actions = {"nav2": ["NavigateToPose"]}
 
         # Merge both dictionaries
         for pkg, acts in extra_actions.items():
@@ -135,9 +137,7 @@ class MoveToLocationTree(BaseTreeRunner):
         return actions
 
     def required_topics(self):
-        return [
-            "/charging"
-        ]
+        return ["/charging"]
 
 
 def main(args=None):
@@ -146,14 +146,21 @@ def main(args=None):
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
-    parser.add_argument('--run_continuous', type=str2bool, default=False,
-                        help="Run tree continuously (default: False)")
-    parser.add_argument("--location", type=str, default="", help="Target location name (from YAML)")
+    parser.add_argument(
+        "--run_continuous",
+        type=str2bool,
+        default=False,
+        help="Run tree continuously (default: False)",
+    )
+    parser.add_argument(
+        "--location", type=str, default="", help="Target location name (from YAML)"
+    )
     parser.add_argument(
         "--location_key",
         type=str,
         default="person_location",
-        help="key to use with blackboard")
+        help="key to use with blackboard",
+    )
 
     args, _ = parser.parse_known_args()
 

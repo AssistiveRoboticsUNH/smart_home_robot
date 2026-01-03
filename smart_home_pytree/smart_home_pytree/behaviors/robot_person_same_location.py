@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 
-'''
+"""
 Check if robot and person are in the same location. gets the location from robot_interface which reads it from the topics
-'''
-import py_trees
-import operator
+"""
+
 import math
+import operator
 from datetime import datetime
+
+import py_trees
 
 
 class RobotPersonSameLocation(py_trees.behaviour.Behaviour):
@@ -14,8 +16,13 @@ class RobotPersonSameLocation(py_trees.behaviour.Behaviour):
     Node that checks if robot and person are in the same location
     """
 
-    def __init__(self, robot_interface, name="RobotPersonSameLocation",
-                 distance_threshold=0.75, debug=True):
+    def __init__(
+        self,
+        robot_interface,
+        name="RobotPersonSameLocation",
+        distance_threshold=0.75,
+        debug=True,
+    ):
         super().__init__(name)
         self.robot_interface = robot_interface
         self.debug_enabled = debug
@@ -45,7 +52,9 @@ class RobotPersonSameLocation(py_trees.behaviour.Behaviour):
         self.debug(f"robot_location_xy = {robot_xy}")
 
         if person_location not in self.locations:
-            self.debug(f"Person location '{person_location}' not in locations table → FAILURE")
+            self.debug(
+                f"Person location '{person_location}' not in locations table → FAILURE"
+            )
             return py_trees.common.Status.FAILURE
 
         target = self.locations[person_location]
@@ -66,11 +75,14 @@ class RobotPersonSameLocation(py_trees.behaviour.Behaviour):
 
             if person_location == robot_location:
                 print(
-                    f"[INFO] [{self.name}] Person and robot are in the SAME location: {person_location}")
+                    f"[INFO] [{self.name}] Person and robot are in the SAME location: {person_location}"
+                )
                 return py_trees.common.Status.SUCCESS
             else:
-                print(f"[INFO] [{self.name}] Person and robot are in DIFFERENT locations -> "
-                      f"Person: {person_location}, Robot: {robot_location}")
+                print(
+                    f"[INFO] [{self.name}] Person and robot are in DIFFERENT locations -> "
+                    f"Person: {person_location}, Robot: {robot_location}"
+                )
                 return py_trees.common.Status.FAILURE
 
         # Compute distance
@@ -84,7 +96,8 @@ class RobotPersonSameLocation(py_trees.behaviour.Behaviour):
         if distance <= self.distance_threshold:
             state.update("robot_location", person_location)
             self.debug(
-                f"Robot is within {self.distance_threshold} meter → setting robot_location = {person_location}")
+                f"Robot is within {self.distance_threshold} meter → setting robot_location = {person_location}"
+            )
             return py_trees.common.Status.SUCCESS
 
         self.debug("Robot not close enough → FAILURE")

@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 
-'''
+"""
 Gets person location from robot_interface and checks if its valid (Not None and part of the locations in the yaml). If its valid it registers it in the blackboard
 
-'''
-import py_trees
-import operator
+"""
 
+import operator
 from datetime import datetime
+
+import py_trees
 
 
 class GetPersonLocation(py_trees.behaviour.Behaviour):

@@ -5,24 +5,27 @@ This script is responsible for running the two reminder protocol.
 
 """
 
-
-import os
-import py_trees
-
-import rclpy
-
-from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
-import yaml
 import argparse
+import os
 
-from smart_home_pytree.trees.read_script_tree import ReadScriptTree
-from smart_home_pytree.registry import load_locations_to_blackboard, load_protocols_to_bb
+import py_trees
+import rclpy
+import yaml
+
 from smart_home_pytree.behaviors.check_protocol_bb import CheckProtocolBB
+from smart_home_pytree.registry import (
+    load_locations_to_blackboard,
+    load_protocols_to_bb,
+)
+from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
+from smart_home_pytree.trees.read_script_tree import ReadScriptTree
 from smart_home_pytree.utils import str2bool
 
 
 class CoffeeProtocolTree(BaseTreeRunner):
-    def __init__(self, node_name: str, robot_interface=None, executor=None, debug=False, **kwargs):
+    def __init__(
+        self, node_name: str, robot_interface=None, executor=None, debug=False, **kwargs
+    ):
         """
         Initialize the CoffeeProtocolTree.
         currently on reminder protocol
@@ -36,7 +39,7 @@ class CoffeeProtocolTree(BaseTreeRunner):
             robot_interface=robot_interface,
             debug=debug,
             executor=executor,
-            **kwargs
+            **kwargs,
         )
 
     def create_tree(self) -> py_trees.behaviour.Behaviour:
@@ -52,12 +55,15 @@ class CoffeeProtocolTree(BaseTreeRunner):
         protocol_name = self.kwargs.get("protocol_name", "")
 
         if protocol_name == "":
-            raise ValueError("protocol_name is empty. Please specify one (e.g., 'coffee').")
+            raise ValueError(
+                "protocol_name is empty. Please specify one (e.g., 'coffee')."
+            )
 
         # Conditional wrappers
         text_1 = "first_text"
         read_script_1_with_check = py_trees.composites.Selector(
-            "Run First Script if needed", memory=True)
+            "Run First Script if needed", memory=True
+        )
         condition_1 = CheckProtocolBB(
             name="Should Run First Script?",
             key=f"{protocol_name}_done.{text_1}_done",
@@ -68,9 +74,11 @@ class CoffeeProtocolTree(BaseTreeRunner):
             node_name=f"{self.node_name}_read_first_script",
             robot_interface=self.robot_interface,
             debug=self.debug,
-            executor=self.executor)
+            executor=self.executor,
+        )
         read_script_reminder_1 = read_script_tree_1.create_tree(
-            protocol_name=protocol_name, data_key=text_1)
+            protocol_name=protocol_name, data_key=text_1
+        )
 
         read_script_1_with_check.add_children([condition_1, read_script_reminder_1])
 
@@ -80,9 +88,11 @@ class CoffeeProtocolTree(BaseTreeRunner):
         root_sequence = py_trees.composites.Sequence(name="CoffeeReminder", memory=True)
 
         # Add behaviors in order
-        root_sequence.add_children([
-            read_script_1_with_check,
-        ])
+        root_sequence.add_children(
+            [
+                read_script_1_with_check,
+            ]
+        )
 
         return root_sequence
 
@@ -97,11 +107,21 @@ def main(args=None):
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
-    parser.add_argument('--run_continuous', type=str2bool, default=False,
-                        help="Run tree continuously (default: False)")
-    parser.add_argument("--num_attempts", type=int, default=3, help="retry attempts (default: 3)")
-    parser.add_argument("--protocol_name", type=str, default="",
-                        help="name of the protocol that needs to run (ex: medicine_am)")
+    parser.add_argument(
+        "--run_continuous",
+        type=str2bool,
+        default=False,
+        help="Run tree continuously (default: False)",
+    )
+    parser.add_argument(
+        "--num_attempts", type=int, default=3, help="retry attempts (default: 3)"
+    )
+    parser.add_argument(
+        "--protocol_name",
+        type=str,
+        default="",
+        help="name of the protocol that needs to run (ex: medicine_am)",
+    )
 
     args, unknown = parser.parse_known_args()
     protocol_name = args.protocol_name

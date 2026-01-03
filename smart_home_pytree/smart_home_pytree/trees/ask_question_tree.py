@@ -1,32 +1,37 @@
 #!/usr/bin/env python3
 
+import argparse
 import os
-import py_trees
 
+import py_trees
+import py_trees_ros
 import rclpy
 
-
-from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
-
-import argparse
-from smart_home_pytree.trees.move_to_person_location import MoveToPersonLocationTree
+from shr_msgs.action import QuestionRequest
+from smart_home_pytree.behaviors.action_behaviors.ask_question import (
+    AskQuestionBehavior,
+)
+from smart_home_pytree.behaviors.check_protocol_bb import CheckProtocolBB
 from smart_home_pytree.behaviors.set_protocol_bb import SetProtocolBB
 from smart_home_pytree.registry import load_protocols_to_bb
-from shr_msgs.action import QuestionRequest
-import py_trees_ros
-from smart_home_pytree.behaviors.action_behaviors.ask_question import AskQuestionBehavior
-from smart_home_pytree.behaviors.check_protocol_bb import CheckProtocolBB
+from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
+from smart_home_pytree.trees.move_to_person_location import MoveToPersonLocationTree
 from smart_home_pytree.utils import str2bool
 
 
 class AskQuestionTree(BaseTreeRunner):
     """Class creates a tree get an answer from the user"""
 
-    def __init__(self, node_name: str, robot_interface=None,
-                 executor=None, debug=False,
-                 protocol_name: str = None,
-                 data_key: str = None,
-                 **kwargs):
+    def __init__(
+        self,
+        node_name: str,
+        robot_interface=None,
+        executor=None,
+        debug=False,
+        protocol_name: str = None,
+        data_key: str = None,
+        **kwargs,
+    ):
         """
         Initialize the AskQuestionTree.
 
@@ -39,15 +44,16 @@ class AskQuestionTree(BaseTreeRunner):
             robot_interface=robot_interface,
             debug=debug,
             executor=executor,
-            **kwargs
+            **kwargs,
         )
 
         # Store optional configuration ONLY USED FOR TESTING
         self.protocol_name = protocol_name
         self.data_key = data_key
 
-    def create_tree(self, protocol_name: str = None,
-                    data_key: str = None) -> py_trees.behaviour.Behaviour:
+    def create_tree(
+        self, protocol_name: str = None, data_key: str = None
+    ) -> py_trees.behaviour.Behaviour:
         """
         Creates a behavior tree for asking a confirmation question after moving to a person.
 
@@ -82,7 +88,7 @@ class AskQuestionTree(BaseTreeRunner):
             node_name=f"{protocol_name}_move_to_person",
             robot_interface=self.robot_interface,
             debug=self.debug,
-            executor=self.executor
+            executor=self.executor,
         )
         move_to_person = move_to_person_tree.create_tree()
 
@@ -96,29 +102,24 @@ class AskQuestionTree(BaseTreeRunner):
             name="ask_question_and_eval",
             action_goal=question_goal,
             protocol_name=protocol_name,
-            data_key=data_key
+            data_key=data_key,
         )
 
         condition = CheckProtocolBB(
             name=f"Should Run {data_key}?",
             key=f"{protocol_name}_done.{data_key}_done",
-            expected_value=True
+            expected_value=True,
         )
 
         # 4. Root Construction: Sequential execution with memory
         question_sequence = py_trees.composites.Sequence(
-            name=f"{protocol_name}_ask_sequence",
-            memory=True
+            name=f"{protocol_name}_ask_sequence", memory=True
         )
 
-        question_sequence.add_children([
-            move_to_person,
-            ask_and_eval
-        ])
+        question_sequence.add_children([move_to_person, ask_and_eval])
 
         selector = py_trees.composites.Selector(
-            name=f"Run Question If Needed",
-            memory=True
+            name=f"Run Question If Needed", memory=True
         )
 
         selector.add_children([condition, question_sequence])
@@ -135,13 +136,27 @@ def main(args=None):
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
-    parser.add_argument('--run_continuous', type=str2bool, default=False,
-                        help="Run tree continuously (default: False)")
-    parser.add_argument("--num_attempts", type=int, default=3, help="retry attempts (default: 3)")
-    parser.add_argument("--protocol_name", type=str, default="exercise",
-                        help="name of the protocol that needs to run (ex: medicine_am)")
-    parser.add_argument("--data_key", type=str, default="get_confirmation",
-                        help="name of the key in the protocol that needs to run (ex: medicine_am)")
+    parser.add_argument(
+        "--run_continuous",
+        type=str2bool,
+        default=False,
+        help="Run tree continuously (default: False)",
+    )
+    parser.add_argument(
+        "--num_attempts", type=int, default=3, help="retry attempts (default: 3)"
+    )
+    parser.add_argument(
+        "--protocol_name",
+        type=str,
+        default="exercise",
+        help="name of the protocol that needs to run (ex: medicine_am)",
+    )
+    parser.add_argument(
+        "--data_key",
+        type=str,
+        default="get_confirmation",
+        help="name of the key in the protocol that needs to run (ex: medicine_am)",
+    )
 
     args, _ = parser.parse_known_args()
     protocol_name = args.protocol_name
@@ -153,9 +168,7 @@ def main(args=None):
     load_protocols_to_bb(yaml_file_path)
 
     tree_runner = AskQuestionTree(
-        node_name="ask_question_tree",
-        protocol_name=protocol_name,
-        data_key=data_key
+        node_name="ask_question_tree", protocol_name=protocol_name, data_key=data_key
     )
     tree_runner.setup()
 

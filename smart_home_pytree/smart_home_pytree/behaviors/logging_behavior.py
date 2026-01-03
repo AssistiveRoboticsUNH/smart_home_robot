@@ -1,10 +1,9 @@
-
 #!/usr/bin/env python3
 
-import py_trees
 import operator
-
 from datetime import datetime
+
+import py_trees
 import rclpy
 
 """
@@ -15,8 +14,13 @@ one of the children gave success. (For fallback to return success it requires on
 
 
 class LoggingBehavior(py_trees.behaviour.Behaviour):
-    def __init__(self, name: str, message: str, robot_interface,
-                 status: py_trees.common.Status = py_trees.common.Status.SUCCESS):
+    def __init__(
+        self,
+        name: str,
+        message: str,
+        robot_interface,
+        status: py_trees.common.Status = py_trees.common.Status.SUCCESS,
+    ):
         """
         A simple logging behavior that prints the current time and a custom message
         each time it's ticked.
@@ -63,7 +67,9 @@ class LoggingBehavior(py_trees.behaviour.Behaviour):
         """
         Called whenever the behavior switches to a non-running state.
         """
-        self.logger.debug(f"{self.name} [LoggingBehavior::terminate()][{self.status}→{new_status}]")
+        self.logger.debug(
+            f"{self.name} [LoggingBehavior::terminate()][{self.status}→{new_status}]"
+        )
 
 
 class DummyRobotInterface:
@@ -86,7 +92,7 @@ def main():
         name="TestLogger",
         message="Standalone Logging Test",
         robot_interface=robot_interface,
-        status=py_trees.common.Status.SUCCESS
+        status=py_trees.common.Status.SUCCESS,
     )
 
     # Minimal tree to execute the behavior

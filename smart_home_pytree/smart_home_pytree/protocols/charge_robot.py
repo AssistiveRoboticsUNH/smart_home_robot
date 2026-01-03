@@ -1,13 +1,16 @@
-import operator
 import argparse
+import operator
+
+import py_trees
+import py_trees_ros
 import rclpy
+
 from smart_home_pytree.behaviors.check_robot_state_key import CheckRobotStateKey
 from smart_home_pytree.behaviors.logging_behavior import LoggingBehavior
 from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
 from smart_home_pytree.trees.move_to_tree import MoveToLocationTree
-import py_trees
-import py_trees_ros
 from smart_home_pytree.utils import str2bool
+
 try:
     # ROS 2 Jazzy / Rolling (Standard)
     from nav2_msgs.action import DockRobot
@@ -18,9 +21,7 @@ except ImportError:
 
 def required_actions_():
     """Return required actions for the ChargeRobotTree. Should match action client names."""
-    return {
-        "smart_home_pytree": ["dock_robot", "undock_robot "]
-    }
+    return {"smart_home_pytree": ["dock_robot", "undock_robot "]}
 
 
 class ChargeRobotTree(BaseTreeRunner):
@@ -30,7 +31,9 @@ class ChargeRobotTree(BaseTreeRunner):
     The tree should check if the robot is charging and exit. Otherwise it moves the robot to home position then dock the robot and checks if it succcessfully charged. It will try for num_attempts then log if it fails
     """
 
-    def __init__(self, node_name: str, robot_interface=None, executor=None, debug=False, **kwargs):
+    def __init__(
+        self, node_name: str, robot_interface=None, executor=None, debug=False, **kwargs
+    ):
         """
         Initialize the ChargeRobotTree.
 
@@ -43,7 +46,7 @@ class ChargeRobotTree(BaseTreeRunner):
             robot_interface=robot_interface,
             debug=debug,
             executor=executor,
-            **kwargs
+            **kwargs,
         )
 
     def create_tree(self) -> py_trees.behaviour.Behaviour:
@@ -70,7 +73,7 @@ class ChargeRobotTree(BaseTreeRunner):
             robot_interface=self.robot_interface,
             key="charging",
             expected_value=True,
-            comparison=operator.eq
+            comparison=operator.eq,
         )
 
         # In py_trees, a single behavior instance cannot be added to the tree in more than one place — it must be cloned or instantiated again, because each node maintains its own state
@@ -80,7 +83,7 @@ class ChargeRobotTree(BaseTreeRunner):
             robot_interface=self.robot_interface,
             key="charging",
             expected_value=True,
-            comparison=operator.eq
+            comparison=operator.eq,
         )
 
         # # takes position as input x, y, theta
@@ -91,7 +94,7 @@ class ChargeRobotTree(BaseTreeRunner):
             robot_interface=self.robot_interface,
             location=target_location,  # pass any location here
             debug=self.debug,
-            executor=self.executor
+            executor=self.executor,
         )
         move_to_home = move_to_home_tree.create_tree()
 
@@ -102,7 +105,7 @@ class ChargeRobotTree(BaseTreeRunner):
             action_type=DockRobot,
             action_name="dock_robot",
             action_goal=docking_goal,
-            wait_for_server_timeout_sec=120.0
+            wait_for_server_timeout_sec=120.0,
         )
 
         # Logging behaviors has to be a behavior
@@ -110,7 +113,7 @@ class ChargeRobotTree(BaseTreeRunner):
             name="Log_Success",
             message="Charging sequence completed successfully",
             status=py_trees.common.Status.SUCCESS,
-            robot_interface=self.robot_interface
+            robot_interface=self.robot_interface,
         )
 
         # SUCCESS actually the default so no need to use status
@@ -118,27 +121,31 @@ class ChargeRobotTree(BaseTreeRunner):
             name="Log_Fail",
             message="Failed to charge after retry attempts",
             status=py_trees.common.Status.FAILURE,
-            robot_interface=self.robot_interface
+            robot_interface=self.robot_interface,
         )
 
         # Charge sequence
-        charge_sequence = py_trees.composites.Sequence(name="Charge Sequence", memory=True)
+        charge_sequence = py_trees.composites.Sequence(
+            name="Charge Sequence", memory=True
+        )
         # handled by the docking routine
         charge_sequence.add_children(
-            [move_to_home, dock_robot, charging_status, log_message_success])
+            [move_to_home, dock_robot, charging_status, log_message_success]
+        )
         # charge_sequence.add_children([dock_robot, charging_status, log_message_success])
 
         # Retry decorator around charge sequence
         charge_sequence_with_retry = py_trees.decorators.Retry(
             name="Charge Sequence with Retry",
             child=charge_sequence,
-            num_failures=num_attempts
+            num_failures=num_attempts,
         )
 
         # Final selector order: if already charging -> success, else run retry
         # sequence, else log failure
         charge_robot.add_children(
-            [check_charging_charge_seq, charge_sequence_with_retry, log_message_fail])
+            [check_charging_charge_seq, charge_sequence_with_retry, log_message_fail]
+        )
 
         return charge_robot
 
@@ -146,9 +153,7 @@ class ChargeRobotTree(BaseTreeRunner):
         return required_actions_()
 
     def required_topics(self):
-        return [
-            "/charging"
-        ]
+        return ["/charging"]
 
 
 def main(args=None):
@@ -165,10 +170,18 @@ def main(args=None):
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
-    parser.add_argument('--run_continuous', type=str2bool, default=False,
-                        help="Run tree continuously (default: False)")
-    parser.add_argument("--num_attempts", type=int, default=3,
-                        help="Docking retry attempts (default: 3)")
+    parser.add_argument(
+        "--run_continuous",
+        type=str2bool,
+        default=False,
+        help="Run tree continuously (default: False)",
+    )
+    parser.add_argument(
+        "--num_attempts",
+        type=int,
+        default=3,
+        help="Docking retry attempts (default: 3)",
+    )
 
     args, _ = parser.parse_known_args()
 

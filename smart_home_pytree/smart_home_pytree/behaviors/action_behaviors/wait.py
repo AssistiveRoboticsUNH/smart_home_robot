@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 
-'''
+"""
 Behavior that waits.
 This should be extended to allow the robot to perform other protocol while its waiting
-'''
+"""
+
+import time
 
 import py_trees
-import time
 
 
 class Wait(py_trees.behaviour.Behaviour):

@@ -1,7 +1,9 @@
 import rclpy
 from rclpy.action import ActionClient
 from rclpy.node import Node
+
 from shr_msgs.action import DockingRequest
+
 
 class DockingClient(Node):
     def __init__(self):
@@ -20,7 +22,9 @@ class DockingClient(Node):
         send_goal_future.add_done_callback(self.goal_response_callback)
 
     def feedback_callback(self, feedback_msg):
-        self.get_logger().info(f"Received feedback: {feedback_msg.feedback.percentage_completed}")
+        self.get_logger().info(
+            f"Received feedback: {feedback_msg.feedback.percentage_completed}"
+        )
 
     def goal_response_callback(self, future):
         goal_handle = future.result()
@@ -36,10 +40,10 @@ class DockingClient(Node):
     def get_result_callback(self, future):
         result = future.result().result
         status = future.result().status
-        
+
         print("result", result)
         print("status", status)
-        
+
         # action_msgs/msg/GoalStatus.
         # int8 STATUS_UNKNOWN=0
         # int8 STATUS_ACCEPTED=1
@@ -50,7 +54,7 @@ class DockingClient(Node):
         # int8 STATUS_ABORTED=6
         # action_msgs/msg/GoalInfo goal_info
         # int8 status
-        
+
         if status == 6:  # STATUS_ABORTED
             self.get_logger().error(f"Action failed with status ABORTED")
         elif status == 4:  # STATUS_SUCCEEDED
@@ -61,11 +65,13 @@ class DockingClient(Node):
         self.get_logger().info("Shutting down client node.")
         rclpy.shutdown()
 
+
 def main():
     rclpy.init()
     client = DockingClient()
     client.send_goal()
     rclpy.spin(client)
+
 
 if __name__ == "__main__":
     main()

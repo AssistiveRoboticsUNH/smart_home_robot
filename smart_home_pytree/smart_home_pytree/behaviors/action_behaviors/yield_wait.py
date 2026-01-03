@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 
-'''
+"""
 wait behavior records a timed resume request on the blackboard and immediately succeeds, yielding control
 so the orchestrator can run other protocols until the scheduled time is reached.
-'''
+"""
+
+import time
 
 import py_trees
-import time
-from smart_home_pytree.registry import load_protocols_to_bb
+
 from smart_home_pytree.behaviors.set_protocol_bb import SetProtocolBB
+from smart_home_pytree.registry import load_protocols_to_bb
 from smart_home_pytree.utils import parse_duration
 
 
@@ -38,8 +40,15 @@ class YieldWait(py_trees.behaviour.Behaviour):
             - {protocol_name}_done.{wait_time_key}_done: Marks this wait step as complete
     """
 
-    def __init__(self, protocol_name, class_name, wait_time_key,
-                 debug=False, name="YieldWait", max_wait=2.0):
+    def __init__(
+        self,
+        protocol_name,
+        class_name,
+        wait_time_key,
+        debug=False,
+        name="YieldWait",
+        max_wait=2.0,
+    ):
         """
         Initialize the YieldWait behavior.
 
@@ -94,7 +103,7 @@ class YieldWait(py_trees.behaviour.Behaviour):
         wait_requests[request_key] = {
             "wait_key": self.wait_time_key,
             "seconds": wait_seconds,
-            "timestamp": time.time()
+            "timestamp": time.time(),
         }
         bb.set("wait_requests", wait_requests)
 
@@ -102,7 +111,7 @@ class YieldWait(py_trees.behaviour.Behaviour):
         set_bb_node = SetProtocolBB(
             name="MarkWaitDone",
             key=f"{self.protocol_name}_done.{self.wait_time_key}_done",
-            value=True
+            value=True,
         )
         set_bb_node.update()
         if self.debug:
@@ -146,8 +155,8 @@ class YieldWait(py_trees.behaviour.Behaviour):
 
 def main():
     # ## todo  adjust to have things wiped from blackboard
-    import pprint
     import os
+    import pprint
 
     yaml_file_path = os.getenv("house_yaml_path", None)
     load_protocols_to_bb(yaml_file_path)

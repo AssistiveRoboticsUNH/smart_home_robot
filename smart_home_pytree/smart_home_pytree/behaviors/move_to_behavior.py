@@ -2,11 +2,11 @@
 
 import py_trees
 import py_trees_ros
+import rclpy
+import tf_transformations
 from geometry_msgs.msg import PoseStamped, Quaternion
 from nav2_msgs.action import NavigateToPose
-import rclpy
 from rclpy.action import ActionClient
-import tf_transformations
 
 
 def yaw_to_quaternion(yaw):
@@ -21,8 +21,13 @@ class MoveToLandmark(py_trees.behaviour.Behaviour):
     Uses the ROS2 native ActionClient (not py_trees_ros).
     """
 
-    def __init__(self, robot_interface, location="",
-                 location_key="person_location", name="MoveToLandmark"):
+    def __init__(
+        self,
+        robot_interface,
+        location="",
+        location_key="person_location",
+        name="MoveToLandmark",
+    ):
         super().__init__(name)
         self.robot_interface = robot_interface
 
@@ -39,7 +44,6 @@ class MoveToLandmark(py_trees.behaviour.Behaviour):
         self.debug = False
 
     def setup(self, **kwargs):
-
         print("MoveTO behavior robot_interface ", self.robot_interface)
         print("MoveTO behavior self id:", id(self))
 
@@ -47,7 +51,9 @@ class MoveToLandmark(py_trees.behaviour.Behaviour):
             raise RuntimeError("MoveToLandmark requires a ROS2 node during setup.")
 
         # Initialize ROS2 node and action client shell
-        self.action_client = ActionClient(self.robot_interface, NavigateToPose, '/navigate_to_pose')
+        self.action_client = ActionClient(
+            self.robot_interface, NavigateToPose, "/navigate_to_pose"
+        )
 
         print(f"[INFO] [{self.name}] Waiting for /navigate_to_pose server...")
         if not self.action_client.wait_for_server(timeout_sec=10.0):
@@ -92,11 +98,11 @@ class MoveToLandmark(py_trees.behaviour.Behaviour):
 
         if self.debug:
             print(
-                f"[DEBUG] [{self.name}] Sending goal -> x={pose.pose.position.x}, y={pose.pose.position.y}")
+                f"[DEBUG] [{self.name}] Sending goal -> x={pose.pose.position.x}, y={pose.pose.position.y}"
+            )
 
         self.goal_future = self.action_client.send_goal_async(
-            goal_msg,
-            feedback_callback=self.feedback_callback
+            goal_msg, feedback_callback=self.feedback_callback
         )
         self.goal_future.add_done_callback(self.goal_response_callback)
         self.sent_goal = True
@@ -106,7 +112,8 @@ class MoveToLandmark(py_trees.behaviour.Behaviour):
         feedback = feedback_msg.feedback
         if self.debug:
             print(
-                f"[DEBUG] [{self.name}] Feedback: distance_remaining={feedback.distance_remaining:.2f}")
+                f"[DEBUG] [{self.name}] Feedback: distance_remaining={feedback.distance_remaining:.2f}"
+            )
 
     def goal_response_callback(self, future):
         """Handle goal acceptance or rejection."""
@@ -119,7 +126,9 @@ class MoveToLandmark(py_trees.behaviour.Behaviour):
                 self.blackboard.unset("going_to_location")
                 # print("goal_response_callback unset self.blackboard ")
             except BaseException:
-                print("goal_response_callback: going_to_location not set so couldnt unset")
+                print(
+                    "goal_response_callback: going_to_location not set so couldnt unset"
+                )
             return py_trees.common.Status.FAILURE
 
         if self.debug:

@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 
-'''
+"""
 Behavior that takes the state of the robot, a key in the state and the expected_value and returns success if the key has the expected value
-'''
-import py_trees
+"""
+
 import operator
+
+import py_trees
 
 
 class SetProtocolBB(py_trees.behaviour.Behaviour):
@@ -45,7 +47,8 @@ class SetProtocolBB(py_trees.behaviour.Behaviour):
             blackboard.set(protocol_name, protocol_data)
 
             self.logger.info(
-                f"Set Blackboard variable: {protocol_name}.{field_name} = {self.value}")
+                f"Set Blackboard variable: {protocol_name}.{field_name} = {self.value}"
+            )
             return py_trees.common.Status.SUCCESS
 
         except Exception as e:

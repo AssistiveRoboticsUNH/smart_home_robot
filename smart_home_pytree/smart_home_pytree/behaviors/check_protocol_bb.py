@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 
-'''
+"""
 Behavior that takes the state of the robot, a key in the state and the expected_value and returns success if the key has the expected value
-'''
-import py_trees
-import operator
+"""
 
+import operator
 from datetime import datetime
+
+import py_trees
 
 
 class CheckProtocolBB(py_trees.behaviour.Behaviour):
@@ -43,8 +44,12 @@ class CheckProtocolBB(py_trees.behaviour.Behaviour):
         print("CheckProtocolBB value: ", value)
         # Compare and return
         if self.comparison(value, self.expected_value):
-            self.logger.debug(f"{keys[0]}: {keys[1]} == {self.expected_value} → SUCCESS")
+            self.logger.debug(
+                f"{keys[0]}: {keys[1]} == {self.expected_value} → SUCCESS"
+            )
             return py_trees.common.Status.SUCCESS
         else:
-            self.logger.debug(f"{keys[0]}: {keys[1]} != {self.expected_value} → FAILURE")
+            self.logger.debug(
+                f"{keys[0]}: {keys[1]} != {self.expected_value} → FAILURE"
+            )
             return py_trees.common.Status.FAILURE
