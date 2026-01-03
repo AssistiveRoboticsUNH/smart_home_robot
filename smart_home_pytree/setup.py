@@ -40,6 +40,7 @@ setup(
             'play_video = robot_actions.play_video:main',
             'smart_plug = smart_sensors.smart_plug_node:main',
             'charge_monitor = smart_sensors.charge_monitor:main',
+            'mock_dock_undock = robot_actions.mock_dock_undock:main',
         ],
     },
 )

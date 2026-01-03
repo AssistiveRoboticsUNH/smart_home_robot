@@ -20,10 +20,12 @@ from smart_home_pytree.trees.wait_tree import WaitTree
 from smart_home_pytree.behaviors.action_behaviors.yield_wait import YieldWait
 from smart_home_pytree.trees.tree_utils import make_reminder_tree
 from smart_home_pytree.trees.wait_tree import WaitTree
+from smart_home_pytree.utils import str2bool
 
 
 class TwoReminderProtocolTree(BaseTreeRunner):
-    def __init__(self, node_name: str, robot_interface=None, test=False, **kwargs):
+    def __init__(self, node_name: str, robot_interface=None,
+                 executor=None, debug=False, test=False, **kwargs):
         """
         Initialize the TwoReminderProtocol.
 
@@ -34,6 +36,8 @@ class TwoReminderProtocolTree(BaseTreeRunner):
         super().__init__(
             node_name=node_name,
             robot_interface=robot_interface,
+            debug=debug,
+            executor=executor,
             **kwargs
         )
         self.test = test
@@ -78,7 +82,9 @@ class TwoReminderProtocolTree(BaseTreeRunner):
             node_name=f"{self.node_name}_first",
             robot_interface=self.robot_interface,
             protocol_name=protocol_name,
-            data_key=reminder_1
+            data_key=reminder_1,
+            debug=self.debug,
+            executor=self.executor
         )
 
         first_selector.add_children([condition_1, first_tree])
@@ -95,6 +101,8 @@ class TwoReminderProtocolTree(BaseTreeRunner):
             wait_tree_init = WaitTree(
                 node_name=f"{self.node_name}_{wait_time_key}",
                 robot_interface=self.robot_interface,
+                debug=self.debug,
+                executor=self.executor
             )
 
             wait_tree = wait_tree_init.create_tree(
@@ -125,6 +133,8 @@ class TwoReminderProtocolTree(BaseTreeRunner):
             robot_interface=self.robot_interface,
             protocol_name=protocol_name,
             data_key=reminder_2,
+            debug=self.debug,
+            executor=self.executor
         )
 
         second_selector.add_children([condition_2, second_tree])
@@ -140,10 +150,6 @@ class TwoReminderProtocolTree(BaseTreeRunner):
         ])
 
         return root_sequence
-
-
-def str2bool(v):
-    return str(v).lower() in ('true', '1', 't', 'yes')
 
 
 def main(args=None):

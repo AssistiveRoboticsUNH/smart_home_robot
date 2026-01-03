@@ -37,7 +37,7 @@ def generate_launch_description():
         executable='play_video',
         name='play_video',
         output='screen')
-    
+
     human_voice_interaction = Node(
         package='shr_human_interaction',
         executable='human_interaction_node',

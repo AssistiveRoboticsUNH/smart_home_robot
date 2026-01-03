@@ -11,7 +11,7 @@ from smart_home_pytree.trees.move_to_person_location import MoveToPersonLocation
 from smart_home_pytree.trees.ask_question_tree import AskQuestionTree
 import argparse
 import rclpy
-
+from smart_home_pytree.utils import str2bool
 # Blackboard helper behaviors
 
 
@@ -86,7 +86,7 @@ class CheckRobotStateKey_(py_trees.behaviour.Behaviour):
 
 
 class ExerciseProtocolTree(BaseTreeRunner):
-    def __init__(self, node_name: str, robot_interface=None, **kwargs):
+    def __init__(self, node_name: str, robot_interface=None, executor=None, debug=False, **kwargs):
         """
         Initialize the ExerciseProtocolTree.
 
@@ -97,6 +97,8 @@ class ExerciseProtocolTree(BaseTreeRunner):
         super().__init__(
             node_name=node_name,
             robot_interface=robot_interface,
+            debug=debug,
+            executor=executor,
             **kwargs
         )
 
@@ -257,7 +259,9 @@ class ExerciseProtocolTree(BaseTreeRunner):
 
         move_to_person_tree = MoveToPersonLocationTree(
             node_name=f"{protocol_name}_move_to_person",
-            robot_interface=self.robot_interface)
+            robot_interface=self.robot_interface,
+            debug=self.debug,
+            executor=self.executor)
         move_to_person = move_to_person_tree.create_tree()
 
         # charge_robot_tree = ChargeRobotTree(node_name=f"{protocol_name}_charge_robot", robot_interface=self.robot_interface)
@@ -268,7 +272,9 @@ class ExerciseProtocolTree(BaseTreeRunner):
                 node_name="ask_question_tree",
                 robot_interface=self.robot_interface,
                 protocol_name=protocol_name,
-                data_key="get_confirmation"
+                data_key="get_confirmation",
+                debug=self.debug,
+                executor=self.executor
             )
             ask_question = ask_question_tree.create_tree()
             inverted_ask_question = py_trees.decorators.Inverter(
@@ -378,10 +384,6 @@ class ExerciseProtocolTree(BaseTreeRunner):
             seq.add_child(rep_selector)
 
         return seq
-
-
-def str2bool(v):
-    return str(v).lower() in ('true', '1', 't', 'yes')
 
 
 def main(args=None):

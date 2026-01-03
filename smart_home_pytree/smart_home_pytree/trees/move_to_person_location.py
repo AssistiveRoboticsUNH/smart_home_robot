@@ -15,7 +15,7 @@ from smart_home_pytree.behaviors.get_person_location import GetPersonLocation
 
 from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
 from smart_home_pytree.trees.move_to_tree import MoveToLocationTree
-
+from smart_home_pytree.utils import str2bool
 import argparse
 
 
@@ -26,7 +26,7 @@ def required_actions_():
 
 
 class MoveToPersonLocationTree(BaseTreeRunner):
-    def __init__(self, node_name: str, robot_interface=None, **kwargs):
+    def __init__(self, node_name: str, robot_interface=None, executor=None, debug=False, **kwargs):
         """
         Initialize the MoveToPersonLocation.
 
@@ -37,6 +37,8 @@ class MoveToPersonLocationTree(BaseTreeRunner):
         super().__init__(
             node_name=node_name,
             robot_interface=robot_interface,
+            debug=debug,
+            executor=executor,
             **kwargs
         )
 
@@ -44,8 +46,6 @@ class MoveToPersonLocationTree(BaseTreeRunner):
         """
         Create the MoveToPersonLocationTree tree that cancels navigation if the person moves rooms.
         """
-
-        self.blackboard = py_trees.blackboard.Blackboard()
         root = py_trees.composites.Sequence("MoveToPersonSequence", memory=True)
 
         num_attempts = self.kwargs.get("num_attempts", 3)
@@ -65,7 +65,9 @@ class MoveToPersonLocationTree(BaseTreeRunner):
         move_to_room_tree = MoveToLocationTree(
             node_name="move_to_location_tree",
             robot_interface=self.robot_interface,
-            location_key="person_location"
+            location_key="person_location",
+            debug=self.debug,
+            executor=self.executor
         )
         move_to_room = move_to_room_tree.create_tree()
         robot_same_room_post = RobotPersonSameLocation(self.robot_interface)
@@ -96,10 +98,6 @@ class MoveToPersonLocationTree(BaseTreeRunner):
         ]
 
 
-def str2bool(v):
-    return str(v).lower() in ('true', '1', 't', 'yes')
-
-
 def main(args=None):
     parser = argparse.ArgumentParser(
         description="""Move to Person Location Behavior Tree
@@ -118,71 +116,21 @@ def main(args=None):
     parser.add_argument("--num_attempts", type=int, default=5,
                         help="Docking retry attempts (default: 5)")
 
-    args, unknown = parser.parse_known_args()
+    args, _ = parser.parse_known_args()
 
     tree_runner = MoveToPersonLocationTree(
         node_name="move_to_person_location_tree",
-        num_attempts=args.num_attempts
+        num_attempts=args.num_attempts,
+        debug=True
     )
     # now run in init
     tree_runner.setup()
 
-    print("run_continuous", args.run_continuous)
-    try:
-        if args.run_continuous:
-            tree_runner.run_continuous()
-        else:
-            tree_runner.run_until_done()
-    finally:
-        tree_runner.cleanup()
-
-    rclpy.shutdown()
-
-
-def main_with_stopping(args=None):
-    import threading
-
-    parser = argparse.ArgumentParser(
-        description="""Move to Person Location Behavior Tree
-
-        Handles automatic robot charging sequence:
-        1. Gets person location
-        2. moves to postion
-        3. checks if robot and person are in same location
-        4. Retries up to num_attempts times if needed
-                """,
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-
-    parser.add_argument("--num_attempts", type=int, default=5,
-                        help="Docking retry attempts (default: 5)")
-
-    args, unknown = parser.parse_known_args()
-
-    tree_runner = MoveToPersonLocationTree(
-        node_name="move_to_person_location_tree",
-        num_attempts=args.num_attempts
-    )
-    # now run in init
-    tree_runner.setup()
-
-    runner_thread = threading.Thread(target=tree_runner.run_until_done, daemon=True)
-    runner_thread.start()
-
-    print("Press 's' + Enter to stop the tree.\n")
-    try:
-        while not tree_runner._stop_tree:
-            user_input = input()
-            if user_input.strip().lower() == 's':
-                print("Stopping tree...")
-                tree_runner.stop_tree()
-                break
-    finally:
-        runner_thread.join(timeout=5)
-        print("####### Tree finished with:", tree_runner.final_status)
-        tree_runner.cleanup()
-        rclpy.shutdown()
+    if args.run_continuous:
+        tree_runner.run_continuous()
+    else:
+        tree_runner.run_until_done()
 
 
 if __name__ == "__main__":
-    main_with_stopping()
+    main()

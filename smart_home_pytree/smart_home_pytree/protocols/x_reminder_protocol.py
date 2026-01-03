@@ -1,28 +1,46 @@
-#!/usr/bin/env python3
-
-"""
-This script is responsible for running the two reminder protocol.
-
-"""
-
 import os
-import py_trees
-
-import rclpy
-
-from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
-import yaml
 import argparse
-
+from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
 from smart_home_pytree.registry import load_protocols_to_bb
 from smart_home_pytree.behaviors.check_protocol_bb import CheckProtocolBB
 from smart_home_pytree.behaviors.action_behaviors.yield_wait import YieldWait
 from smart_home_pytree.trees.tree_utils import make_reminder_tree
 from smart_home_pytree.trees.wait_tree import WaitTree
+from smart_home_pytree.utils import parse_duration, str2bool
+import py_trees
 
 
 class XReminderProtocolTree(BaseTreeRunner):
-    def __init__(self, node_name: str, robot_interface=None, test=False, **kwargs):
+    """
+    A Behavior Tree runner that dynamically orchestrates a sequence of multi-step reminders.
+
+    This class constructs a linear sequence of reminder tasks based on a protocol definition
+    stored in the global Blackboard. It supports resuming partially completed protocols by
+    checking completion flags before executing each step.
+
+    The tree structure generated follows this pattern for each reminder *i* in the protocol:
+        1. **Selector (Check if Done):**
+           - Checks ``protocol_name_done.reminder_i_done``. If True, skips to the next step.
+           - If False, executes the specific reminder behavior tree.
+        2. **Selector (Optional Wait):**
+           - If a ``wait_i`` duration is defined, checks ``protocol_name_done.wait_i_done``.
+           - If not done, executes a wait behavior (either ``YieldWait`` for production
+             or ``WaitTree`` for testing).
+
+    Attributes:
+        test (bool): If True, uses actual ``WaitTree`` behaviors (blocking/timer-based)
+            instead of ``YieldWait`` (orchestrator yielding) for wait steps.
+        kwargs (dict): Configuration arguments, must contain ``protocol_name`` to look up
+            the protocol definition in the Blackboard.
+
+    Raises:
+        ValueError: If ``protocol_name`` is missing from kwargs or if the protocol definition
+            on the Blackboard is invalid (missing ``number_of_protocols``).
+        KeyError: If specific reminder keys (message or type) are missing from the protocol definition.
+    """
+    
+    def __init__(self, node_name: str, robot_interface=None,
+                 executor=None, debug=False, test=False, **kwargs):
         """
         Initialize the XReminderProtocolTree.
 
@@ -33,6 +51,8 @@ class XReminderProtocolTree(BaseTreeRunner):
         super().__init__(
             node_name=node_name,
             robot_interface=robot_interface,
+            debug=debug,
+            executor=executor,
             **kwargs
         )
 
@@ -93,6 +113,8 @@ class XReminderProtocolTree(BaseTreeRunner):
                 robot_interface=self.robot_interface,
                 protocol_name=protocol_name,
                 data_key=reminder_key,
+                debug=self.debug,
+                executor=self.executor
             )
 
             selector.add_children([condition, reminder_tree])
@@ -101,7 +123,9 @@ class XReminderProtocolTree(BaseTreeRunner):
             # ------------------------------------------
             # Wait sequence
             # ------------------------------------------
-            if wait_after > 0:
+            # 1. Parse the value first
+            duration_seconds = parse_duration(wait_after)
+            if duration_seconds > 0:
                 wait_flag = f"{wait_key}_done"
 
                 wait_selector = py_trees.composites.Selector(
@@ -119,6 +143,8 @@ class XReminderProtocolTree(BaseTreeRunner):
                     wait_tree_init = WaitTree(
                         node_name=f"{self.node_name}_{wait_key}",
                         robot_interface=self.robot_interface,
+                        debug=self.debug,
+                        executor=self.executor
                     )
 
                     wait_tree = wait_tree_init.create_tree(
@@ -139,11 +165,8 @@ class XReminderProtocolTree(BaseTreeRunner):
         return root
 
 
-def str2bool(v):
-    return str(v).lower() in ('true', '1', 't', 'yes')
-
-
 def main(args=None):
+    """Main function to run the X Reminder Protocol Tree."""
     parser = argparse.ArgumentParser(
         description="""X Reminder Protocol Tree
 
@@ -159,7 +182,7 @@ def main(args=None):
     parser.add_argument("--protocol_name", type=str, default="medicine_am",
                         help="name of the protocol that needs to run (ex: medicine_am)")
 
-    args, unknown = parser.parse_known_args()
+    args, _ = parser.parse_known_args()
     protocol_name = args.protocol_name
     print("protocol_name: ", protocol_name)
 
@@ -186,6 +209,7 @@ def main(args=None):
 
     # done in base class
     # load_locations_to_blackboard(yaml_file_path)
+
     load_protocols_to_bb(yaml_file_path)
 
     tree_runner = XReminderProtocolTree(
@@ -195,18 +219,17 @@ def main(args=None):
     tree_runner.setup()
 
     print("run_continuous", args.run_continuous)
-    try:
-        if args.run_continuous:
-            tree_runner.run_continuous()
-        else:
-            tree_runner.run_until_done()
-    finally:
-        for key, value in blackboard.storage.items():
-            print(f"{key} : {value}")
+    if args.run_continuous:
+        tree_runner.run_continuous()
+    else:
+        tree_runner.run_until_done()
+    # try:
 
-        tree_runner.cleanup()
+    # finally:
+    for key, value in blackboard.storage.items():
+        print(f"{key} : {value}")
 
-    rclpy.shutdown()
+        # tree_runner.cleanup()
 
 
 if __name__ == "__main__":
