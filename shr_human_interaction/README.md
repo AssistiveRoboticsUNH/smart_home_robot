@@ -9,6 +9,7 @@ ROS 2 node for speech-based human–robot interaction. It wires the `aalap` dia
 - Accepts text-to-speech requests on a topic (always speaks, regardless of current state).
 - Yes/no question action server (`/ask_question`) with configurable retry count.
 - Programmatic wakeword triggering handled inside the question flow.
+- External control topics to trigger a session or force-stop an active session (volatile QoS).
 
 ## Node
 Entry point: `shr_human_interaction.human_interaction_node:main` (console script `human_interaction_node`).
@@ -18,6 +19,8 @@ Entry point: `shr_human_interaction.human_interaction_node:main` (console script
 - `/voice/user` (`std_msgs/String`, publisher): all transcribed user utterances.
 - `/voice/robot` (`std_msgs/String`, publisher): all spoken robot utterances (including those initiated via `/voice/speak`).
 - `/voice/speak` (`std_msgs/String`, subscriber): publish any text here to have it spoken immediately and mirrored on `/voice/robot`.
+- `/voice/system_trigger` (`std_msgs/Empty`, subscriber): when idle, triggers a wakeword session programmatically (QoS: reliable/volatile, depth 1).
+- `/voice/stop_session` (`std_msgs/Empty`, subscriber): when active, force-stops the current session and TTS playback (QoS: reliable/volatile, depth 1).
 
 ## Action Server
 - Name: `/ask_question`
@@ -64,6 +67,15 @@ Monitor topics:
 ros2 topic echo /voice/status
 ros2 topic echo /voice/user
 ros2 topic echo /voice/robot
+```
+
+Control sessions from CLI:
+```bash
+# Trigger listening when idle
+ros2 topic pub /voice/system_trigger std_msgs/msg/Empty "{}" --once
+
+# Stop an active session and TTS
+ros2 topic pub /voice/stop_session std_msgs/msg/Empty "{}" --once
 ```
 
 ## Dependencies

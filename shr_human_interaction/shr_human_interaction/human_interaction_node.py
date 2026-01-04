@@ -19,8 +19,9 @@ from typing import Optional
 import rclpy
 from rclpy.action import ActionServer, CancelResponse, GoalResponse
 from rclpy.callback_groups import ReentrantCallbackGroup
+from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy
 from rclpy.node import Node
-from std_msgs.msg import String
+from std_msgs.msg import String, Empty
 
 # Install aalap from https://github.com/MnAkash/aalap.git
 from aalap.dialogue_manager import DialogManager
@@ -37,7 +38,9 @@ class ShrHumanInteractionNode(Node):
       /voice/user   : std_msgs/String  (all transcribed user text)
       /voice/robot  : std_msgs/String  (all robot speech that is executed)
     Subscribes:
-      /voice/speak  : std_msgs/String  (Listens here what to all speak requests)
+      /voice/speak          : std_msgs/String  (Listens all speak requests)
+      /voice/system_trigger : std_msgs/Empty   (Programmatically trigger a wakeword session when idle)
+      /voice/stop_session   : std_msgs/Empty   (Force-stop an active session and TTS)
 
     Action Servers:
       /ask_question : shr_msgs/QuestionRequest
@@ -96,6 +99,19 @@ class ShrHumanInteractionNode(Node):
         self._question_response_q: "queue.Queue[str]" = queue.Queue(maxsize=10)
         self._question_active = False
         self._question_cancel_event = threading.Event()
+
+        # ---- Control topics (volatile, keep only freshest) ----
+        volatile_qos = QoSProfile(
+            depth=1,
+            reliability=ReliabilityPolicy.RELIABLE,
+            durability=DurabilityPolicy.VOLATILE,
+        )
+        self.sub_system_trigger = self.create_subscription(
+            Empty, "/voice/system_trigger", self._on_system_trigger, volatile_qos
+        )
+        self.sub_stop_session = self.create_subscription(
+            Empty, "/voice/stop_session", self._on_stop_session, volatile_qos
+        )
 
         # ---- Create DialogManager (library) ----
         def _on_transcript(text: str):
@@ -238,7 +254,7 @@ class ShrHumanInteractionNode(Node):
         except Exception:
             pass
 
-    def _on_question_cancel(self, goal_handle):
+    def _stop_session(self):
         self._question_cancel_event.set()
         try:
             self._question_response_q.put_nowait(_CANCELLED)
@@ -247,8 +263,22 @@ class ShrHumanInteractionNode(Node):
         self._stop_tts()
         try:
             self._dm.deactivate_wakeword_session()
-        except:
-            self.get_logger().info("Could not cancel wakeword session.")
+        except Exception:
+            pass
+
+    def _is_session_active(self) -> bool:
+        return self._latest_status not in (None, DialogManager.IDLE)
+
+    def _on_system_trigger(self, msg: Empty):
+        if not self._is_session_active():
+            self._dm.trigger_wakeword()
+
+    def _on_stop_session(self, msg: Empty):
+        if self._is_session_active():
+            self._stop_session()
+
+    def _on_question_cancel(self, goal_handle):
+        self._stop_session()
         return CancelResponse.ACCEPT
 
     def _clear_question_queue(self):
@@ -262,16 +292,7 @@ class ShrHumanInteractionNode(Node):
         return self._question_cancel_event.is_set() or goal_handle.is_cancel_requested
 
     def _cancel_goal(self, goal_handle):
-        self._question_cancel_event.set()
-        self._stop_tts()
-        try:
-            self._question_response_q.put_nowait(_CANCELLED)
-        except queue.Full:
-            pass
-        try:
-            self._dm.deactivate_wakeword_session()
-        except Exception:
-            pass
+        self._stop_session()
         goal_handle.canceled()
         result = QuestionRequest.Result()
         result.response = ""
