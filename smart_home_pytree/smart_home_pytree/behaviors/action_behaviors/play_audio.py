@@ -1,7 +1,9 @@
 import os
-import py_trees
 import subprocess
 import time
+
+import py_trees
+
 
 class PlayAudio(py_trees.behaviour.Behaviour):
     """
@@ -32,7 +34,7 @@ class PlayAudio(py_trees.behaviour.Behaviour):
             self.proc = subprocess.Popen(
                 ["mpg321", "-q", self.audio_path],
                 stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL
+                stderr=subprocess.DEVNULL,
             )
             print(f"[PlayAudio] Started: {self.audio_path}")
 
@@ -67,8 +69,10 @@ class PlayAudio(py_trees.behaviour.Behaviour):
 
 
 def main():
-    play_audio = PlayAudio("/home/olagh48652/smart-home/src/smart-home-robot/shr_resources/resources/food_reminder.mp3")
-    
+    play_audio = PlayAudio(
+        "/home/olagh48652/smart-home/src/smart-home-robot/shr_resources/resources/food_reminder.mp3"
+    )
+
     play_audio.initialise()
 
     while True:
@@ -82,6 +86,6 @@ def main():
 
     play_audio.terminate(status)
 
-        
+
 if __name__ == "__main__":
     main()

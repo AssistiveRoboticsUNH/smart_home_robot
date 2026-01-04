@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 
-'''
+"""
 Behavior that waits.
 This should be extended to allow the robot to perform other protocol while its waiting
-'''
+"""
+
+import time
 
 import py_trees
-import time
+
 
 class Wait(py_trees.behaviour.Behaviour):
     """
@@ -34,7 +36,8 @@ class Wait(py_trees.behaviour.Behaviour):
 
     def terminate(self, new_status):
         print(f"[WAIT] Terminated with status: {new_status}")
-  
+
+
 def main():
     wait = Wait(10)
     wait.initialise()
@@ -50,6 +53,7 @@ def main():
 
     wait.terminate(status)
     wait.update()
-        
+
+
 if __name__ == "__main__":
     main()

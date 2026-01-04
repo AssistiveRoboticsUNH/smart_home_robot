@@ -1,19 +1,28 @@
+import time
+
 import rclpy
 from rclpy.action import CancelResponse
-from shr_msgs.action import PlayVideoRequest
-from std_msgs.msg import String
-import time
 from rclpy.callback_groups import MutuallyExclusiveCallbackGroup, ReentrantCallbackGroup
-from .generic_action_server import run_action_server, GenericActionServer
+from std_msgs.msg import String
+
+from shr_msgs.action import PlayVideoRequest
+
+from .generic_action_server import GenericActionServer, run_action_server
 
 
 class PlayVideoActionServer(GenericActionServer):
     def __init__(self):
-        super().__init__(PlayVideoRequest, 'play_video')
+        super().__init__(PlayVideoRequest, "play_video")
         self.display_cb_group = MutuallyExclusiveCallbackGroup()
 
-        self.display_pub = self.create_publisher(String, 'display_tx', 10)
-        self.display_sub = self.create_subscription(String, 'display_rx', self.display_callback, 10, callback_group=self.display_cb_group)
+        self.display_pub = self.create_publisher(String, "display_tx", 10)
+        self.display_sub = self.create_subscription(
+            String,
+            "display_rx",
+            self.display_callback,
+            10,
+            callback_group=self.display_cb_group,
+        )
 
     def display_callback(self, msg):
         # print(f"[Received] {msg.data}")  # print the message content
@@ -22,14 +31,14 @@ class PlayVideoActionServer(GenericActionServer):
             print("callback self.video_finished", self.video_finished)
             self.get_logger().info("Video finished received!")
 
-    ## turn video off
+    # turn video off
     def cancel_callback(self, goal_handle):
         """
         Called when a cancel request is received.
         """
         self.get_logger().info(f"[{self._action_name}] Cancel requested: {goal_handle}")
-        
-        ## stop video
+
+        # stop video
         self.display_pub.publish(String(data="1"))
         # By default, allow cancel
         return CancelResponse.ACCEPT
@@ -37,21 +46,21 @@ class PlayVideoActionServer(GenericActionServer):
     def execute_callback(self, goal_handle):
         video_path = goal_handle.request.file_name
         self.get_logger().info(f"Received video goal: {video_path}")
-        
+
         # Optional feedback
         feedback = self._action_type.Feedback()
         feedback.running = True
         goal_handle.publish_feedback(feedback)
 
-        # Send video path 
+        # Send video path
         self.display_pub.publish(String(data=video_path))
 
-        ## set to false whenever a video is recieved
+        # set to false whenever a video is recieved
         self.video_finished = False
 
         # Wait for up to 3 minutes for video to finish, check every second
         start_time = self.get_clock().now()
-        timeout = rclpy.time.Duration(seconds=3*60)  # 3 minutes
+        timeout = rclpy.time.Duration(seconds=3 * 60)  # 3 minutes
         while not self.video_finished:
             time.sleep(1)
             if self.get_clock().now() - start_time > timeout:
@@ -61,7 +70,6 @@ class PlayVideoActionServer(GenericActionServer):
                 result.status = "video failed or timeout"
                 return result
 
-        
         self.get_logger().info("Video finish, success")
 
         goal_handle.succeed()
@@ -71,10 +79,11 @@ class PlayVideoActionServer(GenericActionServer):
 
 
 def main():
-    run_action_server(PlayVideoActionServer)  
-    
+    run_action_server(PlayVideoActionServer)
+
+
 # ----------------------------
 # Use generic main to run the server
 # ----------------------------
 if __name__ == "__main__":
-    main() 
+    main()

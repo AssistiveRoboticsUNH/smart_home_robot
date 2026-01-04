@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
+from datetime import datetime
+
 import rclpy
-from rclpy.node import Node
 from rclpy.action import ActionServer, CancelResponse, GoalResponse
 from rclpy.executors import MultiThreadedExecutor
-from datetime import datetime
+from rclpy.node import Node
 
 """
 Make sure in the execute callback override to publish feedback
@@ -18,7 +19,8 @@ Raises:
     NotImplementedError: if execute_callabck is not implemented in your class
 
 """
-    
+
+
 class GenericActionServer(Node):
     """
     Generic Action Server template to be inherited for all actions.
@@ -35,7 +37,7 @@ class GenericActionServer(Node):
             action_name,
             execute_callback=self._execute_with_logging,
             goal_callback=self.goal_callback,
-            cancel_callback=self.cancel_callback
+            cancel_callback=self.cancel_callback,
         )
 
         self.get_logger().info(f"[{self._action_name}] Action Server initialized.")
@@ -65,7 +67,9 @@ class GenericActionServer(Node):
         Wraps the child execute_callback with logging before, during, and after execution.
         """
         start_time = datetime.now()
-        self.get_logger().info(f"[{self._action_name}] Starting execution at {start_time}")
+        self.get_logger().info(
+            f"[{self._action_name}] Starting execution at {start_time}"
+        )
 
         try:
             # Call the overridden execute_callback in subclass
@@ -78,17 +82,20 @@ class GenericActionServer(Node):
 
         end_time = datetime.now()
         duration = (end_time - start_time).total_seconds()
-        self.get_logger().info(f"[{self._action_name}] Execution finished at {end_time} ({duration:.2f}s) Status: {status}")
+        self.get_logger().info(
+            f"[{self._action_name}] Execution finished at {end_time} ({duration:.2f}s) Status: {status}"
+        )
 
         return result
-    
 
     def execute_callback(self, goal_handle):
         """
         Actual execution logic goes here in subclass.
         Must return an instance of action_type.Result
         """
-        raise NotImplementedError("execute_callback must be implemented in the subclass")
+        raise NotImplementedError(
+            "execute_callback must be implemented in the subclass"
+        )
 
     def shutdown(self):
         """
@@ -102,6 +109,7 @@ class GenericActionServer(Node):
 USE MultiThreadedExecutor to allow for cancelling the goal
 """
 
+
 def run_action_server(action_server_class):
     """
     Generic main function to run an action server.
@@ -110,7 +118,7 @@ def run_action_server(action_server_class):
         server_class: The class of the action server (must inherit GenericActionServer)
         *args, **kwargs: Arguments to pass to the server_class constructor
     """
-    
+
     rclpy.init(args=None)
 
     server_instance = action_server_class()
@@ -120,7 +128,9 @@ def run_action_server(action_server_class):
     try:
         executor.spin()
     except KeyboardInterrupt:
-        server_instance.get_logger().info(f"[{server_instance._action_name}] Shutdown requested by user")
+        server_instance.get_logger().info(
+            f"[{server_instance._action_name}] Shutdown requested by user"
+        )
     finally:
         server_instance.shutdown()
         rclpy.try_shutdown()
