@@ -4,7 +4,7 @@ ROS2 node for human-robot interaction using speech.
 Publishes user speech transcripts, robot replies, and voice status.
 Requires aalap library for dialogue management.
 
-It also implements an action server to ask yes/no questions to the user.
+It also implements an action server(/ask_question) to ask yes/no questions to the user.
 
 Author: Moniruzzaman Akash
 Date: Dec 14, 2025
@@ -13,16 +13,21 @@ Date: Dec 14, 2025
 import queue
 import time
 import multiprocessing as mp
+import threading
 from typing import Optional
 
 import rclpy
 from rclpy.action import ActionServer, CancelResponse, GoalResponse
+from rclpy.callback_groups import ReentrantCallbackGroup
 from rclpy.node import Node
 from std_msgs.msg import String
 
 # Install aalap from https://github.com/MnAkash/aalap.git
 from aalap.dialogue_manager import DialogManager
 from shr_msgs.action import QuestionRequest
+
+# Sentinel used to short-circuit the ask_question flow when a cancel is requested
+_CANCELLED = "__cancelled__"
 
 
 class ShrHumanInteractionNode(Node):
@@ -33,10 +38,17 @@ class ShrHumanInteractionNode(Node):
       /voice/robot  : std_msgs/String  (all robot speech that is executed)
     Subscribes:
       /voice/speak  : std_msgs/String  (Listens here what to all speak requests)
+
+    Action Servers:
+      /ask_question : shr_msgs/QuestionRequest
+        - Asks a yes/no question to the user via speech.
+        - Waits for user response and returns "yes", "no", "other", or "".
+        - If cancelled, stops listening and returns "".
     """
 
     def __init__(self):
         super().__init__("human_interaction")
+        self._action_cb_group = ReentrantCallbackGroup()
 
         # ---- Parameters (override via launch/CLI) ----
         self.declare_parameter("model", "base.en")
@@ -83,6 +95,7 @@ class ShrHumanInteractionNode(Node):
         self._robot_q: "queue.Queue[str]" = queue.Queue(maxsize=20)
         self._question_response_q: "queue.Queue[str]" = queue.Queue(maxsize=10)
         self._question_active = False
+        self._question_cancel_event = threading.Event()
 
         # ---- Create DialogManager (library) ----
         def _on_transcript(text: str):
@@ -146,6 +159,7 @@ class ShrHumanInteractionNode(Node):
             execute_callback=self._execute_question_request,
             goal_callback=self._on_question_goal,
             cancel_callback=self._on_question_cancel,
+            callback_group=self._action_cb_group,
         )
 
     def _publish_str(self, pub, text: str):
@@ -218,7 +232,19 @@ class ShrHumanInteractionNode(Node):
             return GoalResponse.REJECT
         return GoalResponse.ACCEPT
 
+    def _stop_tts(self):
+        try:
+            self._dm.tts_player.stop()
+        except Exception:
+            pass
+
     def _on_question_cancel(self, goal_handle):
+        self._question_cancel_event.set()
+        try:
+            self._question_response_q.put_nowait(_CANCELLED)
+        except queue.Full:
+            pass
+        self._stop_tts()
         try:
             self._dm.deactivate_wakeword_session()
         except:
@@ -232,9 +258,30 @@ class ShrHumanInteractionNode(Node):
         except queue.Empty:
             pass
 
-    def _wait_for_status(self, desired: set[str], timeout_s: float) -> bool:
+    def _cancel_requested(self, goal_handle) -> bool:
+        return self._question_cancel_event.is_set() or goal_handle.is_cancel_requested
+
+    def _cancel_goal(self, goal_handle):
+        self._question_cancel_event.set()
+        self._stop_tts()
+        try:
+            self._question_response_q.put_nowait(_CANCELLED)
+        except queue.Full:
+            pass
+        try:
+            self._dm.deactivate_wakeword_session()
+        except Exception:
+            pass
+        goal_handle.canceled()
+        result = QuestionRequest.Result()
+        result.response = ""
+        return result
+
+    def _wait_for_status(self, desired: set[str], timeout_s: float, goal_handle=None) -> bool:
         deadline = time.time() + timeout_s
         while time.time() < deadline:
+            if goal_handle is not None and self._cancel_requested(goal_handle):
+                return False
             if self._latest_status in desired:
                 return True
             time.sleep(0.05)
@@ -261,13 +308,15 @@ class ShrHumanInteractionNode(Node):
     def _wait_for_yes_no(self, goal_handle, timeout_s: float) -> Optional[str]:
         deadline = time.time() + timeout_s
         while time.time() < deadline:
-            if goal_handle.is_cancel_requested:
-                return None
+            if self._cancel_requested(goal_handle):
+                return _CANCELLED
             try:
                 text = self._question_response_q.get(timeout=0.25)
             except queue.Empty:
                 text = None
             if text:
+                if text == _CANCELLED:
+                    return _CANCELLED
                 parsed = self._normalize_yes_no(text)
                 return parsed
                 
@@ -284,6 +333,7 @@ class ShrHumanInteractionNode(Node):
         prompt = f"{question} Please answer yes or no.".strip()
 
         self._question_active = True
+        self._question_cancel_event.clear()
         self._clear_question_queue()
         feedback = QuestionRequest.Feedback()
         feedback.running = True
@@ -292,21 +342,26 @@ class ShrHumanInteractionNode(Node):
         response: Optional[str] = None
         try:
             for attempt in range(max(1, self._ask_attempts)):
-                if goal_handle.is_cancel_requested:
-                    goal_handle.canceled()
-                    result = QuestionRequest.Result()
-                    result.response = ""
-                    return result
+                if self._cancel_requested(goal_handle):
+                    return self._cancel_goal(goal_handle)
 
-                
-                self._wait_for_status({DialogManager.IDLE}, timeout_s=5.0)
+                self._wait_for_status({DialogManager.IDLE}, timeout_s=5.0, goal_handle=goal_handle)
+                if self._cancel_requested(goal_handle):
+                    return self._cancel_goal(goal_handle)
                 
                 self.speak(prompt)
+                if self._cancel_requested(goal_handle):
+                    return self._cancel_goal(goal_handle)
+
                 self._clear_question_queue()
                 self._dm.trigger_wakeword()
-                self._wait_for_status({DialogManager.LISTENING, DialogManager.RECORDING}, timeout_s=5.0)
+                self._wait_for_status({DialogManager.LISTENING, DialogManager.RECORDING}, timeout_s=5.0, goal_handle=goal_handle)
+                if self._cancel_requested(goal_handle):
+                    return self._cancel_goal(goal_handle)
 
                 response = self._wait_for_yes_no(goal_handle, timeout_s=15.0)
+                if response == _CANCELLED:
+                    return self._cancel_goal(goal_handle)
 
                 if response == "other":
                     self._dm.deactivate_wakeword_session()
@@ -319,11 +374,8 @@ class ShrHumanInteractionNode(Node):
 
             self._dm.deactivate_wakeword_session()
 
-            if goal_handle.is_cancel_requested:
-                goal_handle.canceled()
-                result = QuestionRequest.Result()
-                result.response = ""
-                return result
+            if self._cancel_requested(goal_handle):
+                return self._cancel_goal(goal_handle)
 
             result = QuestionRequest.Result()
             result.response = response or ""
@@ -349,11 +401,14 @@ def main():
 
     rclpy.init()
     node = ShrHumanInteractionNode()
+    executor = rclpy.executors.MultiThreadedExecutor()
+    executor.add_node(node)
     try:
-        rclpy.spin(node)
+        executor.spin()
     except KeyboardInterrupt:
         pass
     finally:
+        executor.shutdown()
         node.destroy_node()
         rclpy.shutdown()
 
