@@ -472,7 +472,7 @@ class TriggerMonitor:
             # resets periodic protocols in reset array
             self.check_and_reset_protocols()
             self.recompute_satisfied()
-            time.sleep(1)  # small delay to avoid busy loop
+            time.sleep(0.5)  # small delay to avoid busy loop
 
     # --- MARK COMPLETE & RESET ---
     def parse_reset_pattern(self, reset_pattern):

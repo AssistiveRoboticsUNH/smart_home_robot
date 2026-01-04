@@ -2,7 +2,8 @@ import threading
 
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import String
+from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy
+from std_msgs.msg import String, Empty
 
 
 class HumanInterface(Node):
@@ -51,6 +52,18 @@ class HumanInterface(Node):
         # in the voice_user_callback, implmeemnt the logic in how you want to set
         # it based on the input of the user
         self.create_subscription(String, "/voice/user", self.voice_user_callback, 10)
+        
+        volatile_qos = QoSProfile(
+            depth=1,
+            reliability=ReliabilityPolicy.RELIABLE,
+            durability=DurabilityPolicy.VOLATILE,
+        )
+        
+        self.pub_stop = self.create_publisher(
+            Empty, "/voice/stop_session", volatile_qos
+        )
+        self.decisive_command = False
+        self.decisive_command_lock = threading.Lock()
 
     def _start_safety_timer(self):
         """Starts a native Python thread timer."""
@@ -77,6 +90,12 @@ class HumanInterface(Node):
 
     def _safety_timeout_callback(self):
         """Fires from a separate native thread."""
+        
+        # Prevents racing conditions, decisive_command will handle the update
+        with self.decisive_command_lock:
+            if self.decisive_command:
+                return
+        
         self.get_logger().error(
             "[HumanInterface] TIMEOUT! System resuming automatically."
         )
@@ -86,8 +105,10 @@ class HumanInterface(Node):
             )
 
         if self.human_interrupt_event.is_set():
+            msg = Empty()
             self.human_interrupt_event.clear()
             self.orchestrator_wakeup.set()
+            self.pub_stop.publish(msg)
             if self.debug:
                 print("[HumanInterface] orchestrator_wakeup SET")
                 print("[HumanInterface] human_interrupt_event clear")
@@ -105,6 +126,8 @@ class HumanInterface(Node):
         if msg.data == wakeup_triggered:
             # Only log and set if we aren't already interrupted
             if not self.human_interrupt_event.is_set():
+                with self.decisive_command_lock:
+                    self.decisive_command = False ## make sure to start again
                 self.get_logger().warn(
                     "[HumanInterface] WAKEWORD DETECTED! Pausing Orchestrator."
                 )
@@ -147,34 +170,56 @@ class HumanInterface(Node):
         """
         text = msg.data.lower()
         self.get_logger().info(f"[VOICE USER] '{text}'")
-
-        if "home" in text:
-            self.get_logger().info(
-                "[DECISION] User said 'home', set move_away=True, position='home'"
-            )
-
-            if self.debug:
-                print(
+        
+        with self.decisive_command_lock:
+            local_decisive = False
+            if "home" in text:
+                self.get_logger().info(
                     "[DECISION] User said 'home', set move_away=True, position='home'"
                 )
 
-            # to trigger the protocol, positoin decides the location
-            self.robot_interface.state.update("move_away", True)
-            self.robot_interface.state.update("position", "home")
+                if self.debug:
+                    print(
+                        "[DECISION] User said 'home', set move_away=True, position='home'"
+                    )
 
-        elif "away" in text:
-            self.get_logger().info(
-                "[DECISION] User said 'away' → set move_away=True, position='away'"
-            )
+                # to trigger the protocol, positoin decides the location
+                self.robot_interface.state.update("move_away", True)
+                self.robot_interface.state.update("position", "home")
+                local_decisive = True
 
-            if self.debug:
-                print(
+            elif "away" in text:
+                self.get_logger().info(
                     "[DECISION] User said 'away' → set move_away=True, position='away'"
                 )
 
-            self.robot_interface.state.update("move_away", True)
-            self.robot_interface.state.update("position", "away")
+                if self.debug:
+                    print(
+                        "[DECISION] User said 'away' → set move_away=True, position='away'"
+                    )
 
+                self.robot_interface.state.update("move_away", True)
+                self.robot_interface.state.update("position", "away")
+                local_decisive = True
+                
+        if local_decisive and self.human_interrupt_event.is_set():
+            self.get_logger().info("[DECISION] Stopping human interrupt immediately")
+            if self.debug:
+                print("[DECISION] Stopping human interrupt immediately")
+                
+            # time.sleep(1s) ## or use sleep
+            # Clear the human interrupt and wake orchestrator
+            self.human_interrupt_event.clear()
+            self.orchestrator_wakeup.set() ## might need to be removed to allow for states to take effect
+            
+            # Cancel the safety timer if it’s running
+            self._cancel_safety_timer()
+            
+            # Optionally publish stop message if required
+            msg = Empty()
+            self.pub_stop.publish(msg)
+            self.decisive_command = False # reset safely
+            
     def shutdown(self):
         """Cleanup method to be called by the Orchestrator on exit."""
         self.get_logger().info("Shutting down HumanInterface...")
