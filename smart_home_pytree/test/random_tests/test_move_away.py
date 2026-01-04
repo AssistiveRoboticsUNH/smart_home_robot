@@ -2,20 +2,13 @@
 
 import rclpy
 from rclpy.node import Node
-
-from std_msgs.msg import String, Bool
-from rclpy.qos import (
-    QoSProfile,
-    ReliabilityPolicy,
-    DurabilityPolicy,
-    HistoryPolicy
-)
+from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
+from std_msgs.msg import Bool, String
 
 
 class VoiceTriggerLatched(Node):
-
     def __init__(self):
-        super().__init__('voice_trigger_latched')
+        super().__init__("voice_trigger_latched")
 
         # -------- QoS: latched / reliable state --------
         self.state_qos = QoSProfile(
@@ -26,32 +19,16 @@ class VoiceTriggerLatched(Node):
         )
 
         # -------- Publishers (LATCED) --------
-        self.move_away_pub = self.create_publisher(
-            Bool,
-            'move_away',
-            self.state_qos
-        )
+        self.move_away_pub = self.create_publisher(Bool, "move_away", self.state_qos)
 
-        self.position_pub = self.create_publisher(
-            String,
-            'position',
-            self.state_qos
-        )
+        self.position_pub = self.create_publisher(String, "position", self.state_qos)
 
         # -------- Voice Subscriptions --------
         self.create_subscription(
-            String,
-            '/voice/status',
-            self.voice_status_callback,
-            10
+            String, "/voice/status", self.voice_status_callback, 10
         )
 
-        self.create_subscription(
-            String,
-            '/voice/user',
-            self.voice_user_callback,
-            10
-        )
+        self.create_subscription(String, "/voice/user", self.voice_user_callback, 10)
 
     # ================= VOICE CALLBACKS =================
 
@@ -103,5 +80,5 @@ def main(args=None):
     rclpy.shutdown()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()

@@ -1,9 +1,11 @@
-import py_trees
+import os
 import subprocess
 import tempfile
-import os
-from gtts import gTTS
 import time
+
+import py_trees
+from gtts import gTTS
+
 
 class ReadScript(py_trees.behaviour.Behaviour):
     def __init__(self, text: str, name="ReadScript"):
@@ -28,7 +30,7 @@ class ReadScript(py_trees.behaviour.Behaviour):
             self.proc = subprocess.Popen(
                 ["mpg321", "-q", self.tmp_path],
                 stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL
+                stderr=subprocess.DEVNULL,
             )
 
         except Exception as e:
@@ -43,7 +45,7 @@ class ReadScript(py_trees.behaviour.Behaviour):
         if self.proc is None:
             return py_trees.common.Status.FAILURE
 
-        ret = self.proc.poll() 
+        ret = self.proc.poll()
 
         if ret is None:
             # Still running
@@ -69,8 +71,8 @@ class ReadScript(py_trees.behaviour.Behaviour):
 
         self.proc = None
         self.tmp_path = None
-        
-        
+
+
 def main():
     read_script = ReadScript(
         "Kimleri sevdik, kimleri sildik Kimlerin peşine düştük genç ömrümüzde"

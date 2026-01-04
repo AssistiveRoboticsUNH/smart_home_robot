@@ -34,6 +34,9 @@
   <test_depend>ament_pep257</test_depend>
   <test_depend>python3-pytest</test_depend>
 
+  <doc_depend>python3-sphinx</doc_depend>
+  <doc_depend>sphinx-rtd-theme</doc_depend>
+
   <export>
     <build_type>ament_python</build_type>
   </export>
