@@ -216,8 +216,8 @@ class HumanInterface(Node):
             self._cancel_safety_timer()
             
             # Optionally publish stop message if required
-            msg = Empty()
-            self.pub_stop.publish(msg)
+            stop_msg = Empty()
+            self.pub_stop.publish(stop_msg)
             self.decisive_command = False # reset safely
             
     def shutdown(self):
