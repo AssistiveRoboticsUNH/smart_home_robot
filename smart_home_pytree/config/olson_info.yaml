@@ -32,27 +32,27 @@ protocols:
       low_level:
         reminder_1: "/home/hello-robot/smarthome_ws/src/smart_home_robot/smart_home_pytree/audio_resources/food_reminder_dain.mp3"
         type_1: audio
-        wait_1: 100 ## 5 minutes
+        wait_1: 120 ## 2 minutes
         reminder_2:  "please take your night medicine"
         type_2: text
         number_of_protocols: 2
       high_level:
         priority: 2
         requirements:
-          time: {from: "11:00", to: "12:00"}
+          time: {from: "15:00", to: "17:00"}
           permissible_locations: [living_room]
 
     medicine_pm:
       low_level:
-        reminder_1: "please take your night medicine"
-        type_1: text
-        wait_1: 50
+        reminder_1: "/home/hello-robot/smarthome_ws/src/smart_home_robot/smart_home_pytree/audio_resources/food_reminder_dain.mp3"
+        type_1: audio
+        wait_1: 120 ## 2 minutes
         reminder_2: "This is the second reminder to take your night medicine"
         type_2: text
         number_of_protocols: 2
       high_level:
         priority: 2
-        success_on: {'state': 'coffee', 'value': True}
+        success_on: {'state': 'coffee_pot', 'value': True}
         requirements: 
           time: {'from': '10:00', 'to': '15:00'}
           permissible_locations: [living_room]
