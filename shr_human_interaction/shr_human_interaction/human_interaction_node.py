@@ -392,7 +392,7 @@ class ShrHumanInteractionNode(Node):
                 if self._cancel_requested(goal_handle):
                     return self._cancel_goal(goal_handle)
 
-                response = self._wait_for_yes_no(goal_handle, timeout_s=15.0)
+                response = self._wait_for_yes_no(goal_handle, timeout_s=self._ask_no_speech_timeout_ms / 1000.0 + 0.1)
                 if response == _CANCELLED:
                     return self._cancel_goal(goal_handle)
 
