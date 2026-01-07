@@ -58,6 +58,40 @@ echo $house_yaml_path you should get your path
 The `.env` file contains sensitive information and must stay private.
 It is already included in `.gitignore` to prevent accidental commits.
 
+
+
+## Running in Simulation
+note you will need the turtlebot package installed
+
+Run the launch script
+```
+ros2 launch smart_home_pytree sim_robot.launch.py
+```
+
+then in another terminal run the orchestrator
+
+Prerequisites: Before running, you must set an environment variable pointing to your configuration file. By default, the script looks for house_yaml_path.
+```bash
+export house_yaml_path="/absolute/path/to/your/config.yaml"
+```
+Basic Execution:
+```
+python3 protocol_orchestrator.py 
+```
+
+Testing Specific Times: Run with time override for 2:30 PM and debug mode
+```
+python3 protocol_orchestrator.py --test_time "14:30" --debug
+```
+
+| Argument | Type | Default | Description |
+| :--- | :--- | :--- | :--- |
+| `--test_time` | `str` | `""` | Optional time override in `HH:MM` format. If provided, the system ignores the wall clock and uses this static time. |
+| `--debug` | `flag` | `False` | Enable detailed debug output to the console. |
+| `--env_yaml_file_name` | `str` | `"house_yaml_path"` | The **name** of the environment variable to read the YAML path from. Change this if you use a different env var name. |
+
+
+
 ## Instructions to run planner. Will make it nicer later
 TO TEST AT OLSON
 
