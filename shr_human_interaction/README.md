@@ -45,7 +45,8 @@ All parameters can be set via a launch file or CLI:
 - `wakeword_keywords` (string, default `hey_jarvis`): wakeword(s).
 - `wakeword_model_paths` (list of strings, default `[]`): custom wakeword model paths; empty disables override.
 - `vad_silero_threshold` (double, default `0.5`): VAD sensitivity.
-- `no_speech_timeout_ms` (int, default `8000`): inactivity timeout passed to `aalap` dialog manager.
+- `no_speech_timeout_ms` (int, default `3000`): inactivity timeout passed to `aalap` dialog manager.
+- `no_speech_timeout_ms_action_server` (int, default `8000`): override inactivity timeout while `/ask_question` is active.
 - `publish_hz` (double, default `20.0`): timer frequency for draining/publishing queues.
 - `ask_attempts` (int, default `3`): max retries for the `/ask_question` action.
 

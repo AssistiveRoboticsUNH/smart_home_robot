@@ -58,7 +58,8 @@ class ShrHumanInteractionNode(Node):
         self.declare_parameter("device", "cpu")
         self.declare_parameter("wakeword_keywords", "hey_jarvis")
         self.declare_parameter("vad_silero_threshold", 0.5)
-        self.declare_parameter("no_speech_timeout_ms", 8000)
+        self.declare_parameter("no_speech_timeout_ms", 3000)
+        self.declare_parameter("no_speech_timeout_ms_action_server", 8000)
         self.declare_parameter("ask_attempts", 3)
 
         # If you have model paths, provide a list via YAML/launch; empty => None
@@ -76,6 +77,9 @@ class ShrHumanInteractionNode(Node):
             self.get_parameter("vad_silero_threshold").get_parameter_value().double_value
         )
         self._no_speech_timeout_ms: int = self.get_parameter("no_speech_timeout_ms").get_parameter_value().integer_value
+        self._ask_no_speech_timeout_ms: int = (
+            self.get_parameter("no_speech_timeout_ms_action_server").get_parameter_value().integer_value
+        )
         self._ask_attempts: int = self.get_parameter("ask_attempts").get_parameter_value().integer_value
 
         self._wakeword_model_paths = self.get_parameter("wakeword_model_paths").value
@@ -265,6 +269,13 @@ class ShrHumanInteractionNode(Node):
             self._dm.deactivate_wakeword_session()
         except Exception:
             pass
+        self._set_no_speech_timeout(self._no_speech_timeout_ms)
+
+    def _set_no_speech_timeout(self, timeout_ms: int):
+        try:
+            self._dm.no_speech_timeout = int(timeout_ms)
+        except Exception:
+            pass
 
     def _is_session_active(self) -> bool:
         return self._latest_status not in (None, DialogManager.IDLE)
@@ -355,6 +366,7 @@ class ShrHumanInteractionNode(Node):
 
         self._question_active = True
         self._question_cancel_event.clear()
+        self._set_no_speech_timeout(self._ask_no_speech_timeout_ms)
         self._clear_question_queue()
         feedback = QuestionRequest.Feedback()
         feedback.running = True
@@ -380,7 +392,7 @@ class ShrHumanInteractionNode(Node):
                 if self._cancel_requested(goal_handle):
                     return self._cancel_goal(goal_handle)
 
-                response = self._wait_for_yes_no(goal_handle, timeout_s=15.0)
+                response = self._wait_for_yes_no(goal_handle, timeout_s=self._ask_no_speech_timeout_ms / 1000.0 + 0.1)
                 if response == _CANCELLED:
                     return self._cancel_goal(goal_handle)
 
@@ -407,6 +419,7 @@ class ShrHumanInteractionNode(Node):
         finally:
             self._question_active = False
             self._clear_question_queue()
+            self._set_no_speech_timeout(self._no_speech_timeout_ms)
             try:
                 self._dm.deactivate_wakeword_session()
             except Exception:
