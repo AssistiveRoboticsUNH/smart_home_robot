@@ -6,7 +6,7 @@ import os
 import py_trees
 import rclpy
 
-from smart_home_pytree.behaviors.action_behaviors import read_script
+from smart_home_pytree.behaviors.action_behaviors.read_script_aalp import ReadScript
 from smart_home_pytree.behaviors.set_protocol_bb import SetProtocolBB
 from smart_home_pytree.registry import load_protocols_to_bb
 from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
@@ -84,7 +84,8 @@ class ReadScriptTree(BaseTreeRunner):
         # charge_robot = charge_robot_tree.create_tree()
 
         # Custom behaviors
-        read_script_reminder = read_script.ReadScript(
+        read_script_reminder = ReadScript(
+            node= self.robot_interface,
             name=f"{protocol_name}_read_script", text=text
         )
 
