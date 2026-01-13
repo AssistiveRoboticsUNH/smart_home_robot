@@ -11,8 +11,8 @@ from smart_home_pytree.behaviors.set_protocol_bb import SetProtocolBB
 from smart_home_pytree.registry import load_protocols_to_bb
 from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
 from smart_home_pytree.trees.move_to_person_location import MoveToPersonLocationTree
-from smart_home_pytree.utils import str2bool
-
+from smart_home_pytree.utils import str2bool, FailureType
+from smart_home_pytree.trees.tree_utils import validate_protocol_keys
 
 class ReadScriptTree(BaseTreeRunner):
     """This script is responsible for reading a script to the person at their location."""
@@ -65,6 +65,16 @@ class ReadScriptTree(BaseTreeRunner):
 
         blackboard = py_trees.blackboard.Blackboard()
 
+        # === THE GUARD ===
+        
+        required = [data_key] ## list all that will be checked
+        is_valid, failure_tree = validate_protocol_keys(protocol_name, required)
+        
+        if not is_valid:
+            # If invalid, return the failure tree immediately. 
+            # The Orchestrator will run this, see the failure, and block the protocol.
+            return failure_tree
+        
         # If __init__ already defines values, they take priority.
         protocol_name = protocol_name or self.protocol_name
         protocol_info = blackboard.get(protocol_name)

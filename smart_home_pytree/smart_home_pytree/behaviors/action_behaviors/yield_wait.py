@@ -1,17 +1,12 @@
 #!/usr/bin/env python3
 
-"""
-wait behavior records a timed resume request on the blackboard and immediately succeeds, yielding control
-so the orchestrator can run other protocols until the scheduled time is reached.
-"""
-
 import time
 
 import py_trees
 
 from smart_home_pytree.behaviors.set_protocol_bb import SetProtocolBB
 from smart_home_pytree.registry import load_protocols_to_bb
-from smart_home_pytree.utils import parse_duration
+from smart_home_pytree.utils import parse_duration, FailureType
 
 
 class YieldWait(py_trees.behaviour.Behaviour):
@@ -66,7 +61,8 @@ class YieldWait(py_trees.behaviour.Behaviour):
         self.wait_time_key = wait_time_key
         self.max_wait = max_wait
         self.start_time = None
-        self.debug = True  # debug
+        self.debug = debug
+        self.bb = py_trees.blackboard.Blackboard()
 
     def initialise(self):
         """
@@ -88,24 +84,24 @@ class YieldWait(py_trees.behaviour.Behaviour):
         """
         self.start_time = time.time()
 
-        bb = py_trees.blackboard.Blackboard()
-        protocol_info = bb.get(self.protocol_name)
+        
+        protocol_info = self.bb.get(self.protocol_name)
         wait_time_unparsed = protocol_info[self.wait_time_key]
         wait_seconds = parse_duration(wait_time_unparsed)
         # Construct full protocol identifier (e.g., "XReminderProtocol.medicine_am")
         request_key = f"{self.class_name}.{self.protocol_name}"
 
         # Ensure wait_requests dict exists on blackboard
-        if not bb.exists("wait_requests"):
-            bb.set("wait_requests", {})
+        if not self.bb.exists("wait_requests"):
+            self.bb.set("wait_requests", {})
 
-        wait_requests = bb.get("wait_requests")
+        wait_requests = self.bb.get("wait_requests")
         wait_requests[request_key] = {
             "wait_key": self.wait_time_key,
             "seconds": wait_seconds,
             "timestamp": time.time(),
         }
-        bb.set("wait_requests", wait_requests)
+        self.bb.set("wait_requests", wait_requests)
 
         # Mark this wait step as complete so selector skips it on next run
         set_bb_node = SetProtocolBB(
@@ -133,20 +129,21 @@ class YieldWait(py_trees.behaviour.Behaviour):
             returns FAILURE anyway to prevent indefinite blocking. This is a safety
             mechanism in case TriggerMonitor is not running or has issues.
         """
-        bb = py_trees.blackboard.Blackboard()
-        wait_requests = bb.get("wait_requests")
+        wait_requests = self.bb.get("wait_requests")
         request_key = "{self.class_name}.{self.protocol_name}"
 
         # Check if TriggerMonitor picked up the request (removed from dict)
         if request_key not in wait_requests:
             if self.debug:
                 print("[YieldWait] Request processed by TriggerMonitor")
+            self.bb.set("error_reason", "YieldWait safe") ## reset bt
             return py_trees.common.Status.FAILURE
 
         # Safety timeout to prevent infinite blocking
         if time.time() - self.start_time > self.max_wait:
             if self.debug:
                 print("[YieldWait] Timeout - proceeding anyway")
+            self.bb.set("error_reason", "YieldWait unsafe, timed out") 
             return py_trees.common.Status.FAILURE
 
         # Still waiting for TriggerMonitor to process

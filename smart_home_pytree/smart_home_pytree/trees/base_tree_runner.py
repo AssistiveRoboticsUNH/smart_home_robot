@@ -13,6 +13,7 @@ from py_trees import display
 
 from smart_home_pytree.registry import load_locations_to_blackboard
 from smart_home_pytree.robot_interface import RobotInterface
+from smart_home_pytree.utils import FailureType
 
 
 class TreeRunMode(Enum):
@@ -50,6 +51,10 @@ class BaseTreeRunner:
         yaml_file_path = os.getenv("house_yaml_path", None)
         load_locations_to_blackboard(yaml_file_path)
 
+        self.bb = py_trees.blackboard.Blackboard()
+        self.failure_message = None ## for error handling
+        self.failure_type = FailureType.SAFE
+        
         # MODE SELECTION (EXPLICIT)
         if executor is None:
             self.mode = TreeRunMode.STANDALONE
@@ -173,7 +178,12 @@ class BaseTreeRunner:
         # make sure to overwrite stop flag
         self._stop_tree = False
         self.final_status = py_trees.common.Status.FAILURE  # initialize
-
+        self.failure_message = None  # Reset error message on run
+        self.failure_type = FailureType.SAFE
+        self.bb.set("error_reason", "") ## reset bt
+        ## by default type safe
+        self.bb.set("error_type", self.failure_type)
+        
         def tick_tree_until_done(timer):
             try:
                 self.tree.root.tick_once()
@@ -185,7 +195,8 @@ class BaseTreeRunner:
 
             except Exception as e:
                 import traceback
-
+                # CATCH PYTHON CRASHES
+                self.failure_message = f"Crash: {str(e)}"
                 print(f" Exception during tick: {e}")
                 traceback.print_exc()
                 self.cleanup(exit_code=1)
@@ -196,6 +207,21 @@ class BaseTreeRunner:
                 py_trees.common.Status.SUCCESS,
                 py_trees.common.Status.FAILURE,
             ]:
+                
+                # CHECK FOR LOGICAL FAILURES
+                if current_status == py_trees.common.Status.FAILURE:
+                    
+                    # Check if a behavior left a specific error note
+                    failure_reason = self.bb.get("error_reason")
+                    if failure_reason:
+                        self.failure_message = failure_reason
+                        failure_type = self.bb.get("error_type")
+                        print(f"failure_type: {failure_type}")
+                        self.failure_type = self.bb.get("error_type")
+                    else:
+                        self.failure_message = "Tree failed (unknown reason)"
+                        self.failure_type = FailureType.UNKNOWN
+                        
                 color = (
                     console.green
                     if current_status == py_trees.common.Status.SUCCESS

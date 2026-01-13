@@ -3,7 +3,8 @@ import subprocess
 import time
 
 import py_trees
-
+from std_msgs.msg import Bool
+from smart_home_pytree.utils import FailureType
 
 class PlayAudio(py_trees.behaviour.Behaviour):
     """
@@ -14,18 +15,23 @@ class PlayAudio(py_trees.behaviour.Behaviour):
         FAILURE if file missing or playback errors
     """
 
-    def __init__(self, audio_path: str, name="PlayAudio"):
+    def __init__(self, audio_path: str, debug: Bool = False,  name="PlayAudio"):
         super().__init__(name)
         self.audio_path = audio_path
         self.proc = None
-
+        self.blackboard = py_trees.blackboard.Blackboard()
+        self.debug = debug
+        
     def initialise(self):
         """Called once when the behavior starts."""
         print("[PlayAudio] initialise")
 
         # Check file exists
         if not os.path.isfile(self.audio_path):
-            print("[PlayAudio] File does not exist:", self.audio_path)
+            if self.debug:
+                print("[PlayAudio] File does not exist:", self.audio_path)
+            self.blackboard.set("error_reason", f"Audio file not found: {self.audio_path}")
+            self.blackboard.set("error_type", FailureType.BLOCKING)
             self.proc = None
             return
 

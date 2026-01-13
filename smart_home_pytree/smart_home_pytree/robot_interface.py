@@ -83,6 +83,16 @@ class RobotInterface(Node):
             durability=DurabilityPolicy.VOLATILE,
         )
 
+        self.voice_qos = QoSProfile(
+            reliability=ReliabilityPolicy.RELIABLE,
+            durability=DurabilityPolicy.VOLATILE,
+            depth=10,
+        )
+        # Publishers
+        self.pub_speak = self.create_publisher(
+            String, "/voice/speak", self.voice_qos
+        )
+        
         # Subscriptions
         self.create_subscription(
             PoseWithCovarianceStamped,
@@ -127,8 +137,12 @@ class RobotInterface(Node):
         )
         self.state.update("person_location", "living_room")
 
+    def speak(self, text:str):
+        msg = String()
+        msg.data = text
+        self.pub_speak.publish(msg)
+        
     def amcl_callback(self, msg):
-        print("updating robot amcl")
         x = msg.pose.pose.position.x
         y = msg.pose.pose.position.y
         self.state.update("robot_location_xy", (x, y))

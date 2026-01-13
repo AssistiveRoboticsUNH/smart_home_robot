@@ -51,7 +51,6 @@ class LoggingBehavior(py_trees.behaviour.Behaviour):
         self.feedback_message = full_message
         self.logger.info(full_message)
 
-        # Alternatively, you can also print if you want console output:
         print(full_message)
 
         # prepend the magic key

@@ -7,8 +7,39 @@ multiple robot behaviors and orchestrators.
 """
 
 from typing import Union
+from enum import Enum
+from datetime import datetime
+import logging
 
+class FailureType(Enum):
+    """
+    Categorizes why a tree failed.
+    """
+    SAFE = 0          # Intentional stop (YieldWait). Do nothing.
+    BLOCKING = 1      # Protocol broken (Missing file). Blacklist this protocol.
+    RETRYABLE = 2     # Transient error. Allow retry.
+    SYSTEM_HALT = 3   # CRITICAL HAZARD. Stop the entire Orchestrator.
+    UNKNOWN = 4        # Failure due to unhandled reasons.
 
+def discord_logging(msg: str, robot_interface):
+    """
+    A function to be used to send messages to be discord
+
+    Args:
+        msg (str): a string with the message to be sent
+        robot_interface (_type_): ros2 node
+    """
+    current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    full_message = f"[{current_time}] {msg}"
+    
+    # prepend the magic key
+    msg = f"weblog={full_message}"
+
+    # publish to rosout with magic word (which Discord node subscribes to)
+    robot_interface.get_logger().info(msg)
+
+    return
+    
 def str2bool(value: Union[str, int, bool]) -> bool:
     """
     Convert a string, integer, or boolean input into a boolean value.
@@ -23,7 +54,6 @@ def str2bool(value: Union[str, int, bool]) -> bool:
         bool: True if the input matches a truthy value, False otherwise.
     """
     return str(value).lower() in ("true", "1", "t", "yes")
-
 
 def parse_duration(value: Union[str, int, float]) -> int:
     """
@@ -40,6 +70,11 @@ def parse_duration(value: Union[str, int, float]) -> int:
     Returns:
         int: The parsed duration in seconds. Returns 0 if parsing fails.
     """
+    # # basic configuration to make sure you see the output in the console
+    # logging.basicConfig(level=logging.DEBUG)
+    # # Define the logger variable used in your function
+    # logger = logging.getLogger(__name__)
+
     # 1. Handle direct numbers (int or float)
     if isinstance(value, (int, float)):
         return int(value)

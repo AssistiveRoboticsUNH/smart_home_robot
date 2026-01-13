@@ -54,7 +54,7 @@ protocols:
   XReminderProtocol:
     medicine_am:
       low_level:
-        reminder_1: "/home/olagh48652/smart-home/src/smart-home-robot/shr_resources/resources/food_reminder.mp3"
+        reminder_1: "/home/olagh48652/smart-home/src/smart-home-robot/shr_resources/resources/olfat_food_reminder.mp3"
         type_1: audio
         wait_1: 120
         reminder_2:  "please take your night medicine"
@@ -68,8 +68,8 @@ protocols:
 
     medicine_pm:
       low_level:
-        reminder_1: "please take your night medicine"
-        type_1: text
+        reminder_1: "/home/olagh48652/smart-home/src/smart-home-robot/shr_resources/resources/olfat_food_reminder.mp3"
+        type_1: audio
         wait_1: 2*60
         reminder_2: "This is the second reminder to take your night medicine"
         type_2: text

@@ -17,7 +17,7 @@ class ReadScript(py_trees.behaviour.Behaviour):
         text: str,
         node: Node,
         name="ReadScript",
-        timeout=15.0,
+        timeout=120.0,
     ):
         super().__init__(name)
         self.text = text

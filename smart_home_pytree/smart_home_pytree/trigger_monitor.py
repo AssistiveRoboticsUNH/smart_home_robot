@@ -6,10 +6,6 @@ from datetime import datetime, timedelta
 import py_trees
 import yaml
 
-# TODO: unify naming class name protocol name
-#  TRIGGER MONITOR
-
-
 class TriggerMonitor:
     # pylint: disable=too-many-instance-attributes
     """
@@ -47,6 +43,7 @@ class TriggerMonitor:
         self.lock = threading.RLock()
         self.stop_flag = False
         self.completed_protocols = set()  # track completed ones
+        self.blocked_protocols = set() # track blocked protocols (stopped due to errors)
 
         self.protocols_to_reset = set()  # track ones that need resetting
         # self.protocols_to_reset should include (protocl_name, time it fines,
@@ -170,12 +167,12 @@ class TriggerMonitor:
         The wait_requests is a dictionary on the blackboard with entries:
         full_protocol_name -> {"seconds": int, "timestamp": float}
         """
-        bb = py_trees.blackboard.Blackboard()
+     
         # Ensure the key exists
-        if not bb.exists("wait_requests"):
-            bb.set("wait_requests", {})
+        if not self.blackboard.exists("wait_requests"):
+            self.blackboard.set("wait_requests", {})
 
-        wait_requests = bb.get("wait_requests")
+        wait_requests = self.blackboard.get("wait_requests")
         if self.debug and wait_requests:
             print(
                 f"[Yield wait] from collect_wait_requests got wait_requests: {wait_requests} "
@@ -184,7 +181,8 @@ class TriggerMonitor:
         for full_name, req in list(wait_requests.items()):
             seconds = req["seconds"]
             timestamp = req["timestamp"]
-            print(f"[Yield wait] from full_name {full_name} got wait_requests: {req} ")
+            if self.debug:
+                print(f"[Yield wait] from full_name {full_name} got wait_requests: {req} ")
             resume_time = datetime.fromtimestamp(timestamp) + timedelta(seconds=seconds)
 
             # Register resume
@@ -221,7 +219,9 @@ class TriggerMonitor:
         Returns:
             _type_: _description_
         """
-        print(f"[Yield wait] {full_name}: {self.pending_waits}")
+        if self.debug:
+            print(f"[Yield wait] {full_name}: {self.pending_waits}")
+            
         if full_name not in self.pending_waits.keys():
             return False
 
@@ -235,7 +235,47 @@ class TriggerMonitor:
 
         # check if protocol has key to check that it is done
         return False
+    
+    # --- BLOCK LOGIC ---
+    def block_protocol(self, full_name: str):
+        """
+        Permanently block a protocol from running (until restart or daily reset).
+        full_name corresponds to full name.
+        """
+        with self.lock:
+            if full_name not in self.blocked_protocols:
+                print(f" [TriggerMonitor] BLOCKING protocol: {full_name}")
+                self.blocked_protocols.add(full_name)
+                # Force a re-check so the orchestrator knows status changed
+                self.recompute_satisfied()
+                
+    def get_blocked_protocols(self):
+        """Return a list of currently blocked protocols."""
+        with self.lock:
+            return list(self.blocked_protocols)
 
+    def unblock_protocol(self, full_name: str):
+        """
+        Manually remove a protocol from the blocked list.
+        Also resets its 'done' flags so it can retry immediately.
+        """
+        with self.lock:
+            if full_name in self.blocked_protocols:
+                print(f" [TriggerMonitor] Manual UNBLOCK: {full_name}")
+                self.blocked_protocols.discard(full_name)
+                
+                # OPTIONAL: Reset the 'done' flag so it runs immediately if conditions are met
+                try:
+                    sub_name = full_name.split(".")[-1]
+                    self.reset_specific_protocol_dones(sub_name)
+                except Exception as e:
+                    print(f"[TriggerMonitor] Warning: Could not reset done flags for {full_name}: {e}")
+
+                # Force a re-check of what is satisfied
+                self.recompute_satisfied()
+            else:
+                print(f"[TriggerMonitor] Protocol '{full_name}' was not in the blocked list.")
+                
     # --- RESET HELPERS ---
     def reset_specific_protocol_dones(self, protocol_name: str):
         """
@@ -381,14 +421,12 @@ class TriggerMonitor:
         with self.lock:
             changed = new_satisfied != self.current_satisfied_protocols
             self.current_satisfied_protocols = new_satisfied
-        print("##############################################################")
-        print("$$$$$$$$$$$$$$$$$$$$$ Satisfied new_satisfied event : ", new_satisfied)
-        print("##############################################################")
+        
         if (
             changed or new_satisfied
         ):  # trigger if not empty and if change happened might be redundant
-            # if self.debug and changed:
-            print("Satisfied change event : ", new_satisfied)
+            if changed:
+                print("Satisfied change event : ", new_satisfied)
             self.satisfied_changed_event.set()
 
         return changed
@@ -416,8 +454,14 @@ class TriggerMonitor:
                     print(f"[Yield wait] resumed: {resumed}")
 
                 # If currently waiting (and not just resumed), skip it
-                print(f"[DEBUG waiting] name {full_name} pending {self.pending_waits} ")
                 if full_name in self.pending_waits:
+                    if self.debug:
+                        print(f"[TriggerMonitor] Skipping {full_name} (PENDING WAIT)")
+                    continue
+                
+                if full_name in self.blocked_protocols:
+                    if self.debug:
+                        print(f"[TriggerMonitor] Skipping {full_name} (BLOCKED)")
                     continue
 
                 # Completed Check
@@ -467,6 +511,9 @@ class TriggerMonitor:
             if today != last_day:
                 print("[TriggerMonitor] New day → resetting protocol done flags.")
                 self.reset_all_protocol_dones()
+                with self.lock:
+                    self.completed_protocols.clear()
+                    self.blocked_protocols.clear() ## check if needed
                 last_day = today
 
             # resets periodic protocols in reset array
@@ -500,7 +547,7 @@ class TriggerMonitor:
 
         return total_seconds if total_seconds > 0 else None
 
-    def mark_completed(self, protocol_name):
+    def mark_completed(self, full_name):
         """
         Mark a protocol as successfully completed based on its reset_pattern.
 
@@ -510,13 +557,13 @@ class TriggerMonitor:
         3. NO PATTERN / OTHER: Mark complete (runs once until daily reset).
         """
         with self.lock:
-            print(f"[TriggerMonitor] Marking {protocol_name} as completed.")
+            print(f"[TriggerMonitor] Marking {full_name} as completed.")
 
             # Parse Name & Validate
             try:
-                main, sub = protocol_name.split(".")
+                main, sub = full_name.split(".")
             except ValueError:
-                print(f"[ERROR] Invalid protocol name format: {protocol_name}")
+                print(f"[ERROR] Invalid protocol name format: {full_name}")
                 return
 
             # Retrieve YAML Config
@@ -525,7 +572,7 @@ class TriggerMonitor:
                 high_level = sub_data["high_level"]
                 reset_pattern = high_level.get("reset_pattern", None)  # None if missing
             except KeyError:
-                print(f"[ERROR] Protocol not found in YAML: {protocol_name}")
+                print(f"[ERROR] Protocol not found in YAML: {full_name}")
                 return
 
             # Determine Type
@@ -546,7 +593,7 @@ class TriggerMonitor:
                 return
 
             # --- CASE 2 & 3: Mark as Complete (Blocks re-triggering) ---
-            self.completed_protocols.add(protocol_name)
+            self.completed_protocols.add(full_name)
 
             # --- CASE 2: PERIODIC ---
             if pattern_type == "periodic":
@@ -554,23 +601,23 @@ class TriggerMonitor:
                 if reset_seconds:
                     timestamp = datetime.now()
                     self.protocols_to_reset.add(
-                        (protocol_name, timestamp, reset_seconds)
+                        (full_name, timestamp, reset_seconds)
                     )
                     if self.debug:
                         print(
-                            f"[TriggerMonitor] Type PERIODIC: Scheduled reset for {protocol_name} in {reset_seconds}s"
+                            f"[TriggerMonitor] Type PERIODIC: Scheduled reset for {full_name} in {reset_seconds}s"
                         )
                 else:
                     if self.debug:
                         print(
-                            f"[ERROR] Periodic protocol {protocol_name} has invalid time settings."
+                            f"[ERROR] Periodic protocol {full_name} has invalid time settings."
                         )
 
             # --- CASE 3: DEFAULT (No Pattern) ---
             elif pattern_type == "default":
                 if self.debug:
                     print(
-                        f"[TriggerMonitor] Type DEFAULT: {protocol_name} marked complete (no auto-reset)."
+                        f"[TriggerMonitor] Type DEFAULT: {full_name} marked complete (no auto-reset)."
                     )
 
             # Update satisfied list because one protocol just became "Complete" (blocked)

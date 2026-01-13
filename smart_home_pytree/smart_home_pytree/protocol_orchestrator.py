@@ -9,13 +9,14 @@ from datetime import datetime
 import py_trees
 import rclpy
 from rclpy.executors import MultiThreadedExecutor
+from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
+from std_msgs.msg import String, Empty
 
 from smart_home_pytree.human_interface import HumanInterface
-from smart_home_pytree.registry import load_protocols_to_bb
+from smart_home_pytree.registry import load_protocols_to_bb, update_protocol_config
 from smart_home_pytree.robot_interface import RobotInterface
 from smart_home_pytree.trigger_monitor import TriggerMonitor
-
-# PROTOCOL ORCHESTRATOR
+from smart_home_pytree.utils import FailureType
 
 
 class ProtocolOrchestrator:
@@ -69,11 +70,11 @@ class ProtocolOrchestrator:
         self.last_satisfied = None
 
         self.robot_interface = robot_interface or RobotInterface()
-        # Setup HumanInterface (CRITICAL: Create BEFORE Robot Interface spins)
+        # Setup HumanInterface
         self.human_interface_node = HumanInterface(
             human_interrupt_event=self.human_interrupt_event,
             orchestrator_wakeup=self.orchestrator_wakeup,
-            robot_interface=self.robot_interface,  # Pass None for now to prevent dependency loop
+            robot_interface=self.robot_interface, 
         )
 
         print("[orchi ]test_time:", test_time)
@@ -100,12 +101,93 @@ class ProtocolOrchestrator:
         )
         self.monitor_thread.start()
 
+        qos_profile = QoSProfile(
+            reliability=ReliabilityPolicy.RELIABLE,
+            history=HistoryPolicy.KEEP_LAST,
+            depth=1,
+            durability=DurabilityPolicy.VOLATILE,
+        )
+        
+        # --- ADMIN INTERFACE FOR UNBLOCKING---
+        self.robot_interface.create_subscription(
+            String, 
+            "/admin/unblock_protocol", 
+            self._admin_unblock_callback, 
+            qos_profile
+        )
+
+        self.robot_interface.create_subscription(
+            Empty,
+            "/admin/list_blocked",
+            self._admin_list_callback,
+            qos_profile
+        )
+        
+        self.robot_interface.create_subscription(
+            String,
+            "/admin/update_config",
+            self._admin_config_callback,
+            qos_profile
+        )
+
+    # --- ADMIN FUNCTIONS ---
+    def _admin_unblock_callback(self, msg: String):
+        """
+        ROS Topic Callback to unblock a protocol manually.
+        Usage: ros2 topic pub /admin/unblock_protocol std_msgs/msg/String "data: 'XReminderProtocol.medicine_pm'" --once
+        """
+        protocol_name = msg.data.strip()
+        print(f"[Admin] Received request to unblock: {protocol_name}")
+        self.trigger_monitor.unblock_protocol(protocol_name)
+
+    def _admin_list_callback(self, msg: Empty):
+        """
+        ROS Topic Callback to print blocked protocols.
+        Usage: ros2 topic pub /admin/list_blocked std_msgs/msg/Empty "{}" --once
+        """
+        blocked = self.trigger_monitor.get_blocked_protocols()
+        if not blocked:
+            print("[Admin] No protocols are currently blocked.")
+        else:
+            print(f"[Admin] BLOCKED PROTOCOLS: {blocked}")
+    
+    ## NOTE: Can add auto unblocking in this function
+    def _admin_config_callback(self, msg: String):
+        """
+        Parses command: "protocol_name key new_value"
+        Example: "medicine_pm reminder_1 "/home/olagh48652/smart-home/src/smart-home-robot/shr_resources/resources/food_reminder.mp3"
+        ros2 topic pub /admin/update_config std_msgs/msg/String "data: 'medicine_pm reminder_1 /home/olagh48652/smart-home/src/smart-home-robot/shr_resources/resources/food_reminder.mp3'" --once 
+
+        """
+        data = msg.data.strip()
+        parts = data.split(" ", 2) # Split into max 3 parts
+
+        if len(parts) < 3:
+            print(f"[Admin] Invalid update format. Use: 'PROTOCOL KEY NEW_VALUE'")
+            return
+
+        p_name = parts[0]
+        key = parts[1]
+        val = parts[2]
+
+        # Call the helper
+        success = update_protocol_config(p_name, key, val)
+        print("Update status success: ", success)
+    
+    # --- HELPER FUNCTIONS ---
     def _state_is_ready(self):
         for key in self.required_state_keys:
             if self.robot_interface.state.get(key) is None:
                 return False
         return True
+    
+    def camel_to_snake(self, name: str) -> str:
+        """Convert CamelCase to snake_case."""
+        s1 = re.sub(r"(.)([A-Z][a-z]+)", r"\1_\2", name)
+        s2 = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", s1)
+        return s2.lower()
 
+    # --- ORCHESTRATOR FUNCTIONS ---
     def orchestrator_loop(self):
         """
         Reactive Event Loop.
@@ -184,13 +266,15 @@ class ProtocolOrchestrator:
         if self.running_thread and not self.running_thread.is_alive():
             if self.debug:
                 print("[Orchestrator] Thread finished naturally. Cleaning up.")
+                
             with self.lock:
                 self.running_tree = None
                 self.running_thread = None
 
         # B. Get Candidates
         satisfied = self.trigger_monitor.get_satisfied()
-        print("(((((((((((( &&****** satisfied: ", satisfied)
+        if self.debug:
+            print("#### satisfied: ", satisfied)
         # Sort by priority (lowest number = highest priority)
         # satisfied is list of tuples: [("Name", priority_int), ...]
         best_candidate = min(satisfied, key=lambda x: x[1], default=None)
@@ -216,7 +300,6 @@ class ProtocolOrchestrator:
                 print("[Orchestrator] Something is running.")
 
             current_priority = current_run["priority"]
-            print("current_priority: ", current_priority)
             new_priority = best_candidate[1]
 
             if new_priority < current_priority:
@@ -227,18 +310,55 @@ class ProtocolOrchestrator:
                 self.stop_protocol()
                 self.start_protocol(best_candidate)
 
+    # --- HANDLING PROTOCOL FUNCTIONS ---
     def _run_protocol(self, tree_runner, class_protocol_name):
         """Run a protocol tree and clean up when done."""
         try:
             tree_runner.run_until_done()
         finally:
             print("tree_runner.final_status", tree_runner.final_status)
+            
+            # SUCCESS
             if tree_runner.final_status == py_trees.common.Status.SUCCESS:
                 print(
                     f"************** mark_completed {class_protocol_name} *************"
                 )
                 self.trigger_monitor.mark_completed(class_protocol_name)
 
+            elif tree_runner.final_status == py_trees.common.Status.FAILURE:
+                failure_message = getattr(tree_runner, "failure_message", None)
+                failure_type = getattr(tree_runner, "failure_type", None)
+                if failure_message:
+                    # if in error_msg:
+                    print(f"[Orchestrator] ERROR MSG in {class_protocol_name}: {failure_message}")
+                    print(f"[Orchestrator] ERROR Type in {class_protocol_name}: {failure_type}")
+                    # [Orchestrator] ERROR MSG in XReminderProtocol.medicine_pm: YieldWait safe
+                    # [Orchestrator] ERROR Type in XReminderProtocol.medicine_pm: FailureType.SAFE
+                
+                if failure_type == FailureType.SAFE:
+                    self.robot_interface.speak("Going to wait for next reminder.") ## only for texting
+                    pass # Log only
+
+                elif failure_type == FailureType.BLOCKING:
+                    print(f"[Orchestrator] BLOCKING: {class_protocol_name}. Blacklisting.")
+                    with self.lock:
+                        self.trigger_monitor.blocked_protocols.add(class_protocol_name)
+
+                elif failure_type == FailureType.SYSTEM_HALT:
+                    # === NEW CRITICAL HANDLER ===
+                    print(f"[Orchestrator] SYSTEM HALT TRIGGERED by {class_protocol_name}!")
+                    print(f"   Reason: {failure_message}")
+                    print("   Initiating Emergency Shutdown...")
+
+                    self.stop_flag = True  # Stop the orchestrator
+                    self.orchestrator_wakeup.set() # Unblock the main loop immediately
+                    
+                    # Optional: Robot announcement
+                    self.robot_interface.speak("Critical safety error. Shutting down.")
+                    
+                elif failure_type == FailureType.RETRYABLE:
+                     print(f"[Orchestrator] Retryable: {class_protocol_name}.")
+                
             with self.lock:
                 print(f"[Orchestrator] Finished: {class_protocol_name}")
                 # tree = self.running_tree["tree"]
@@ -246,12 +366,7 @@ class ProtocolOrchestrator:
                 self.running_tree = None
                 self.running_thread = None
 
-    def camel_to_snake(self, name: str) -> str:
-        """Convert CamelCase to snake_case."""
-        s1 = re.sub(r"(.)([A-Z][a-z]+)", r"\1_\2", name)
-        s2 = re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", s1)
-        return s2.lower()
-
+    
     def start_protocol(self, protocol_tuple):
         """Start the protocol in its own thread."""
         if protocol_tuple is None:
@@ -275,9 +390,7 @@ class ProtocolOrchestrator:
         snake_case_class_name = self.camel_to_snake(
             tree_class_name
         )  # turns it to snake case
-        protocol_name = class_protocol_name.split(".")[
-            -1
-        ]  # unique for a protocol ex: medicine_am
+        protocol_name = class_protocol_name.split(".")[-1]  # unique for a protocol ex: medicine_am
 
         if self.debug:
             print("**** tree_class_name : ", tree_class_name)
@@ -337,7 +450,8 @@ class ProtocolOrchestrator:
         with self.lock:
             self.running_tree = None
             self.running_thread = None
-
+            
+    # --- ORCHESTRATOR SHUTDOWN ---
     def shutdown(self):
         """Gracefully stop everything (ROS-safe)."""
         print("[Orchestrator] Shutting down...")
@@ -443,7 +557,7 @@ def main():
         raise RuntimeError(
             f"Environment variable '{args.env_yaml_file_name}' is not set."
         )
-    # blackboard = py_trees.blackboard.Blackboard()
+    
     load_protocols_to_bb(yaml_file_path)
 
     if test_time:
@@ -453,14 +567,8 @@ def main():
 
     # For testing:
     orch = ProtocolOrchestrator(test_time=test_time, debug=args.debug)
-    # orch = ProtocolOrchestrator()
     # For live use:
     # orch = ProtocolOrchestrator()
-
-    # # Mock data: pretend these are current satisfied protocols
-    # orch.trigger_monitor.get_satisfied = lambda: [
-    #     ("TwoReminderProtocol.medicine_am", 1)
-    # ]
 
     try:
         orch.orchestrator_loop()
