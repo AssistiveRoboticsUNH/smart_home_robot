@@ -15,8 +15,6 @@ from smart_home_pytree.registry import load_protocols_to_bb
 from smart_home_pytree.robot_interface import RobotInterface
 from smart_home_pytree.trigger_monitor import TriggerMonitor
 
-# PROTOCOL ORCHESTRATOR
-
 
 class ProtocolOrchestrator:
     # pylint: disable=too-many-instance-attributes
@@ -216,7 +214,6 @@ class ProtocolOrchestrator:
                 print("[Orchestrator] Something is running.")
 
             current_priority = current_run["priority"]
-            print("current_priority: ", current_priority)
             new_priority = best_candidate[1]
 
             if new_priority < current_priority:

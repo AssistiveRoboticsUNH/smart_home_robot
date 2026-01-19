@@ -12,6 +12,7 @@ from smart_home_pytree.registry import load_protocols_to_bb
 from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
 from smart_home_pytree.trees.move_to_person_location import MoveToPersonLocationTree
 from smart_home_pytree.utils import str2bool
+from smart_home_pytree.trees.tree_utils import validate_protocol_keys
 
 
 class ReadScriptTree(BaseTreeRunner):
@@ -64,6 +65,16 @@ class ReadScriptTree(BaseTreeRunner):
         """
 
         blackboard = py_trees.blackboard.Blackboard()
+        
+        # === THE GUARD ===
+        
+        required = [data_key] ## list all that will be checked
+        is_valid, failure_tree = validate_protocol_keys(protocol_name, required)
+        
+        if not is_valid:
+            # If invalid, return the failure tree immediately.
+            # The Orchestrator will run this, see the failure, and block the protocol.
+            return failure_tree
 
         # If __init__ already defines values, they take priority.
         protocol_name = protocol_name or self.protocol_name
@@ -80,8 +91,6 @@ class ReadScriptTree(BaseTreeRunner):
         )
         move_to_person = move_to_person_tree.create_tree()
 
-        # charge_robot_tree = ChargeRobotTree(node_name=f"{protocol_name}_charge_robot", robot_interface=self.robot_interface)
-        # charge_robot = charge_robot_tree.create_tree()
 
         # Custom behaviors
         read_script_reminder = ReadScript(
@@ -110,7 +119,6 @@ class ReadScriptTree(BaseTreeRunner):
                 move_to_person,
                 read_script_reminder,
                 set_read_script_success,
-                # charge_robot,
             ]
         )
 

@@ -18,7 +18,6 @@ from smart_home_pytree.behaviors.check_protocol_bb import CheckProtocolBB
 from smart_home_pytree.registry import load_protocols_to_bb
 from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
 from smart_home_pytree.trees.move_to_tree import MoveToLocationTree
-from smart_home_pytree.trees.tree_utils import make_reminder_tree
 from smart_home_pytree.utils import str2bool
 
 

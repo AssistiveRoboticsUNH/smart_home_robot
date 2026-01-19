@@ -85,9 +85,6 @@ class PlayVideoTree(BaseTreeRunner):
         )
         move_to_person = move_to_person_tree.create_tree()
 
-        # charge_robot_tree = ChargeRobotTree(node_name=f"{protocol_name}_charge_robot", robot_interface=self.robot_interface)
-        # charge_robot = charge_robot_tree.create_tree()
-
         # Custom behaviors
         video_goal = PlayVideoRequest.Goal()
         video_goal.file_name = video_path

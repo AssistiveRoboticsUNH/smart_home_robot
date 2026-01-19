@@ -5,6 +5,37 @@ import py_trees
 import py_trees_ros
 import yaml
 
+def update_protocol_config(protocol_name: str, key_to_update: str, new_value: str):
+    """
+    Updates a specific configuration value for a protocol on the Blackboard
+    without resetting the execution state (done flags).
+    """
+    blackboard = py_trees.blackboard.Blackboard()
+    
+    # 1. Check if the protocol exists
+    if not blackboard.exists(protocol_name):
+        print(f"[Update] Error: Protocol '{protocol_name}' not found on Blackboard.")
+        return False
+
+    # 2. Get the CURRENT configuration dictionary
+    #    (This contains 'video_path', 'text', etc.)
+    current_config = blackboard.get(protocol_name)
+
+    if not isinstance(current_config, dict):
+        print(f"[Update] Error: Blackboard key '{protocol_name}' is not a dictionary.")
+        return False
+
+    # 3. Log the change for safety
+    old_value = current_config.get(key_to_update, "NOT_SET")
+    print(f"[Update] Changing {protocol_name}[{key_to_update}]: '{old_value}' -> '{new_value}'")
+
+    # 4. Update the dictionary in place
+    current_config[key_to_update] = new_value
+
+    # 5. Write it back to Blackboard (updates the reference)
+    blackboard.set(protocol_name, current_config)
+    
+    return True
 
 def load_locations_to_blackboard(yaml_path: str, debug: bool = False):
     """
@@ -121,7 +152,6 @@ def load_protocols_to_bb(yaml_path: str, debug: bool = False):
 
 
 if __name__ == "__main__":
-    # yaml_file_path = "/home/olagh48652/smart_home_pytree_ws/src/smart_home_pytree/config/house_info.yaml"
 
     yaml_file_path = os.getenv("house_yaml_path", None)
     print("yaml_file_path", yaml_file_path)
