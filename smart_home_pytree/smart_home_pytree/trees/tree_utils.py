@@ -7,7 +7,6 @@ Helper script to avoid repeating code for differnt protocols
 import py_trees
 
 from smart_home_pytree.behaviors.set_protocol_bb import SetProtocolBB
-from smart_home_pytree.utils import FailureType
 
 
 def validate_protocol_keys(protocol_name, required_keys):
