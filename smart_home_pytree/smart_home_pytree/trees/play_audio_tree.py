@@ -9,7 +9,7 @@ import rclpy
 from smart_home_pytree.behaviors.action_behaviors import play_audio
 from smart_home_pytree.behaviors.set_protocol_bb import SetProtocolBB
 from smart_home_pytree.behaviors.check_protocol_bb import CheckProtocolBB
-from smart_home_pytree.registry import load_protocols_to_bb
+from smart_home_pytree.registry import load_protocols_to_bb, load_locations_to_blackboard
 from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
 from smart_home_pytree.trees.move_to_person_location import MoveToPersonLocationTree
 from smart_home_pytree.utils import str2bool
@@ -21,11 +21,11 @@ class PlayAudioTree(BaseTreeRunner):
     def __init__(
         self,
         node_name: str,
+        protocol_name: str,
+        data_key: str,
         robot_interface=None,
         executor=None,
         debug=False,
-        protocol_name: str = None,  # for tests
-        data_key: str = None,
         **kwargs,
     ):
         """
@@ -35,6 +35,28 @@ class PlayAudioTree(BaseTreeRunner):
             node_name (str): name of the ROS node.
             **kwargs: extra arguments such as location.
         """
+
+        self.protocol_name = protocol_name
+        self.data_key = data_key
+        
+        blackboard = py_trees.blackboard.Blackboard()
+        
+        if not blackboard.exists(protocol_name):
+            raise ValueError(
+                f"Validation Error: Protocol '{protocol_name}' not found in Blackboard. "
+                "Ensure `load_protocols_to_bb` is called before initializing this tree and yaml file includes the protocol name in the protocols."
+            )
+        
+        protocol_info = blackboard.get(protocol_name)
+
+        # Check if the specific data key exists within that protocol
+        if self.data_key not in protocol_info:
+            raise ValueError(
+                f"Validation Error: Key '{self.data_key}' not found inside protocol '{protocol_name}'. "
+                f"Available keys: {list(protocol_info.keys())}"
+            )
+        self.audio_path = protocol_info[data_key]
+        
         super().__init__(
             node_name=node_name,
             robot_interface=robot_interface,
@@ -43,48 +65,28 @@ class PlayAudioTree(BaseTreeRunner):
             **kwargs,
         )
 
-        # Store optional configuration ONLY USED FOR TESTING
-        self.protocol_name = protocol_name
-        self.data_key = data_key
-
-    def create_tree(
-        self, protocol_name: str = None, data_key: str = None
-    ) -> py_trees.behaviour.Behaviour:
+    def create_tree(self) -> py_trees.behaviour.Behaviour:
         """
         Creates the PlayAudioTree tree:
         Sequence:
             MoveToPersonLocation -> ReadScript -> ChargeRobot
 
-        Args:
-            protocol_name (str): which protocol does this play audio belong to (same name as in yaml)
-            data_key: which key to use (ex:first_reminder) has to be same as in yaml and part of the protocol
-            wait_time: how long should the robot wait after charging (default: 0.0s)
-
         Returns:
             the root of the tree
         """
-
-        blackboard = py_trees.blackboard.Blackboard()
-
-        # If __init__ already defines values, they take priority.
-        protocol_name = protocol_name or self.protocol_name
-        protocol_info = blackboard.get(protocol_name)
-
-        data_key = data_key or self.data_key
-        audio_path = protocol_info[data_key]
-
+        
         selector = py_trees.composites.Selector(
-            name=f"Run {data_key} If Needed", memory=True
+            name=f"Run {self.data_key} If Needed", memory=True
         )
 
         condition = CheckProtocolBB(
-            name=f"Should Run {data_key}?",
-            key=f"{protocol_name}_done.{data_key}_done",
+            name=f"Should Run {self.data_key}?",
+            key=f"{self.protocol_name}_done.{self.data_key}_done",
             expected_value=True,
         )
         
         move_to_person_tree = MoveToPersonLocationTree(
-            node_name=f"{protocol_name}_move_to_person",
+            node_name=f"{self.protocol_name}_move_to_person",
             robot_interface=self.robot_interface,
             debug=self.debug,
             executor=self.executor,
@@ -93,18 +95,18 @@ class PlayAudioTree(BaseTreeRunner):
 
         # Custom behaviors
         play_audio_reminder = play_audio.PlayAudio(
-            name=f"{protocol_name}_play_audio", audio_path=audio_path
+            name=f"{self.protocol_name}_play_audio", audio_path=self.audio_path
         )
 
         set_play_audio_success = SetProtocolBB(
             name="play_audio_set_bb",
-            key=f"{protocol_name}_done.{data_key}_done",
+            key=f"{self.protocol_name}_done.{self.data_key}_done",
             value=True,
         )
 
         # Root sequence
         root_sequence = py_trees.composites.Sequence(
-            name=f"{protocol_name}_play_audio", memory=True
+            name=f"{self.protocol_name}_play_audio", memory=True
         )
 
         root_sequence.add_children(
@@ -157,7 +159,7 @@ def main(args=None):
     print("protocol_name: ", protocol_name)
 
     yaml_file_path = os.getenv("house_yaml_path", None)
-
+    load_locations_to_blackboard(yaml_file_path)
     load_protocols_to_bb(yaml_file_path)
 
     tree_runner = PlayAudioTree(

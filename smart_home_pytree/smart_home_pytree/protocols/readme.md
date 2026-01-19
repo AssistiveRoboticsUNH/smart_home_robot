@@ -1,0 +1,1 @@
+## classes in this directory need to have the same format. no specific variables. the variable need to be set by the yaml ONLY

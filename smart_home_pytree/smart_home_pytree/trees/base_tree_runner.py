@@ -47,8 +47,7 @@ class BaseTreeRunner:
         self.nodes_cleanup_done = False
         self._stop_tree = False
 
-        yaml_file_path = os.getenv("house_yaml_path", None)
-        load_locations_to_blackboard(yaml_file_path)
+        
 
         # MODE SELECTION (EXPLICIT)
         if executor is None:

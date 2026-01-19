@@ -277,7 +277,6 @@ class ExerciseProtocolTree(BaseTreeRunner):
         )
 
         # return exercise_block
-
         move_to_person_tree = MoveToPersonLocationTree(
             node_name=f"{protocol_name}_move_to_person",
             robot_interface=self.robot_interface,

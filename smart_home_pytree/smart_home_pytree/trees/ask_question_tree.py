@@ -25,11 +25,11 @@ class AskQuestionTree(BaseTreeRunner):
     def __init__(
         self,
         node_name: str,
+        protocol_name: str,
+        data_key: str,
         robot_interface=None,
         executor=None,
         debug=False,
-        protocol_name: str = None,
-        data_key: str = None,
         **kwargs,
     ):
         """
@@ -39,6 +39,30 @@ class AskQuestionTree(BaseTreeRunner):
             node_name (str): name of the ROS node.
             **kwargs: extra arguments such as location.
         """
+
+        # Store optional configuration ONLY USED FOR TESTING
+        self.protocol_name = protocol_name
+        self.data_key = data_key
+        
+        blackboard = py_trees.blackboard.Blackboard()
+        
+        if blackboard.exists(protocol_name):
+            raise ValueError(
+                f"Validation Error: Protocol '{protocol_name}' not found in Blackboard. "
+                "Ensure `load_protocols_to_bb` is called before initializing this tree and yaml file includes the protocol name in the protocols."
+            )
+        
+        protocol_info = blackboard.get(protocol_name)
+
+        # Check if the specific data key exists within that protocol
+        if self.data_key not in protocol_info:
+            raise ValueError(
+                f"Validation Error: Key '{self.data_key}' not found inside protocol '{protocol_name}'. "
+                f"Available keys: {list(protocol_info.keys())}"
+            )
+        self.question_text = protocol_info[data_key]
+        
+        
         super().__init__(
             node_name=node_name,
             robot_interface=robot_interface,
@@ -46,14 +70,9 @@ class AskQuestionTree(BaseTreeRunner):
             executor=executor,
             **kwargs,
         )
+        
 
-        # Store optional configuration ONLY USED FOR TESTING
-        self.protocol_name = protocol_name
-        self.data_key = data_key
-
-    def create_tree(
-        self, protocol_name: str = None, data_key: str = None
-    ) -> py_trees.behaviour.Behaviour:
+    def create_tree(self) -> py_trees.behaviour.Behaviour:
         """
         Creates a behavior tree for asking a confirmation question after moving to a person.
 
@@ -62,30 +81,13 @@ class AskQuestionTree(BaseTreeRunner):
         2. Execute the AskQuestionBehavior (Custom Action Client).
         3. Conditionally update the Blackboard based on 'yes'/'no' answers.
 
-        Args:
-            protocol_name: Name of the protocol (defaults to self.protocol_name if None).
-            data_key: Key for the specific data entry (defaults to self.data_key if None).
-
         Returns:
             py_trees.behaviour.Behaviour: The root node (Sequence) of the generated tree.
         """
 
-        blackboard = py_trees.blackboard.Blackboard()
-
-        # Configuration Setup
-        protocol_name = protocol_name or self.protocol_name
-        protocol_info = blackboard.get(protocol_name)
-        data_key = data_key or self.data_key
-
-        # Safety Check
-        if not protocol_name or not data_key:
-            raise ValueError("Create Tree failed: protocol_name or data_key is missing")
-
-        question_text = protocol_info[data_key]
-
         # 1. Subtree: Navigation logic
         move_to_person_tree = MoveToPersonLocationTree(
-            node_name=f"{protocol_name}_move_to_person",
+            node_name=f"{self.protocol_name}_move_to_person",
             robot_interface=self.robot_interface,
             debug=self.debug,
             executor=self.executor,
@@ -94,26 +96,26 @@ class AskQuestionTree(BaseTreeRunner):
 
         # 2. Goal Setup: Define the question parameters
         question_goal = QuestionRequest.Goal()
-        question_goal.question = question_text
+        question_goal.question = self.question_text
 
         # 3. Custom Behavior: Logic-heavy Action Client
         # This node handles asking the question and the conditional Blackboard updates
         ask_and_eval = AskQuestionBehavior(
             name="ask_question_and_eval",
             action_goal=question_goal,
-            protocol_name=protocol_name,
-            data_key=data_key,
+            protocol_name=self.protocol_name,
+            data_key=self.data_key,
         )
 
         condition = CheckProtocolBB(
-            name=f"Should Run {data_key}?",
-            key=f"{protocol_name}_done.{data_key}_done",
+            name=f"Should Run {self.data_key}?",
+            key=f"{self.protocol_name}_done.{self.data_key}_done",
             expected_value=True,
         )
 
         # 4. Root Construction: Sequential execution with memory
         question_sequence = py_trees.composites.Sequence(
-            name=f"{protocol_name}_ask_sequence", memory=True
+            name=f"{self.protocol_name}_ask_sequence", memory=True
         )
 
         question_sequence.add_children([move_to_person, ask_and_eval])

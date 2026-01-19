@@ -198,7 +198,7 @@ def main(args=None):
         else:
             tree_runner.run_until_done()
             print("##################")
-            print("\nTICK HISTORY:\n", tree_runner._tick_history)
+            # print("\nTICK HISTORY:\n", tree_runner._tick_history)
     finally:
         # robot_interface.shutdown()
         tree_runner.cleanup()

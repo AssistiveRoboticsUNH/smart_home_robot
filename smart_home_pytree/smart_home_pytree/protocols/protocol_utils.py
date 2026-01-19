@@ -31,8 +31,10 @@ def make_reminder_tree(
             robot_interface=robot_interface,
             debug=debug,
             executor=executor,
+            protocol_name=protocol_name, 
+            data_key=data_key
         )
-        return tree.create_tree(protocol_name=protocol_name, data_key=data_key)
+        return tree.create_tree()
 
     elif reminder_type == "audio":
         tree = PlayAudioTree(
@@ -40,8 +42,10 @@ def make_reminder_tree(
             robot_interface=robot_interface,
             debug=debug,
             executor=executor,
+            protocol_name=protocol_name, 
+            data_key=data_key
         )
-        return tree.create_tree(protocol_name=protocol_name, data_key=data_key)
+        return tree.create_tree()
 
     elif reminder_type == "video":
         tree = PlayVideoTree(
@@ -49,8 +53,10 @@ def make_reminder_tree(
             robot_interface=robot_interface,
             debug=debug,
             executor=executor,
+            protocol_name=protocol_name, 
+            data_key=data_key
         )
-        return tree.create_tree(protocol_name=protocol_name, data_key=data_key)
+        return tree.create_tree()
     else:
         raise ValueError(
             f"Unknown reminder type: {reminder_type} available types are text, audio, video, question_answer "

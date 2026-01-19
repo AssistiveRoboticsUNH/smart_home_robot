@@ -10,7 +10,8 @@ import rclpy
 from shr_msgs.action import PlayVideoRequest
 from smart_home_pytree.behaviors.set_protocol_bb import SetProtocolBB
 from smart_home_pytree.behaviors.check_protocol_bb import CheckProtocolBB
-from smart_home_pytree.registry import load_protocols_to_bb
+
+from smart_home_pytree.registry import load_protocols_to_bb, load_locations_to_blackboard
 from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
 from smart_home_pytree.trees.move_to_person_location import MoveToPersonLocationTree
 from smart_home_pytree.utils import str2bool
@@ -26,11 +27,11 @@ class PlayVideoTree(BaseTreeRunner):
     def __init__(
         self,
         node_name: str,
+        protocol_name: str,
+        data_key: str,
         robot_interface=None,
         executor=None,
         debug=False,
-        protocol_name: str = None,
-        data_key: str = None,
         **kwargs,
     ):
         """
@@ -40,6 +41,30 @@ class PlayVideoTree(BaseTreeRunner):
             node_name (str): name of the ROS node.
             **kwargs: extra arguments such as location.
         """
+        
+        # Store optional configuration ONLY USED FOR TESTING
+        self.protocol_name = protocol_name
+        self.data_key = data_key
+        
+        blackboard = py_trees.blackboard.Blackboard()
+        
+        if not blackboard.exists(protocol_name):
+            raise ValueError(
+                f"Validation Error: Protocol '{self.protocol_name}' not found in Blackboard. "
+                "Ensure `load_protocols_to_bb` is called before initializing this tree and yaml file includes the protocol name in the protocols."
+            )
+        
+        protocol_info = blackboard.get(protocol_name)
+        
+
+        # Check if the specific data key exists within that protocol
+        if self.data_key not in protocol_info:
+            raise ValueError(
+                f"Validation Error: Key '{self.data_key}' not found inside protocol '{self.protocol_name}'. "
+                f"Available keys: {list(protocol_info.keys())}"
+            )
+        self.video_path = protocol_info[data_key]
+
         super().__init__(
             node_name=node_name,
             robot_interface=robot_interface,
@@ -48,13 +73,7 @@ class PlayVideoTree(BaseTreeRunner):
             **kwargs,
         )
 
-        # Store optional configuration ONLY USED FOR TESTING
-        self.protocol_name = protocol_name
-        self.data_key = data_key
-
-    def create_tree(
-        self, protocol_name: str = None, data_key: str = None
-    ) -> py_trees.behaviour.Behaviour:
+    def create_tree(self) -> py_trees.behaviour.Behaviour:
         """
         Creates the PlayVideoTree tree:
         Sequence:
@@ -63,33 +82,24 @@ class PlayVideoTree(BaseTreeRunner):
         Args:
             protocol_name (str): which protocol does this play audio belong to (same name as in yaml)
             data_key: which key to use (ex:first_reminder) has to be same as in yaml and part of the protocol
-            wait_time: how long should the robot wait after charging (default: 0.0s)
 
         Returns:
             the root of the tree
         """
 
-        blackboard = py_trees.blackboard.Blackboard()
-
-        # If __init__ already defines values, they take priority.
-        protocol_name = protocol_name or self.protocol_name
-        protocol_info = blackboard.get(protocol_name)
-
-        data_key = data_key or self.data_key
-        video_path = protocol_info[data_key]
 
         selector = py_trees.composites.Selector(
-            name=f"Run {data_key} If Needed", memory=True
+            name=f"Run {self.data_key} If Needed", memory=True
         )
 
         condition = CheckProtocolBB(
-            name=f"Should Run {data_key}?",
-            key=f"{protocol_name}_done.{data_key}_done",
+            name=f"Should Run {self.data_key}?",
+            key=f"{self.protocol_name}_done.{self.data_key}_done",
             expected_value=True,
         )
         
         move_to_person_tree = MoveToPersonLocationTree(
-            node_name=f"{protocol_name}_move_to_person",
+            node_name=f"{self.protocol_name}_move_to_person",
             robot_interface=self.robot_interface,
             debug=self.debug,
             executor=self.executor,
@@ -98,7 +108,7 @@ class PlayVideoTree(BaseTreeRunner):
 
         # Custom behaviors
         video_goal = PlayVideoRequest.Goal()
-        video_goal.file_name = video_path
+        video_goal.file_name = self.video_path
 
         play_video_reminder = py_trees_ros.actions.ActionClient(
             name="Play_video",
@@ -110,13 +120,13 @@ class PlayVideoTree(BaseTreeRunner):
 
         set_play_video_success = SetProtocolBB(
             name="play_video_set_bb",
-            key=f"{protocol_name}_done.{data_key}_done",
+            key=f"{self.protocol_name}_done.{self.data_key}_done",
             value=True,
         )
 
         # Root sequence
         root_sequence = py_trees.composites.Sequence(
-            name=f"{protocol_name}_play_video", memory=True
+            name=f"{self.protocol_name}_play_video", memory=True
         )
 
         root_sequence.add_children(
@@ -170,7 +180,7 @@ def main(args=None):
     print("protocol_name: ", protocol_name)
 
     yaml_file_path = os.getenv("house_yaml_path", None)
-
+    load_locations_to_blackboard(yaml_file_path)
     load_protocols_to_bb(yaml_file_path)
 
     tree_runner = PlayVideoTree(

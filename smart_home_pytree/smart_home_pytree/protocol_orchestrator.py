@@ -11,7 +11,7 @@ import rclpy
 from rclpy.executors import MultiThreadedExecutor
 
 from smart_home_pytree.human_interface import HumanInterface
-from smart_home_pytree.registry import load_protocols_to_bb
+from smart_home_pytree.registry import load_protocols_to_bb, load_locations_to_blackboard
 from smart_home_pytree.robot_interface import RobotInterface
 from smart_home_pytree.trigger_monitor import TriggerMonitor
 
@@ -441,7 +441,12 @@ def main():
             f"Environment variable '{args.env_yaml_file_name}' is not set."
         )
     # blackboard = py_trees.blackboard.Blackboard()
-    load_protocols_to_bb(yaml_file_path)
+    print("Loading location and protocol to bb")
+    blackboard = py_trees.blackboard.Blackboard()
+    ## remove data from prev runs
+    # blackboard.clear()
+    load_protocols_to_bb(yaml_file_path, debug=True)
+    load_locations_to_blackboard(yaml_file_path)
 
     if test_time:
         print(f"[INFO] Using overridden time: {test_time}")

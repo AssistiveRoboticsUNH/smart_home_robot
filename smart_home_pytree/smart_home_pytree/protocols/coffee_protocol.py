@@ -121,7 +121,7 @@ def main(args=None):
     yaml_file_path = os.getenv("house_yaml_path", None)
 
     blackboard = py_trees.blackboard.Blackboard()
-
+    load_locations_to_blackboard(yaml_file_path)
     load_protocols_to_bb(yaml_file_path)
 
     tree_runner = CoffeeProtocolTree(
