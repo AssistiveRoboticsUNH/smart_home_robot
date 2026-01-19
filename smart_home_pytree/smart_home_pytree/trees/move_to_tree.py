@@ -60,6 +60,11 @@ class MoveToLocationTree(BaseTreeRunner):
             executor=executor,
             **kwargs,
         )
+        
+        ## needs to be here
+        # location = self.kwargs.get("location", "")
+        ## location needs to be coming from yaml
+        # location_key = self.kwargs.get("location_key", "person_location")
 
     def create_tree(self) -> py_trees.behaviour.Behaviour:
         """
@@ -75,6 +80,7 @@ class MoveToLocationTree(BaseTreeRunner):
         # # Get the blackboard
         # blackboard = py_trees.blackboard.Blackboard()
 
+        ## todo: throw error
         location = self.kwargs.get("location", "")
         location_key = self.kwargs.get("location_key", "person_location")
 

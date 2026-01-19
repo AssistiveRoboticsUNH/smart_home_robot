@@ -12,8 +12,8 @@ import py_trees
 import rclpy
 
 from smart_home_pytree.behaviors.action_behaviors import wait
-from smart_home_pytree.behaviors.move_to_behavior import MoveToLandmark
 from smart_home_pytree.behaviors.set_protocol_bb import SetProtocolBB
+from smart_home_pytree.behaviors.check_protocol_bb import CheckProtocolBB
 from smart_home_pytree.protocols.charge_robot import ChargeRobotTree
 from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
 from smart_home_pytree.utils import parse_duration, str2bool
@@ -74,9 +74,20 @@ class WaitTree(BaseTreeRunner):
         wait_time_key = wait_time_key or self.wait_time_key
         wait_time_unparsed = protocol_info[wait_time_key]
         wait_time = parse_duration(wait_time_unparsed)
+        
+        wait_selector = py_trees.composites.Selector(
+            name=f"Wait After {wait_time_key}", memory=True
+        )
+
+        condition_wait = CheckProtocolBB(
+            name=f"Should Run Wait After {wait_time_key}?",
+            key=f"{protocol_name}_done.{wait_time_key}_done",
+            expected_value=True,
+        )
+
+
         root = py_trees.composites.Sequence(name="WaitTree", memory=True)
 
-        # state = robot_interface.state
 
         charge_robot_tree = ChargeRobotTree(
             node_name=f"{protocol_name}_charge_robot",
@@ -92,12 +103,14 @@ class WaitTree(BaseTreeRunner):
             key=f"{protocol_name}_done.{wait_time_key}_done",
             value=True,
         )
-
+        
         root.add_children([charge_robot, wait_behavior, set_wait_success])
 
-        return root
+        wait_selector.add_children([condition_wait, root])
+                
+        return wait_selector
 
-    # know what action server need to be there for debugging
+    # know what action server needs to be there for debugging
     def required_actions(self):
         # Start with base actions
         actions = required_actions_()

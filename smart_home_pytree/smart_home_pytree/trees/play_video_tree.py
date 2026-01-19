@@ -9,6 +9,7 @@ import rclpy
 
 from shr_msgs.action import PlayVideoRequest
 from smart_home_pytree.behaviors.set_protocol_bb import SetProtocolBB
+from smart_home_pytree.behaviors.check_protocol_bb import CheckProtocolBB
 from smart_home_pytree.registry import load_protocols_to_bb
 from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
 from smart_home_pytree.trees.move_to_person_location import MoveToPersonLocationTree
@@ -77,6 +78,16 @@ class PlayVideoTree(BaseTreeRunner):
         data_key = data_key or self.data_key
         video_path = protocol_info[data_key]
 
+        selector = py_trees.composites.Selector(
+            name=f"Run {data_key} If Needed", memory=True
+        )
+
+        condition = CheckProtocolBB(
+            name=f"Should Run {data_key}?",
+            key=f"{protocol_name}_done.{data_key}_done",
+            expected_value=True,
+        )
+        
         move_to_person_tree = MoveToPersonLocationTree(
             node_name=f"{protocol_name}_move_to_person",
             robot_interface=self.robot_interface,
@@ -113,11 +124,11 @@ class PlayVideoTree(BaseTreeRunner):
                 move_to_person,
                 play_video_reminder,
                 set_play_video_success,
-                # charge_robot,
             ]
         )
 
-        return root_sequence
+        selector.add_children([condition, root_sequence])
+        return selector
 
 
 def main(args=None):

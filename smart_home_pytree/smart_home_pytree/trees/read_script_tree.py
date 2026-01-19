@@ -8,15 +8,15 @@ import rclpy
 
 from smart_home_pytree.behaviors.action_behaviors.read_script_aalp import ReadScript
 from smart_home_pytree.behaviors.set_protocol_bb import SetProtocolBB
+from smart_home_pytree.behaviors.check_protocol_bb import CheckProtocolBB
 from smart_home_pytree.registry import load_protocols_to_bb
 from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
 from smart_home_pytree.trees.move_to_person_location import MoveToPersonLocationTree
 from smart_home_pytree.utils import str2bool
-from smart_home_pytree.trees.tree_utils import validate_protocol_keys
 
 
 class ReadScriptTree(BaseTreeRunner):
-    """This script is responsible for reading a script to the person at their location."""
+    """This script is responsible for reading a script to the person at their location if its not already done and update the key to done."""
 
     def __init__(
         self,
@@ -46,6 +46,14 @@ class ReadScriptTree(BaseTreeRunner):
         # Store optional configuration ONLY USED FOR TESTING
         self.protocol_name = protocol_name
         self.data_key = data_key
+        
+        # move here
+        # protocol_name = protocol_name or self.protocol_name
+        # protocol_info = blackboard.get(protocol_name)
+
+        # data_key = data_key or self.data_key
+        # text = protocol_info[data_key]
+        # and raise error
 
     def create_tree(
         self, protocol_name: str = None, data_key: str = None
@@ -65,16 +73,6 @@ class ReadScriptTree(BaseTreeRunner):
         """
 
         blackboard = py_trees.blackboard.Blackboard()
-        
-        # === THE GUARD ===
-        
-        required = [data_key] ## list all that will be checked
-        is_valid, failure_tree = validate_protocol_keys(protocol_name, required)
-        
-        if not is_valid:
-            # If invalid, return the failure tree immediately.
-            # The Orchestrator will run this, see the failure, and block the protocol.
-            return failure_tree
 
         # If __init__ already defines values, they take priority.
         protocol_name = protocol_name or self.protocol_name
@@ -83,6 +81,16 @@ class ReadScriptTree(BaseTreeRunner):
         data_key = data_key or self.data_key
         text = protocol_info[data_key]
 
+        selector = py_trees.composites.Selector(
+            name=f"Run {data_key} If Needed", memory=True
+        )
+
+        condition = CheckProtocolBB(
+            name=f"Should Run {data_key}?",
+            key=f"{protocol_name}_done.{data_key}_done",
+            expected_value=True,
+        )
+            
         move_to_person_tree = MoveToPersonLocationTree(
             node_name=f"{protocol_name}_move_to_person",
             robot_interface=self.robot_interface,
@@ -90,7 +98,6 @@ class ReadScriptTree(BaseTreeRunner):
             executor=self.executor,
         )
         move_to_person = move_to_person_tree.create_tree()
-
 
         # Custom behaviors
         read_script_reminder = ReadScript(
@@ -122,7 +129,8 @@ class ReadScriptTree(BaseTreeRunner):
             ]
         )
 
-        return root_sequence
+        selector.add_children([condition, root_sequence])
+        return selector
 
 
 def main(args=None):

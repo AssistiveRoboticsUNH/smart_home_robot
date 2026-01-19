@@ -77,14 +77,6 @@ class TwoReminderProtocolTree(BaseTreeRunner):
 
         # Conditional wrappers
         reminder_1 = "first_reminder"
-        first_selector = py_trees.composites.Selector(
-            "Run First Script if needed", memory=True
-        )
-        condition_1 = CheckProtocolBB(
-            name="Should Run First Script?",
-            key=f"{protocol_name}_done.{reminder_1}_done",
-            expected_value=True,
-        )
 
         first_tree = make_reminder_tree(
             reminder_type=type_1,
@@ -96,48 +88,15 @@ class TwoReminderProtocolTree(BaseTreeRunner):
             executor=self.executor,
         )
 
-        first_selector.add_children([condition_1, first_tree])
-
-        wait_selector = py_trees.composites.Selector("Run wait if needed", memory=True)
-
-        condition_wait = CheckProtocolBB(
-            name="Should Run wait?",
-            key=f"{protocol_name}_done.{wait_time_key}_done",
-            expected_value=True,
+        
+        wait_tree = YieldWait(
+            name=f"{self.node_name}_{wait_time_key}",
+            class_name="XReminderProtocol",  # class name without tree
+            protocol_name=protocol_name,
+            wait_time_key=wait_time_key,
         )
-
-        if self.test:
-            wait_tree_init = WaitTree(
-                node_name=f"{self.node_name}_{wait_time_key}",
-                robot_interface=self.robot_interface,
-                debug=self.debug,
-                executor=self.executor,
-            )
-
-            wait_tree = wait_tree_init.create_tree(
-                protocol_name=protocol_name,
-                wait_time_key=wait_time_key,
-            )
-        else:
-            wait_tree = YieldWait(
-                name=f"{self.node_name}_{wait_time_key}",
-                class_name="XReminderProtocol",  # class name without tree
-                protocol_name=protocol_name,
-                wait_time_key=wait_time_key,
-            )
-
-        wait_selector.add_children([condition_wait, wait_tree])
 
         reminder_2 = "second_reminder"
-        second_selector = py_trees.composites.Selector(
-            "Run Second Script if needed", memory=True
-        )
-        condition_2 = CheckProtocolBB(
-            name="Should Run Second Script?",
-            key=f"{protocol_name}_done.{reminder_2}_done",
-            expected_value=True,
-        )
-
         second_tree = make_reminder_tree(
             reminder_type=type_2,
             node_name=f"{self.node_name}_second",
@@ -148,8 +107,6 @@ class TwoReminderProtocolTree(BaseTreeRunner):
             executor=self.executor,
         )
 
-        second_selector.add_children([condition_2, second_tree])
-
         # Root sequence
         root_sequence = py_trees.composites.Sequence(
             name="TwoReminderSequence", memory=True
@@ -158,9 +115,9 @@ class TwoReminderProtocolTree(BaseTreeRunner):
         # Add behaviors in order
         root_sequence.add_children(
             [
-                first_selector,
-                wait_selector,
-                second_selector,
+                first_tree,
+                wait_tree,
+                second_tree,
             ]
         )
 

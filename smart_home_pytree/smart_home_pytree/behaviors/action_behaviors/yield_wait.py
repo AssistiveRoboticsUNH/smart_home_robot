@@ -67,6 +67,7 @@ class YieldWait(py_trees.behaviour.Behaviour):
         self.max_wait = max_wait
         self.start_time = None
         self.debug = True  # debug
+        self._already_done = False
 
     def initialise(self):
         """
@@ -94,7 +95,24 @@ class YieldWait(py_trees.behaviour.Behaviour):
         wait_seconds = parse_duration(wait_time_unparsed)
         # Construct full protocol identifier (e.g., "XReminderProtocol.medicine_am")
         request_key = f"{self.class_name}.{self.protocol_name}"
+   
+        compound_key = f"{self.protocol_name}_done.{self.wait_time_key}_done"
+        keys = compound_key.split(".")
 
+        if len(keys) != 2:
+            raise RuntimeError(f"Invalid compound key: {compound_key}")
+    
+        protocol_info = bb.get(keys[0])
+        if protocol_info is None:
+            raise RuntimeError(f"Blackboard missing key: {keys[0]}")
+
+        wait_done = protocol_info.get(keys[1], None)
+        if wait_done is True:
+            # if self.debug:
+            print(f"[YieldWait] {compound_key} already True → skipping wait")
+            self._already_done = True
+            return
+    
         # Ensure wait_requests dict exists on blackboard
         if not bb.exists("wait_requests"):
             bb.set("wait_requests", {})
@@ -133,6 +151,12 @@ class YieldWait(py_trees.behaviour.Behaviour):
             returns FAILURE anyway to prevent indefinite blocking. This is a safety
             mechanism in case TriggerMonitor is not running or has issues.
         """
+        print(f"[YieldWait] _already_done is {self._already_done}")
+        if self._already_done:
+            print(f"[YieldWait] {self.protocol_name}_done.{self.wait_time_key}_done already True → skipping wait")
+            ## its time for the other reminder so tree shouldnt fail
+            return py_trees.common.Status.SUCCESS
+            
         bb = py_trees.blackboard.Blackboard()
         wait_requests = bb.get("wait_requests")
         request_key = "{self.class_name}.{self.protocol_name}"

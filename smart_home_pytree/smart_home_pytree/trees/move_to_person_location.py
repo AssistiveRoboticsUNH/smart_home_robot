@@ -25,6 +25,8 @@ def required_actions_():
 
 
 class MoveToPersonLocationTree(BaseTreeRunner):
+    """Class creates a tree that gets the location of the person and sends the robot there if the robot is not already there."""
+
     def __init__(
         self, node_name: str, robot_interface=None, executor=None, debug=False, **kwargs
     ):
@@ -42,6 +44,8 @@ class MoveToPersonLocationTree(BaseTreeRunner):
             executor=executor,
             **kwargs,
         )
+        
+        
 
     def create_tree(self) -> py_trees.behaviour.Behaviour:
         """

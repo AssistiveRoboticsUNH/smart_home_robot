@@ -11,7 +11,7 @@ from smart_home_pytree.trees.play_audio_tree import PlayAudioTree
 from smart_home_pytree.trees.play_video_tree import PlayVideoTree
 from smart_home_pytree.trees.read_script_tree import ReadScriptTree
 
-
+## todo: if inti errors out to error report
 def make_reminder_tree(
     reminder_type: str,
     node_name: str,

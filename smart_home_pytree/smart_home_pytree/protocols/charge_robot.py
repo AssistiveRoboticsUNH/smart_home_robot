@@ -188,7 +188,6 @@ def main(args=None):
     # Pass the same instance into the tree
     tree_runner = ChargeRobotTree(
         node_name="charge_robot_tree",
-        # robot_interface=robot_interface
     )
     tree_runner.setup()
 

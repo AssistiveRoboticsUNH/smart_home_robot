@@ -61,15 +61,6 @@ class CoffeeProtocolTree(BaseTreeRunner):
 
         # Conditional wrappers
         text_1 = "first_text"
-        read_script_1_with_check = py_trees.composites.Selector(
-            "Run First Script if needed", memory=True
-        )
-        condition_1 = CheckProtocolBB(
-            name="Should Run First Script?",
-            key=f"{protocol_name}_done.{text_1}_done",
-            expected_value=True,
-        )
-
         read_script_tree_1 = ReadScriptTree(
             node_name=f"{self.node_name}_read_first_script",
             robot_interface=self.robot_interface,
@@ -80,17 +71,16 @@ class CoffeeProtocolTree(BaseTreeRunner):
             protocol_name=protocol_name, data_key=text_1
         )
 
-        read_script_1_with_check.add_children([condition_1, read_script_reminder_1])
-
         # # play_audio = play_audio.PlayAudio(name="play_audio", file="food_reminder.mp3")
 
         # Root sequence
         root_sequence = py_trees.composites.Sequence(name="CoffeeReminder", memory=True)
 
+        ## other behaviors can be added
         # Add behaviors in order
         root_sequence.add_children(
             [
-                read_script_1_with_check,
+                read_script_reminder_1,
             ]
         )
 

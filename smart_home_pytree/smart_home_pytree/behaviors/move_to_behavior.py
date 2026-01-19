@@ -64,8 +64,10 @@ class MoveToLandmark(py_trees.behaviour.Behaviour):
 
     def initialise(self):
         # Get target location from state/blackboard and Send the goal request.
+        
+        ## ToDo: check if it exists first then report if not and fail
         locations = self.blackboard.get("locations")
-
+        
         if self.debug:
             print(f"[DEBUG] [{self.name}] Preparing to send goal")
 

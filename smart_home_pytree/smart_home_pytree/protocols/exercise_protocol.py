@@ -7,7 +7,7 @@ import rclpy
 import yaml
 
 from shr_msgs.action import PlayVideoRequest
-from smart_home_pytree.behaviors.action_behaviors.read_script import ReadScript
+from smart_home_pytree.behaviors.action_behaviors.read_script_aalp import ReadScript
 from smart_home_pytree.behaviors.action_behaviors.wait import Wait
 from smart_home_pytree.registry import load_protocols_to_bb
 from smart_home_pytree.trees.ask_question_tree import AskQuestionTree

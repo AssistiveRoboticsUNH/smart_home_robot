@@ -20,7 +20,7 @@ from smart_home_pytree.utils import str2bool
 
 
 class AskQuestionTree(BaseTreeRunner):
-    """Class creates a tree get an answer from the user"""
+    """Class creates a tree to get an answer from the user"""
 
     def __init__(
         self,

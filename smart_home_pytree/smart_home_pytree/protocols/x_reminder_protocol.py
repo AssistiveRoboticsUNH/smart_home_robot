@@ -30,8 +30,6 @@ class XReminderProtocolTree(BaseTreeRunner):
              or ``WaitTree`` for testing).
 
     Attributes:
-        test (bool): If True, uses actual ``WaitTree`` behaviors (blocking/timer-based)
-            instead of ``YieldWait`` (orchestrator yielding) for wait steps.
         kwargs (dict): Configuration arguments, must contain ``protocol_name`` to look up
             the protocol definition in the Blackboard.
 
@@ -47,7 +45,6 @@ class XReminderProtocolTree(BaseTreeRunner):
         robot_interface=None,
         executor=None,
         debug=False,
-        test=False,
         **kwargs,
     ):
         """
@@ -65,7 +62,6 @@ class XReminderProtocolTree(BaseTreeRunner):
             **kwargs,
         )
 
-        self.test = test
 
     def create_tree(self) -> py_trees.behaviour.Behaviour:
         protocol_name = self.kwargs.get("protocol_name", "")
@@ -99,19 +95,6 @@ class XReminderProtocolTree(BaseTreeRunner):
             reminder_type = protocol_info[type_key]
             wait_after = protocol_info.get(wait_key, 0)
 
-            # ------------------------------------------
-            # Reminder selector (skip if already done)
-            # ------------------------------------------
-            selector = py_trees.composites.Selector(
-                name=f"Run {reminder_key} If Needed", memory=True
-            )
-
-            condition = CheckProtocolBB(
-                name=f"Should Run {reminder_key}?",
-                key=f"{protocol_name}_done.{reminder_key}_done",
-                expected_value=True,
-            )
-
             reminder_tree = make_reminder_tree(
                 reminder_type=reminder_type,
                 node_name=f"{self.node_name}_{reminder_key}",
@@ -122,8 +105,7 @@ class XReminderProtocolTree(BaseTreeRunner):
                 executor=self.executor,
             )
 
-            selector.add_children([condition, reminder_tree])
-            root.add_child(selector)
+            root.add_child(reminder_tree)
 
             # ------------------------------------------
             # Wait sequence
@@ -131,40 +113,14 @@ class XReminderProtocolTree(BaseTreeRunner):
             # 1. Parse the value first
             duration_seconds = parse_duration(wait_after)
             if duration_seconds > 0:
-                wait_flag = f"{wait_key}_done"
 
-                wait_selector = py_trees.composites.Selector(
-                    name=f"Wait After {reminder_key}", memory=True
+                wait_tree = YieldWait(
+                    name=f"{self.node_name}_{wait_key}",
+                    class_name="XReminderProtocol",  # class name without tree
+                    protocol_name=protocol_name,
+                    wait_time_key=wait_key,
                 )
-
-                condition_wait = CheckProtocolBB(
-                    name=f"Should Run Wait After {reminder_key}?",
-                    key=f"{protocol_name}_done.{wait_flag}",
-                    expected_value=True,
-                )
-
-                if self.test:
-                    wait_tree_init = WaitTree(
-                        node_name=f"{self.node_name}_{wait_key}",
-                        robot_interface=self.robot_interface,
-                        debug=self.debug,
-                        executor=self.executor,
-                    )
-
-                    wait_tree = wait_tree_init.create_tree(
-                        protocol_name=protocol_name,
-                        wait_time_key=wait_key,
-                    )
-                else:
-                    wait_tree = YieldWait(
-                        name=f"{self.node_name}_{wait_key}",
-                        class_name="XReminderProtocol",  # class name without tree
-                        protocol_name=protocol_name,
-                        wait_time_key=wait_key,
-                    )
-
-                wait_selector.add_children([condition_wait, wait_tree])
-                root.add_child(wait_selector)
+                root.add_child(wait_tree)
 
         return root
 

@@ -6,8 +6,9 @@ import os
 import py_trees
 import rclpy
 
-from smart_home_pytree.behaviors.action_behaviors import play_audio, wait
+from smart_home_pytree.behaviors.action_behaviors import play_audio
 from smart_home_pytree.behaviors.set_protocol_bb import SetProtocolBB
+from smart_home_pytree.behaviors.check_protocol_bb import CheckProtocolBB
 from smart_home_pytree.registry import load_protocols_to_bb
 from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
 from smart_home_pytree.trees.move_to_person_location import MoveToPersonLocationTree
@@ -72,6 +73,16 @@ class PlayAudioTree(BaseTreeRunner):
         data_key = data_key or self.data_key
         audio_path = protocol_info[data_key]
 
+        selector = py_trees.composites.Selector(
+            name=f"Run {data_key} If Needed", memory=True
+        )
+
+        condition = CheckProtocolBB(
+            name=f"Should Run {data_key}?",
+            key=f"{protocol_name}_done.{data_key}_done",
+            expected_value=True,
+        )
+        
         move_to_person_tree = MoveToPersonLocationTree(
             node_name=f"{protocol_name}_move_to_person",
             robot_interface=self.robot_interface,
@@ -79,9 +90,6 @@ class PlayAudioTree(BaseTreeRunner):
             executor=self.executor,
         )
         move_to_person = move_to_person_tree.create_tree()
-
-        # charge_robot_tree = ChargeRobotTree(node_name=f"{protocol_name}_charge_robot", robot_interface=self.robot_interface)
-        # charge_robot = charge_robot_tree.create_tree()
 
         # Custom behaviors
         play_audio_reminder = play_audio.PlayAudio(
@@ -104,11 +112,11 @@ class PlayAudioTree(BaseTreeRunner):
                 move_to_person,
                 play_audio_reminder,
                 set_play_audio_success,
-                # charge_robot,
             ]
         )
 
-        return root_sequence
+        selector.add_children([condition, root_sequence])
+        return selector
 
 
 def main(args=None):

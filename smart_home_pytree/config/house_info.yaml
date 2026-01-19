@@ -70,10 +70,28 @@ protocols:
       low_level:
         reminder_1: "please take your night medicine"
         type_1: text
-        wait_1: 2*60
+        wait_1: 40
         reminder_2: "This is the second reminder to take your night medicine"
         type_2: text
         number_of_protocols: 2
+      high_level:
+        priority: 2
+        success_on: {'state': 'coffee', 'value': True}
+        requirements: 
+          time: {'from': '14:00', 'to': '15:00'}
+          permissible_locations: [living_room]
+
+    medicine_3:
+      low_level:
+        reminder_1: "please take your night medicine"
+        type_1: text
+        wait_1: 10
+        reminder_2: "/home/olagh48652/smart-home/src/smart-home-robot/shr_resources/resources/food_reminder.mp3"
+        type_2: audio
+        wait_2: 10
+        reminder_3: "This is the third reminder to take your night medicine"
+        type_3: text
+        number_of_protocols: 3
       high_level:
         priority: 2
         success_on: {'state': 'coffee', 'value': True}
