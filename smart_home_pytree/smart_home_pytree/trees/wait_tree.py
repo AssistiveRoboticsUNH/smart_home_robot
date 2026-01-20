@@ -32,9 +32,9 @@ class WaitTree(BaseTreeRunner):
     def __init__(
         self,
         node_name: str,
+        protocol_name: str,
+        wait_time_key: str,
         robot_interface=None,
-        protocol_name: str = None,
-        wait_time_key: str = None,
         executor=None,
         debug=False,
         **kwargs,
@@ -56,10 +56,28 @@ class WaitTree(BaseTreeRunner):
 
         self.protocol_name = protocol_name
         self.wait_time_key = wait_time_key
+        
+        blackboard = py_trees.blackboard.Blackboard()
+        
+        if not blackboard.exists(protocol_name):
+            raise ValueError(
+                f"Validation Error: Protocol '{protocol_name}' not found in Blackboard. "
+                "Ensure `load_protocols_to_bb` is called before initializing this tree and yaml file includes the protocol name in the protocols."
+            )
+    
+        protocol_info = blackboard.get(protocol_name)
 
-    def create_tree(
-        self, protocol_name: str = None, wait_time_key: str = None
-    ) -> py_trees.behaviour.Behaviour:
+        # Check if the specific data key exists within that protocol
+        if self.wait_time_key not in protocol_info:
+            raise ValueError(
+                f"Validation Error: Key '{self.wait_time_key}' not found inside protocol '{protocol_name}'. "
+                f"Available keys: {list(protocol_info.keys())}"
+            )
+        self.wait_time_unparsed = protocol_info[wait_time_key]
+        
+        
+
+    def create_tree(self) -> py_trees.behaviour.Behaviour:
         """
         Create a tree to handle moving the robot to charge then waiting
 
@@ -67,30 +85,24 @@ class WaitTree(BaseTreeRunner):
             the root of the tree
         """
 
-        blackboard = py_trees.blackboard.Blackboard()
-        protocol_name = protocol_name or self.protocol_name
-        protocol_info = blackboard.get(protocol_name)
-
-        wait_time_key = wait_time_key or self.wait_time_key
-        wait_time_unparsed = protocol_info[wait_time_key]
-        wait_time = parse_duration(wait_time_unparsed)
+        
+        wait_time = parse_duration(self.wait_time_unparsed)
         
         wait_selector = py_trees.composites.Selector(
-            name=f"Wait After {wait_time_key}", memory=True
+            name=f"Wait After {self.wait_time_key}", memory=True
         )
 
         condition_wait = CheckProtocolBB(
-            name=f"Should Run Wait After {wait_time_key}?",
-            key=f"{protocol_name}_done.{wait_time_key}_done",
+            name=f"Should Run Wait After {self.wait_time_key}?",
+            key=f"{self.protocol_name}_done.{self.wait_time_key}_done",
             expected_value=True,
         )
-
 
         root = py_trees.composites.Sequence(name="WaitTree", memory=True)
 
 
         charge_robot_tree = ChargeRobotTree(
-            node_name=f"{protocol_name}_charge_robot",
+            node_name=f"{self.protocol_name}_charge_robot",
             robot_interface=self.robot_interface,
             debug=self.debug,
             executor=self.executor,
@@ -100,7 +112,7 @@ class WaitTree(BaseTreeRunner):
         wait_behavior = wait.Wait(name="wait", duration_in_sec=wait_time)
         set_wait_success = SetProtocolBB(
             name="wait_set_bb",
-            key=f"{protocol_name}_done.{wait_time_key}_done",
+            key=f"{self.protocol_name}_done.{self.wait_time_key}_done",
             value=True,
         )
         

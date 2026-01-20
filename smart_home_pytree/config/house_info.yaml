@@ -131,7 +131,7 @@ protocols:
       low_level:
         away_location: dining # move_away has two loc, home or away where away is the location defined here and has to be part of the locations in the yaml
         position_state_key: position # key to indicate whether to move away or home
-        state_key: move_away
+        state_key: move_away ## in robot interface when move_awayis set to true it triggers the protocol
       high_level:
         reset_pattern:
           type: instant 

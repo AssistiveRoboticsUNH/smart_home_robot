@@ -53,7 +53,37 @@ class MoveAwayProtocolTree(BaseTreeRunner):
             executor=executor,
             **kwargs,
         )
+        
+        self.bb = py_trees.blackboard.Blackboard()
+        self.protocol_name = self.kwargs.get("protocol_name", "")
+        
+        if not self.protocol_name:
+            raise ValueError(
+                f"[{node_name}] CRITICAL: 'protocol_name' is missing in kwargs."
+            )
+            
+        if not self.bb.exists(self.protocol_name):
+            available_keys = list(self.bb.storage.keys())
+            raise KeyError(
+                f"[{node_name}] CRITICAL: Protocol '{self.protocol_name}' "
+                f"not found in Blackboard. Available keys: {available_keys}"
+            )
 
+        self.protocol_info = self.bb.get(self.protocol_name)
+
+        required_keys = ["position_state_key", "state_key", "away_location"]
+        
+        for key in required_keys:
+            if key not in self.protocol_info:
+                raise KeyError(
+                    f"[{node_name}] CRITICAL: Missing required key '{key}' "
+                    f"in protocol '{self.protocol_name}' configuration."
+                )
+                
+        self.position_state_key = self.protocol_info["position_state_key"] ##  indicates the key in the robot_interface state that indicates whether to move to home or away
+        self.update_key = self.protocol_info["state_key"] ## key in the robot_interface state that is responsible to trigger the protocol
+        self.away_location = self.protocol_info["away_location"] ## indicastes what the away location set to 
+        
     def create_tree(self) -> py_trees.behaviour.Behaviour:
         """
         Creates the MoveAwayProtocolTree tree:
@@ -64,31 +94,32 @@ class MoveAwayProtocolTree(BaseTreeRunner):
             the root of the tree
         """
 
-        protocol_name = self.kwargs.get("protocol_name", "")
-        blackboard = py_trees.blackboard.Blackboard()
-        protocol_info = blackboard.get(protocol_name)
+        # Use the key from YAML (e.g., "position") to look up the robot's current value
+        #    If robot.state["position"] is "home", we go Home.
+        #    If robot.state["position"] is "away", we go to the dining room (away_location).
+        move_command = self.robot_interface.state.get(self.position_state_key, None)
 
-        if protocol_info is None:
-            raise RuntimeError(f"Protocol '{protocol_name}' not found in blackboard")
+        if move_command is None:
+            raise ValueError(
+                f"[{self.node_name}] CRITICAL: Robot state is missing the required key '{self.position_state_key}'. "
+                f"Cannot determine target. Current state keys: {list(self.robot_interface.state.keys())}"
+            )
 
-        # Extract the types
-        position_key = "position_state_key"
-
-        state_key = protocol_info[position_key]
-        update_key = protocol_info["state_key"]
-
-        state = self.robot_interface.state
-        position_loc = state.get(state_key, None)
-
-        print(f"&&& postion loc using key {state_key} is {position_loc}")
-        print(f"&&& protocol_info using key {protocol_info['away_location']}")
-
-        if position_loc == "home":
+   
+        if move_command == "home":
             target_location = "home"
+            
+        elif move_command == "away":
+            target_location = self.away_location 
+            
         else:
-            target_location = protocol_info["away_location"]
+            raise ValueError(
+                f"[{self.node_name}] CRITICAL: Invalid value '{move_command}' found for state key '{self.position_state_key}'. "
+                f"Expected 'home' or 'away'."
+            )
 
-        print(f"&&& target_location loc using key {target_location} ")
+        if self.debug:
+             print(f"[{self.node_name}] Command: '{move_command}' -> Target: '{target_location}'")
 
         # Root sequence
         root_sequence = py_trees.composites.Sequence(
@@ -96,7 +127,7 @@ class MoveAwayProtocolTree(BaseTreeRunner):
         )
 
         move_to_position_tree = MoveToLocationTree(
-            node_name=f"{protocol_name}_move_to_position",
+            node_name=f"{self.protocol_name}_move_to_position",
             robot_interface=self.robot_interface,
             location=target_location,
             debug=self.debug,
@@ -108,7 +139,7 @@ class MoveAwayProtocolTree(BaseTreeRunner):
 
         # set it to false
         update_key_beh = UpdateRobotStateKey_(
-            name="update_beh", robot_interface=self.robot_interface, key=update_key
+            name="update_beh", robot_interface=self.robot_interface, key=self.update_key
         )
 
         # Add behaviors in order

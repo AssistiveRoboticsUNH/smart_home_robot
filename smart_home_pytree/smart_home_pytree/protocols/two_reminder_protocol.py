@@ -28,7 +28,6 @@ class TwoReminderProtocolTree(BaseTreeRunner):
         robot_interface=None,
         executor=None,
         debug=False,
-        test=False,
         **kwargs,
     ):
         """
@@ -45,7 +44,39 @@ class TwoReminderProtocolTree(BaseTreeRunner):
             executor=executor,
             **kwargs,
         )
-        self.test = test
+        
+        self.bb = py_trees.blackboard.Blackboard()
+
+        self.protocol_name = self.kwargs.get("protocol_name", "")
+        if not self.protocol_name:
+            raise ValueError(
+                f"[{node_name}] CRITICAL: 'protocol_name' is missing in kwargs."
+            )
+
+        if not self.bb.exists(self.protocol_name):
+            available_keys = list(self.bb.storage.keys())
+            raise KeyError(
+                f"[{node_name}] CRITICAL: Protocol '{self.protocol_name}' "
+                f"not found in Blackboard. Available keys: {available_keys}"
+            )
+
+        self.protocol_info = self.bb.get(self.protocol_name)
+
+        if self.debug:
+            print(f"[{node_name}] Protocol Info: {self.protocol_info}")
+
+        required_keys = ["type_first", "type_second", "wait_time_between_reminders"]
+        for key in required_keys:
+            if key not in self.protocol_info:
+                raise KeyError(
+                    f"[{node_name}] CRITICAL: Protocol '{self.protocol_name}' "
+                    f"is missing required key '{key}'."
+                )
+
+        self.type_1 = self.protocol_info["type_first"]
+        self.type_2 = self.protocol_info["type_second"]
+        self.wait_time_key = "wait_time_between_reminders"
+   
 
     def create_tree(self) -> py_trees.behaviour.Behaviour:
         """
@@ -57,32 +88,12 @@ class TwoReminderProtocolTree(BaseTreeRunner):
             the root of the tree
         """
 
-        protocol_name = self.kwargs.get("protocol_name", "")
-        bb = py_trees.blackboard.Blackboard()
-
-        # Extract the types
-
-        print("protocol_name: ", protocol_name)
-        protocol_info = bb.get(protocol_name)
-
-        print(protocol_info)
-        type_1 = protocol_info["type_first"]
-        type_2 = protocol_info["type_second"]
-        wait_time_key = "wait_time_between_reminders"
-
-        if protocol_name == "":
-            raise ValueError(
-                "protocol_name is empty. Please specify one (e.g., 'medicine_am')."
-            )
-
-        # Conditional wrappers
         reminder_1 = "first_reminder"
-
         first_tree = make_reminder_tree(
-            reminder_type=type_1,
+            reminder_type=self.type_1,
             node_name=f"{self.node_name}_first",
             robot_interface=self.robot_interface,
-            protocol_name=protocol_name,
+            protocol_name=self.protocol_name,
             data_key=reminder_1,
             debug=self.debug,
             executor=self.executor,
@@ -90,18 +101,18 @@ class TwoReminderProtocolTree(BaseTreeRunner):
 
         
         wait_tree = YieldWait(
-            name=f"{self.node_name}_{wait_time_key}",
+            name=f"{self.node_name}_{self.wait_time_key}",
             class_name="XReminderProtocol",  # class name without tree
-            protocol_name=protocol_name,
-            wait_time_key=wait_time_key,
+            protocol_name=self.protocol_name,
+            wait_time_key=self.wait_time_key,
         )
 
         reminder_2 = "second_reminder"
         second_tree = make_reminder_tree(
-            reminder_type=type_2,
+            reminder_type=self.type_2,
             node_name=f"{self.node_name}_second",
             robot_interface=self.robot_interface,
-            protocol_name=protocol_name,
+            protocol_name=self.protocol_name,
             data_key=reminder_2,
             debug=self.debug,
             executor=self.executor,

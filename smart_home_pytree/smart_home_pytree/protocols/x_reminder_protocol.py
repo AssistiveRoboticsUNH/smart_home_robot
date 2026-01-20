@@ -61,36 +61,62 @@ class XReminderProtocolTree(BaseTreeRunner):
             executor=executor,
             **kwargs,
         )
+        
+        self.bb = py_trees.blackboard.Blackboard()
 
+        self.protocol_name = self.kwargs.get("protocol_name", "")
+        if not self.protocol_name:
+            raise ValueError(
+                f"[{node_name}] CRITICAL: 'protocol_name' is missing in kwargs."
+            )
+
+        if not self.bb.exists(self.protocol_name):
+            available_keys = list(self.bb.storage.keys())
+            raise KeyError(
+                f"[{node_name}] CRITICAL: Protocol '{self.protocol_name}' "
+                f"not found in Blackboard. Available keys: {available_keys}"
+            )
+
+        self.protocol_info = self.bb.get(self.protocol_name)
+
+        self.num_protocols = self.protocol_info.get("number_of_protocols", 0)
+        
+        if self.num_protocols <= 0:
+            raise ValueError(
+                f"[{node_name}] CRITICAL: '{self.protocol_name}' has invalid "
+                f"number_of_protocols: {self.num_protocols}. Must be > 0."
+            )
+
+        if self.debug:
+            print(f"[{node_name}] Protocol '{self.protocol_name}' found with {self.num_protocols} steps.")
+            
 
     def create_tree(self) -> py_trees.behaviour.Behaviour:
-        protocol_name = self.kwargs.get("protocol_name", "")
-        if protocol_name == "":
-            raise ValueError("Missing protocol_name in kwargs")
-
-        bb = py_trees.blackboard.Blackboard()
-        protocol_info = bb.get(protocol_name)
-
-        n = protocol_info.get("number_of_protocols", 0)
-        if n == 0:
-            raise ValueError(f"{protocol_name} has no number_of_protocols set")
+        protocol_name = self.protocol_name
+        protocol_info = self.protocol_info
 
         root = py_trees.composites.Sequence(
             name=f"{protocol_name}_XReminderSequence", memory=True
         )
 
         # Iterate through reminders in order
-        for i in range(1, n + 1):
+        for i in range(1, self.num_protocols + 1):
             reminder_key = f"reminder_{i}"
             type_key = f"type_{i}"
             wait_key = f"wait_{i}"
 
             # Message and type must exist
-            if reminder_key not in protocol_info:
-                raise KeyError(f"{protocol_name}: Missing {reminder_key}")
+            if reminder_key not in self.protocol_info:
+                raise KeyError(
+                    f"[{self.node_name}] CRITICAL: Protocol '{self.protocol_name}' "
+                    f"expects step {i} but is missing key '{reminder_key}'."
+                )
 
-            if type_key not in protocol_info:
-                raise KeyError(f"{protocol_name}: Missing {type_key}")
+            if type_key not in self.protocol_info:
+                raise KeyError(
+                    f"[{self.node_name}] CRITICAL: Protocol '{self.protocol_name}' "
+                    f"expects step {i} but is missing key '{type_key}'."
+                )
 
             reminder_type = protocol_info[type_key]
             wait_after = protocol_info.get(wait_key, 0)

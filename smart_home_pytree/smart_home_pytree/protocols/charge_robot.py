@@ -48,7 +48,8 @@ class ChargeRobotTree(BaseTreeRunner):
             executor=executor,
             **kwargs,
         )
-
+        
+        self.num_attempts = self.kwargs.get("num_attempts", 3) ## just to expose the variable
     def create_tree(self) -> py_trees.behaviour.Behaviour:
         """
         Create a tree to handle charging the robot
@@ -58,11 +59,8 @@ class ChargeRobotTree(BaseTreeRunner):
         """
 
         target_location = "home"
-        num_attempts = self.kwargs.get("num_attempts", 3)
+        num_attempts = self.num_attempts
         print("num_attempts", num_attempts)
-
-        print("ChargeRobotTree robot_interface ", self.robot_interface)
-        print("ChargeRobotTree self id:", id(self))
 
         # --- Task Selector Equivalent to Fallback---
         charge_robot = py_trees.composites.Selector(name="Tasks", memory=True)

@@ -56,6 +56,7 @@ class GuardedMoveToPersonLocationTree(BaseTreeRunner):
         except BaseException:
             print("going_to_location is not set")
             going_to = None
+            
 
         print("going_to: ", going_to)
 

@@ -61,10 +61,19 @@ class MoveToLocationTree(BaseTreeRunner):
             **kwargs,
         )
         
-        ## needs to be here
-        # location = self.kwargs.get("location", "")
-        ## location needs to be coming from yaml
-        # location_key = self.kwargs.get("location_key", "person_location")
+        self.location = self.kwargs.get("location")
+        if not self.location:
+            raise ValueError(f"[{node_name}] CRITICAL ERROR: 'location' parameter is missing!")
+        
+        blackboard = py_trees.blackboard.Blackboard()
+
+        if blackboard.exists("location_key"):
+            # If it exists on blackboard, use it
+            self.location_key = blackboard.get("location_key")
+        else:
+            # Otherwise use kwargs, defaulting to "person_location"
+            self.location_key = self.kwargs.get("location_key", "person_location")
+
 
     def create_tree(self) -> py_trees.behaviour.Behaviour:
         """
@@ -77,13 +86,7 @@ class MoveToLocationTree(BaseTreeRunner):
             print("MoveTOtree robot_interface ", self.robot_interface)
             print("MoveTOtree self id:", id(self))
 
-        # # Get the blackboard
-        # blackboard = py_trees.blackboard.Blackboard()
-
-        ## todo: throw error
-        location = self.kwargs.get("location", "")
-        location_key = self.kwargs.get("location_key", "person_location")
-
+   
         root = py_trees.composites.Sequence(name="MoveTo", memory=True)
 
         # state = robot_interface.state
@@ -115,7 +118,7 @@ class MoveToLocationTree(BaseTreeRunner):
         undocking_selector.add_children([not_charging_status, undock_robot])
 
         move_to_position = MoveToLandmark(
-            self.robot_interface, location=location, location_key=location_key
+            self.robot_interface, location=self.location, location_key=self.location_key
         )
 
         # move_to_position =

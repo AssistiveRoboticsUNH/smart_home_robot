@@ -117,6 +117,48 @@ class ExerciseProtocolTree(BaseTreeRunner):
         # self.node_name = node_name
         self.key_word = "exercise_key"
         self.bb = py_trees.blackboard.Blackboard()
+        
+        self.protocol_name = self.kwargs.get("protocol_name", "")
+        if not self.protocol_name:
+            raise ValueError(
+                f"[{node_name}] CRITICAL: 'protocol_name' is missing in kwargs."
+            )
+            
+        if not self.bb.exists(self.protocol_name)
+            raise KeyError(
+                    f"[{node_name}] CRITICAL: Protocol '{self.protocol_name}' "
+                    f"was not found in the Blackboard. keys available: {list(self.bb.storage.keys())}"
+                )
+        
+        self.protocol_info = self.bb.get(self.protocol_name)
+     
+            
+        # List of keys that MUST exist in the protocol info
+        required_keys = [
+            "exercise_yaml_file",
+            "start_state_key",
+            "stop_state_key",
+            "video_dir_path",
+        ]
+
+        for key in required_keys:
+            if key not in self.protocol_info:
+                raise KeyError(
+                    f"[{node_name}] CRITICAL: Missing required key '{key}' in protocol '{self.protocol_name}' configuration."
+                )
+
+        exercise_yaml_path = self.protocol_info["exercise_yaml_file"]
+        self.start_key = self.protocol_info["start_state_key"]
+        self.stop_key = self.protocol_info["stop_state_key"]
+        self.video_dir_path = self.protocol_info["video_dir_path"]
+        
+        if not os.path.isfile(self.exercise_yaml_path):
+            raise FileNotFoundError(
+                f"[{node_name}] CRITICAL: Exercise YAML file not found at: {self.exercise_yaml_path}"
+            )
+        
+        # Pre-load data to ensure YAML is valid right now
+        self.exercise_data = self.load_exercise_yaml(exercise_yaml_path)
 
     def load_exercise_yaml(self, path):
         """
@@ -134,18 +176,13 @@ class ExerciseProtocolTree(BaseTreeRunner):
         return data
 
     def create_tree(self):
-        protocol_name = self.kwargs.get("protocol_name", "")
-        if protocol_name == "":
-            raise ValueError(
-                "protocol_name is empty. Please specify one (e.g., 'medicine_am')."
-            )
+        protocol_name = self.protocol_name
 
         protocol_info = self.bb.get(protocol_name)
 
-        exercise_yaml_file = protocol_info["exercise_yaml_file"]
-        self.start_key = protocol_info["start_state_key"]
-        self.stop_key = protocol_info["stop_state_key"]
-        self.video_dir_path = protocol_info["video_dir_path"]
+        self.start_key = self.start_key
+        self.stop_key = self.stop_key
+        self.video_dir_path = self.video_dir_path
 
         confirmation_key = "get_confirmation"
         try:
@@ -156,8 +193,7 @@ class ExerciseProtocolTree(BaseTreeRunner):
         print("self.start_key", self.start_key)
         print("self.stop_key", self.stop_key)
 
-        print("exercise_yaml_file: ", exercise_yaml_file)
-        data = self.load_exercise_yaml(exercise_yaml_file)
+        data = self.exercise_data 
 
         key_prefix = self.key_word + protocol_name  # "exercise_key"
         print("key_prefix: ", key_prefix)

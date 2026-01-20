@@ -46,7 +46,6 @@ class MoveToPersonLocationTree(BaseTreeRunner):
         )
         
         
-
     def create_tree(self) -> py_trees.behaviour.Behaviour:
         """
         Create the MoveToPersonLocationTree tree that cancels navigation if the person moves rooms.
