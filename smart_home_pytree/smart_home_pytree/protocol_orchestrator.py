@@ -14,6 +14,7 @@ from smart_home_pytree.human_interface import HumanInterface
 from smart_home_pytree.registry import load_protocols_to_bb, load_locations_to_blackboard
 from smart_home_pytree.robot_interface import RobotInterface
 from smart_home_pytree.trigger_monitor import TriggerMonitor
+from smart_home_pytree.utils import BlackboardLogger
 
 
 class ProtocolOrchestrator:
@@ -74,7 +75,6 @@ class ProtocolOrchestrator:
             robot_interface=self.robot_interface,  # Pass None for now to prevent dependency loop
         )
 
-        print("[orchi ]test_time:", test_time)
         # Setup TriggerMonitor
         self.trigger_monitor = TriggerMonitor(
             self.robot_interface,
@@ -92,11 +92,23 @@ class ProtocolOrchestrator:
         self.ros_spin_thread = threading.Thread(target=self.executor.spin, daemon=True)
         self.ros_spin_thread.start()
 
-        # Non-ROS threads are fine
+        # Non-ROS threads
         self.monitor_thread = threading.Thread(
             target=self.trigger_monitor.start_monitor, daemon=True
         )
         self.monitor_thread.start()
+        
+        # --- Setup logger ---
+        blackboard = py_trees.blackboard.Blackboard()
+
+        # 3. Create  Custom Logger
+        # If robot_interface is a node, it uses it. If not, it uses print.
+        custom_logger = BlackboardLogger(node=self.robot_interface, debug_mode=debug)
+
+        # 4. SAVE IT GLOBALLY
+        # Saved globally so 'logger' is available to every single Python file in project
+        blackboard.set("logger", custom_logger)
+        self.bb_logger = blackboard.get("logger")
 
     def _state_is_ready(self):
         for key in self.required_state_keys:
@@ -109,17 +121,16 @@ class ProtocolOrchestrator:
         Reactive Event Loop.
         Blocks until an event occurs (Human Voice or Trigger Change), then acts.
         """
-        if self.debug:
-            print("[Orchestrator] Starting reactive loop")
+        self.bb_logger.notify_discord("[Orchestrator] Starting Orchestrator loop")          
 
         while not self.stop_flag:
-            if self.debug:
-                print("[Orchestrator] while of orchestrator_loop...")
+            # if self.debug:
+            #     print("[Orchestrator] while of orchestrator_loop...")
+            self.bb_logger.debug("[Orchestrator] In the while of orchestrator_loop...") 
 
             # 1. Gatekeeper: Doesn't do anything if robot isn't ready
             if not self._state_is_ready():
-                if self.debug:
-                    print("[Orchestrator] Robot state not ready. Waiting...")
+                self.bb_logger.info("[Orchestrator]  Robot state not ready. Waiting...")    
                 time.sleep(2)
                 continue
 
@@ -128,12 +139,14 @@ class ProtocolOrchestrator:
             self.orchestrator_wakeup.clear()
 
             if self.stop_flag:
+                self.bb_logger.notify_discord("[Orchestrator] stop_flag was triggered") 
                 break
 
             # 3. PRIORITY 1: Human Interruption
             #    If the interrupt flag is set, we stop everything and trap execution
             #    here until the human releases us.
             if self.human_interrupt_event.is_set():
+                self.bb_logger.debug("[Orchestrator] Human interruption is set")
                 self._handle_human_interrupt()
                 # Once we return from _handle_human_interrupt, the flag is cleared.
                 # We 'continue' to restart the loop and see what protocols are now valid.
@@ -146,14 +159,12 @@ class ProtocolOrchestrator:
         """
         Stops the running protocol and blocks until human clears the interrupt.
         """
-        if self.debug:
-            print("[Orchestrator] Human Interrupt Detected! Pausing system.")
-
+        self.bb_logger.debug("[Orchestrator] Human Interrupt Detected! Pausing system.")
+        
         # 1. Immediately kill any running tasks
         if self.running_tree:
-            print(
-                f"[Orchestrator] Preempting {self.running_tree['name']} due to Human."
-            )
+            self.bb_logger.notify_discord(f"[Orchestrator] Preempting {self.running_tree['name']} due to Human.") 
+            
             self.stop_protocol()
 
         # 2. Trap the orchestrator here.
@@ -161,14 +172,15 @@ class ProtocolOrchestrator:
         #    The voice node triggers 'orchestrator_wakeup' when it clears the flag,
         #    breaking this wait.
         while not self.stop_flag and self.human_interrupt_event.is_set():
-            if self.debug:
-                print("[Orchestrator] System Paused. Waiting for Human IDLE...")
+            self.bb_logger.debug(
+                    "[Orchestrator] System paused. Waiting for human idle.")
             self.orchestrator_wakeup.wait()
             self.orchestrator_wakeup.clear()
 
-        if self.debug:
-            print("[Orchestrator] Human released control. Resuming operations.")
-
+        self.bb_logger.notify_discord(
+            "[Orchestrator] Human released control. Resuming operations."
+        )
+     
     def _reconcile_protocols(self):
         """
         Compares currently running tree against satisfied triggers
@@ -176,6 +188,9 @@ class ProtocolOrchestrator:
         """
 
         if self.stop_flag:
+            self.bb_logger.debug(
+                "[Orchestrator] Stop flag set. Skipping reconciliation."
+            )
             return
 
         # A. Cleanup: If a thread finished naturally, clear our memory of it
@@ -444,7 +459,7 @@ def main():
     print("Loading location and protocol to bb")
     
     
-    load_protocols_to_bb(yaml_file_path, debug=True)
+    load_protocols_to_bb(yaml_file_path, debug=False)
     load_locations_to_blackboard(yaml_file_path)
 
     if test_time:
@@ -456,6 +471,7 @@ def main():
     orch = ProtocolOrchestrator(test_time=test_time, debug=args.debug)
 
     try:
+        print("ORCHI LOOP")
         orch.orchestrator_loop()
     except KeyboardInterrupt:
         print("[Main] KeyboardInterrupt received.")
@@ -472,3 +488,4 @@ if __name__ == "__main__":
 
 
 # ros2 run smart_home_pytree protocol_orchestrator -- --debug --test_time 10:30 --env_yaml_file_name house_yaml_path
+# ros2 run rqt_console rqt_console
