@@ -91,6 +91,11 @@ python3 protocol_orchestrator.py --test_time "14:30" --debug
 | `--env_yaml_file_name` | `str` | `"house_yaml_path"` | The **name** of the environment variable to read the YAML path from. Change this if you use a different env var name. |
 
 
+You can also run with ros
+
+```
+ros2 run smart_home_pytree protocol_orchestrator -- --debug --test_time 10:30 --env_yaml_file_name house_yaml_path
+```
 
 ## Instructions to run planner. Will make it nicer later
 TO TEST AT OLSON

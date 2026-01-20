@@ -442,9 +442,8 @@ def main():
         )
     # blackboard = py_trees.blackboard.Blackboard()
     print("Loading location and protocol to bb")
-    blackboard = py_trees.blackboard.Blackboard()
-    ## remove data from prev runs
-    # blackboard.clear()
+    
+    
     load_protocols_to_bb(yaml_file_path, debug=True)
     load_locations_to_blackboard(yaml_file_path)
 
@@ -455,14 +454,6 @@ def main():
 
     # For testing:
     orch = ProtocolOrchestrator(test_time=test_time, debug=args.debug)
-    # orch = ProtocolOrchestrator()
-    # For live use:
-    # orch = ProtocolOrchestrator()
-
-    # # Mock data: pretend these are current satisfied protocols
-    # orch.trigger_monitor.get_satisfied = lambda: [
-    #     ("TwoReminderProtocol.medicine_am", 1)
-    # ]
 
     try:
         orch.orchestrator_loop()
@@ -480,8 +471,4 @@ if __name__ == "__main__":
 # ros2 topic pub /display_rx std_msgs/msg/String "data: 'exercise_stop'"
 
 
-# cd ~/smarthome_ws/src/smart_home_robot/smart_home_pytree/smart_home_pytree
-# python3 protocol_orchestrator.py \
-#   --debug \
-#   --test_time 10:30 \
-#   --env_yaml_file_name house_yaml_path
+# ros2 run smart_home_pytree protocol_orchestrator -- --debug --test_time 10:30 --env_yaml_file_name house_yaml_path

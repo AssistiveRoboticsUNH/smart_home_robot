@@ -33,14 +33,13 @@ setup(
     tests_require=["pytest"],
     entry_points={
         "console_scripts": [
-            "charge_robot_tree = smart_home_pytree.charge_robot_tree:charge_robot_tree_main",
-            "move_to_tree = smart_home_pytree.trees.move_to_tree:main",
             "undocking = robot_actions.undocking:main",
             "docking = robot_actions.docking:main",
             "play_video = robot_actions.play_video:main",
             "smart_plug = smart_sensors.smart_plug_node:main",
             "charge_monitor = smart_sensors.charge_monitor:main",
             "mock_dock_undock = robot_actions.mock_dock_undock:main",
+            "protocol_orchestrator = smart_home_pytree.protocol_orchestrator:main",
         ],
     },
 )
