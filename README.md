@@ -12,12 +12,13 @@ cd ~/smart_home_pytree_ws
 rosdep install --from-paths src --ignore-src -r -y
 
 if you run rosdep then no need for this
-```
+
+---
 git clone https://github.com/splintered-reality/py_trees
 git clone https://github.com/splintered-reality/py_trees_ros/
 git clone https://github.com/splintered-reality/py_trees_ros_viewer
 git clone https://github.com/splintered-reality/py_trees_ros_interfaces
-```
+---
 
 git clone https://github.com/AssistiveRoboticsUNH/smart_home_robot
 
