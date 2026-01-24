@@ -124,7 +124,7 @@ class ExerciseProtocolTree(BaseTreeRunner):
                 f"[{node_name}] CRITICAL: 'protocol_name' is missing in kwargs."
             )
             
-        if not self.bb.exists(self.protocol_name)
+        if not self.bb.exists(self.protocol_name):
             raise KeyError(
                     f"[{node_name}] CRITICAL: Protocol '{self.protocol_name}' "
                     f"was not found in the Blackboard. keys available: {list(self.bb.storage.keys())}"

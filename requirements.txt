@@ -4,3 +4,4 @@ asyncio
 gTTS
 discord
 timedelta
+zmq

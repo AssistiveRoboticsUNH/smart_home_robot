@@ -26,7 +26,24 @@ the yaml file to be used that contains information about the house should be sto
 If you plan on using the smart plug you need to define the plug_ip  as an environment variable
 ```
 
+For simulation you will need 
 
+
+```
+sudo apt install ros-$ROS_DISTRO-navigation2
+sudo apt install ros-$ROS_DISTRO-nav2-bringup
+
+Jazzy and newer
+sudo apt install ros-$ROS_DISTRO-nav2-minimal-tb*
+
+iron and older
+sudo apt install ros-$ROS_DISTRO-turtlebot3-gazebo
+
+source /opt/ros/<ros2-distro>/setup.
+export TURTLEBOT3_MODEL=waffle  # Iron and older only with Gazebo Classic
+export GAZEBO_MODEL_PATH=$GAZEBO_MODEL_PATH:/opt/ros/<ros2-distro>/share/turtlebot3_gazebo/models # Iron and older only with Gazebo Classic
+
+```
 ### Environment Setup Instructions (Optional)
 
 1. **Use the template file**
