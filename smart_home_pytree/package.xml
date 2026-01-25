@@ -20,13 +20,15 @@
   <build_depend>pyqt5-dev-tools</build_depend>
   <build_depend>qttools5-dev-tools</build_depend>
 
+  <!-- Docking messages (Humble and earlier) -->
+  <exec_depend>opennav_docking_msgs</exec_depend>
+  <exec_depend>tf_transformations_py</exec_depend>
+
   <!-- tree dependencies -->
   <exec_depend>py_trees</exec_depend>
   <exec_depend>py_trees_ros</exec_depend>
-  <!-- <exec_depend>py_trees_ros_interfaces</exec_depend> -->
   <exec_depend>rcl_interfaces</exec_depend>
-  <!-- <exec_depend>rclpy</exec_depend> -->
-  <!-- <exec_depend>std_msgs</exec_depend> -->
+
 
   <!-- default dependencies -->
   <test_depend>ament_copyright</test_depend>

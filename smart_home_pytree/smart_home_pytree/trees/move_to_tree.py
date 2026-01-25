@@ -25,7 +25,7 @@ try:
 except ImportError:
     # ROS 2 Humble (Requires 'ros-humble-opennav-docking-msgs')
     from opennav_docking_msgs.action import UndockRobot
-
+from smart_home_pytree.utils import BlackboardLogger
 # launch file is using
 
 
@@ -61,11 +61,14 @@ class MoveToLocationTree(BaseTreeRunner):
             **kwargs,
         )
         
+        blackboard = py_trees.blackboard.Blackboard()
+        self.bb_logger = blackboard.get("logger")
+        
+        
         self.location = self.kwargs.get("location")
         if not self.location:
-            raise ValueError(f"[{node_name}] CRITICAL ERROR: 'location' parameter is missing!")
+            self.bb_logger.debug("[MoveToLocationTree] 'location' parameter is missing! Using key") 
         
-        blackboard = py_trees.blackboard.Blackboard()
 
         if blackboard.exists("location_key"):
             # If it exists on blackboard, use it
