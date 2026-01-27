@@ -13,7 +13,7 @@ from py_trees import display
 
 from smart_home_pytree.registry import load_locations_to_blackboard
 from smart_home_pytree.robot_interface import RobotInterface
-
+from smart_home_pytree.utils import BlackboardLogger
 
 class TreeRunMode(Enum):
     """Class to handle Explicitly if Base is responsible for spinning"""
@@ -47,6 +47,8 @@ class BaseTreeRunner:
         self.nodes_cleanup_done = False
         self._stop_tree = False
 
+        ## TODo: get rid of bb in trees and use this
+        self.blackboard = py_trees.blackboard.Blackboard()
         
 
         # MODE SELECTION (EXPLICIT)
@@ -71,6 +73,8 @@ class BaseTreeRunner:
                 self.executor = rclpy.executors.SingleThreadedExecutor()
 
             self.executor.add_node(self.robot_interface)
+            custom_logger = BlackboardLogger(node=self.robot_interface, debug_mode=self.debug)
+            self.blackboard.set("logger", custom_logger)
 
         else:
             # EMBEDDED

@@ -37,7 +37,7 @@ def generate_launch_description():
 
     play_video_node_cmd = Node(
         package="smart_home_pytree",
-        executable="play_video",
+        executable="play_video_locally",
         name="play_video",
         output="screen",
     )
@@ -82,7 +82,7 @@ def generate_launch_description():
     return LaunchDescription(
         [   tb3_launch,
             display_node,
-            # play_video_node_cmd,
+            play_video_node_cmd,
             human_voice_interaction,
             mock_dock_undock_cmd,
             charging_pub,

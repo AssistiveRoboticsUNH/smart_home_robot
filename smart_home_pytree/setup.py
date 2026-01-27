@@ -38,10 +38,12 @@ setup(
             "undocking = robot_actions.undocking:main",
             "docking = robot_actions.docking:main",
             "play_video = robot_actions.play_video:main",
+            "play_video_locally = robot_actions.play_video_locally:main",
             "smart_plug = smart_sensors.smart_plug_node:main",
             "charge_monitor = smart_sensors.charge_monitor:main",
             "mock_dock_undock = robot_actions.mock_dock_undock:main",
             "protocol_orchestrator = smart_home_pytree.protocol_orchestrator:main",
+            
         ],
     },
 )

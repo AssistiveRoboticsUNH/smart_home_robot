@@ -106,7 +106,7 @@ protocols:
         video_dir_path: "file:///storage/emulated/0/Download/Exercise_Videos" ## path on the tablet 
         start_state_key: "start_exercise"
         stop_state_key: "stop_exercise"
-        get_confirmation: "Do you want to exercise now?" ## if empty then dont ask to indictae whther the protocol should start after the person asks
+        get_confirmation: "Do you want to exercise now?" ## if empty then dont ask to indicate whether the protocol should start after the person asks
       high_level:
         reset_pattern:
           type: instant ## if triggered should play directly
@@ -114,7 +114,30 @@ protocols:
         requirements: 
           event: 
             - {'state': 'start_exercise', 'value': True}
-          time: {'from': '10:00', 'to': '17:00'}
+          time: {'from': '15:00', 'to': '17:00'}
+
+  ## you should have one either random or normal exercise protocol
+  ExerciseProtocolRandom:
+    exercise_rand:
+      low_level:
+        total_num_exercises: 3 ## total number of exercises to pick from
+        difficulty_level: [low, medium] ## difficulty level to pick exercises from [high, medium, low] empty means all levels
+        time_limit_minutes: 5 ## time limit for the exercise session
+        reps_per_exercise: 2 ## number of repetitions per exercise
+        time_between_exercises: 6 ## time between exercises in seconds
+        time_between_reps: 3 ## time between reps in seconds
+        video_dir_path: "/home/olagh48652/Exercise_Videos" ## path on the tablet 
+        start_state_key: "start_exercise"
+        stop_state_key: "stop_exercise"
+        get_confirmation: "Do you want to exercise now?" ## if empty then dont ask to indicate whether the protocol should start after the person asks
+      high_level:
+        reset_pattern:
+          type: instant ## if triggered should play directly
+        priority: 4
+        requirements: 
+          event: 
+            - {'state': 'start_exercise', 'value': True}
+          time: {'from': '6:00', 'to': '14:00'}
 
   ChargeRobot:
     charge_robot: 

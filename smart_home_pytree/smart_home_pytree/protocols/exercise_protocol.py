@@ -16,8 +16,6 @@ from smart_home_pytree.trees.move_to_person_location import MoveToPersonLocation
 from smart_home_pytree.utils import str2bool
 
 # Blackboard helper behaviors
-
-
 class CheckDoneBB(py_trees.behaviour.Behaviour):
     # return True if value is true
     def __init__(self, name, key):
@@ -32,7 +30,6 @@ class CheckDoneBB(py_trees.behaviour.Behaviour):
         return (
             py_trees.common.Status.SUCCESS if value else py_trees.common.Status.FAILURE
         )
-
 
 class SetDoneBB(py_trees.behaviour.Behaviour):
     def __init__(self, name, key):
@@ -93,8 +90,6 @@ class CheckRobotStateKey_(py_trees.behaviour.Behaviour):
 
 
 # MAIN PROTOCOL TREE
-
-
 class ExerciseProtocolTree(BaseTreeRunner):
     def __init__(
         self, node_name: str, robot_interface=None, executor=None, debug=False, **kwargs
@@ -321,9 +316,7 @@ class ExerciseProtocolTree(BaseTreeRunner):
         )
         move_to_person = move_to_person_tree.create_tree()
 
-        # charge_robot_tree = ChargeRobotTree(node_name=f"{protocol_name}_charge_robot", robot_interface=self.robot_interface)
-        # charge_robot = charge_robot_tree.create_tree()
-
+        ## todo: gaurd for confirmation
         if self.get_confirmation:
             ask_question_tree = AskQuestionTree(
                 node_name="ask_question_tree",
@@ -336,7 +329,7 @@ class ExerciseProtocolTree(BaseTreeRunner):
             ask_question = ask_question_tree.create_tree()
             inverted_ask_question = py_trees.decorators.Inverter(
                 name="InvertConfirmation", child=ask_question
-            )  # if success then should go to fallbakc and play the protocol
+            )  # if success then should go to fallback and play the protocol
 
         # Full pipeline
         if self.get_confirmation:
@@ -353,6 +346,7 @@ class ExerciseProtocolTree(BaseTreeRunner):
             #         # charge_robot
             #     ]
             # )
+            ## the question happens at the perosn location so no need to move
             selector.add_children([inverted_ask_question, exercise_block])
             return selector
 
@@ -364,7 +358,6 @@ class ExerciseProtocolTree(BaseTreeRunner):
                 children=[
                     move_to_person,
                     exercise_block,
-                    # charge_robot ## not really needed
                 ],
             )
 
@@ -490,7 +483,6 @@ def main(args=None):
 
         tree_runner.cleanup()
 
-    rclpy.shutdown()
 
 
 if __name__ == "__main__":

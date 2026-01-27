@@ -5,6 +5,9 @@ import py_trees
 import py_trees_ros
 import yaml
 
+from smart_home_pytree.utils import BlackboardLogger
+
+
 def update_protocol_config(protocol_name: str, key_to_update: str, new_value: str):
     """
     Updates a specific configuration value for a protocol on the Blackboard
@@ -149,8 +152,7 @@ def load_protocols_to_bb(yaml_path: str, debug: bool = False):
             print(f"{key} : {value}")
 
     return blackboard
-
-
+        
 if __name__ == "__main__":
 
     yaml_file_path = os.getenv("house_yaml_path", None)

@@ -109,6 +109,8 @@ class BlackboardLogger:
                 self._logger.set_level(LoggingSeverity.INFO)
         else:
             self._logger = None
+        
+        self._logger.info(str("BlackboardLogger initialized"))
 
     def info(self, message):
         """
