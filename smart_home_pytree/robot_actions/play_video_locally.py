@@ -45,7 +45,7 @@ class PlayVideoLocalActionServer(GenericActionServer):
         Sets up internal state used to track the external video process
         and cancellation requests.
         """
-        super().__init__(PlayVideoRequest, "play_video_local")
+        super().__init__(PlayVideoRequest, "play_video")
         self.process = None
         self.cancel_requested = False
 

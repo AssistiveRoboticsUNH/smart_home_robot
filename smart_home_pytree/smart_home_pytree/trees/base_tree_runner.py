@@ -71,7 +71,7 @@ class BaseTreeRunner:
 
             if self.executor is None:
                 self.executor = rclpy.executors.SingleThreadedExecutor()
-
+            ## MultiThreadedExecutor try
             self.executor.add_node(self.robot_interface)
             custom_logger = BlackboardLogger(node=self.robot_interface, debug_mode=self.debug)
             self.blackboard.set("logger", custom_logger)

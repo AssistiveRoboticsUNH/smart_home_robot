@@ -45,8 +45,8 @@ class AskQuestionTree(BaseTreeRunner):
         self.data_key = data_key
         
         blackboard = py_trees.blackboard.Blackboard()
-        
-        if blackboard.exists(protocol_name):
+    
+        if not blackboard.exists(protocol_name):
             raise ValueError(
                 f"Validation Error: Protocol '{protocol_name}' not found in Blackboard. "
                 "Ensure `load_protocols_to_bb` is called before initializing this tree and yaml file includes the protocol name in the protocols."
@@ -126,7 +126,6 @@ class AskQuestionTree(BaseTreeRunner):
 
         selector.add_children([condition, question_sequence])
         return selector
-
 
 def main(args=None):
     parser = argparse.ArgumentParser(

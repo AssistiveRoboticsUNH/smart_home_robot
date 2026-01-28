@@ -6,9 +6,9 @@ import time
 import py_trees
 from gtts import gTTS
 
-
+## using kwargs to have same code work with aalp and non aalp
 class ReadScript(py_trees.behaviour.Behaviour):
-    def __init__(self, text: str, name="ReadScript"):
+    def __init__(self, text: str, name="ReadScript", **kwargs):
         super().__init__(name)
         self.text = text
         self.proc = None

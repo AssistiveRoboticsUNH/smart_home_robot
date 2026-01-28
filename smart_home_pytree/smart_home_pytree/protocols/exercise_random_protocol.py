@@ -212,7 +212,7 @@ class ExerciseRandomProtocolTree(BaseTreeRunner):
             play_video = py_trees_ros.actions.ActionClient(
                 name=f"Play Rep {i+1}",
                 action_type=PlayVideoRequest,
-                action_name="play_video_local",
+                action_name="play_video",
                 action_goal=goal,
                 wait_for_server_timeout_sec=30.0,
             )
@@ -320,7 +320,7 @@ class ExerciseRandomProtocolTree(BaseTreeRunner):
                     memory=True,
                     children=[
                         guarded_execution,
-                        ReadScript("Stopping exercise now.", "StopNotice"), # Fallback if guard fails
+                        ReadScript(text="Stopping exercise now.", name="StopNotice", node=self.robot_interface)
                     ],
                 ),
                 ClearExerciseRunning("CleanupState"),
@@ -334,10 +334,10 @@ class ExerciseRandomProtocolTree(BaseTreeRunner):
             debug=self.debug,
             executor=self.executor,
         ).create_tree()
-
+        
         # --- Confirmation Logic ---
-        ## If we are resuming then we dont want to ask again
         if self.get_confirmation and not is_running:
+            # The node that asks and sets the "user_wants_video" flag
             ask_tree = AskQuestionTree(
                 node_name="ask_question_tree",
                 robot_interface=self.robot_interface,
@@ -347,18 +347,30 @@ class ExerciseRandomProtocolTree(BaseTreeRunner):
                 executor=self.executor,
             ).create_tree()
 
-            # Logic: If Ask returns SUCCESS (User said YES), Inverter makes it FAILURE.
-            # Selector tries next child (the protocol).
-            # If Ask returns FAILURE (User said NO), Inverter makes it SUCCESS.
-            # Selector finishes (Protocol skipped).
-            inverted_ask = py_trees.decorators.Inverter(name="InvertConfirmation", child=ask_tree)
-            
-            root_selector = py_trees.composites.Selector(name="CheckPermission", memory=True)
-            root_selector.add_children([inverted_ask, lifecycle])
+            # Check if the user specifically said YES
+            check_yes = py_trees.behaviours.CheckBlackboardVariableValue(
+                name="Did User Say Yes?",
+                check=py_trees.common.ComparisonExpression(
+                    variable="user_wants_video",
+                    value=True,
+                    operator=lambda a, b: a == b
+                )
+            )
 
-            ## AskQuestionTree includes moving tot he person to ask
+            # Create the "Play Path"
+            # This only runs if Ask is SUCCESS AND CheckYes is SUCCESS
+            play_protocol_sequence = py_trees.composites.Sequence(name="PlayProtocolPath", memory=True)
+            play_protocol_sequence.add_children([ask_tree, check_yes, lifecycle])
+
+            # Create the "Skip Path"
+            # If the sequence above fails (User said NO)
+            root_selector = py_trees.composites.Selector(name="CheckPermission", memory=True)
+            root_selector.add_children([
+                play_protocol_sequence,
+                ReadScript(text="User said No. Skipping exercise.", name="SkipNotice", node=self.robot_interface)
+            ])
+
             return root_selector
-        
         else:
             # Standard execution without permission check
             final_root = py_trees.composites.Sequence(
@@ -400,7 +412,7 @@ def main(args=None):
 
     yaml_file_path = os.getenv("house_yaml_path", None)
     load_locations_to_blackboard(yaml_file_path, debug=False)
-    load_protocols_to_bb(yaml_file_path, debug=False)
+    load_protocols_to_bb(yaml_file_path, debug=True)
 
     tree_runner = ExerciseRandomProtocolTree(
         node_name="exercise_protocol_tree", protocol_name=protocol_name

@@ -7,14 +7,9 @@ series_1:
   type: Cardio_Final
   ex1:
     text: "We’ll start with some low punches. "
-    rep: 2
-    time_between_rep_in_sec: 3
-    video_name: "cardio_punches_low.mp4"
-  ex2:
-    text: "Let’s do some high punches"
     rep: 1
     time_between_rep_in_sec: 3
-    video_name: "cardio_punches_high.mp4"
+    video_name: "cardio_punches_low.mp4"
 
 series_2:
   introduction: >
@@ -24,7 +19,7 @@ series_2:
     text: >
       We’ll start with an easy exercise that just requires you to stand quietly
       with your feet close together.
-    rep: 2
+    rep: 1
     time_between_rep_in_sec: 3
     video_name: "FINAL_feet_together_stance_medium.mp4"
 

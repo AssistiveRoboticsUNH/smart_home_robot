@@ -7,9 +7,10 @@ import rclpy
 import yaml
 
 from shr_msgs.action import PlayVideoRequest
-from smart_home_pytree.behaviors.action_behaviors.read_script_aalp import ReadScript
+# from smart_home_pytree.behaviors.action_behaviors.read_script_aalp import ReadScript ## getting stick with aalp
+from smart_home_pytree.behaviors.action_behaviors.read_script import ReadScript
 from smart_home_pytree.behaviors.action_behaviors.wait import Wait
-from smart_home_pytree.registry import load_protocols_to_bb
+from smart_home_pytree.registry import load_protocols_to_bb, load_locations_to_blackboard
 from smart_home_pytree.trees.ask_question_tree import AskQuestionTree
 from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
 from smart_home_pytree.trees.move_to_person_location import MoveToPersonLocationTree
@@ -66,7 +67,6 @@ class ClearExerciseProgressBB(py_trees.behaviour.Behaviour):
 
         return py_trees.common.Status.SUCCESS
 
-
 class CheckRobotStateKey_(py_trees.behaviour.Behaviour):
     def __init__(self, name: str, robot_interface, key: str):
         super().__init__(name)
@@ -76,18 +76,16 @@ class CheckRobotStateKey_(py_trees.behaviour.Behaviour):
     def update(self):
         value = self.robot_interface.state.get(self.key, None)
         if value is None:
-            self.logger.warning(f"{self.name}: '{self.key}' not found in RobotState")
+            # self.logger.warning(f"{self.name}: '{self.key}' not found in RobotState")
             value = False
 
-        print("charging value: ", value)
-        if value == True:
+        if value is True:
             # fail when true
             self.logger.debug(f"STOP EXERCISE, FAILURE")
             return py_trees.common.Status.FAILURE
         else:
             self.logger.debug(f"Not STOP EXERCISE, SUCCESS ")
             return py_trees.common.Status.SUCCESS
-
 
 # MAIN PROTOCOL TREE
 class ExerciseProtocolTree(BaseTreeRunner):
@@ -127,7 +125,6 @@ class ExerciseProtocolTree(BaseTreeRunner):
         
         self.protocol_info = self.bb.get(self.protocol_name)
      
-            
         # List of keys that MUST exist in the protocol info
         required_keys = [
             "exercise_yaml_file",
@@ -147,9 +144,9 @@ class ExerciseProtocolTree(BaseTreeRunner):
         self.stop_key = self.protocol_info["stop_state_key"]
         self.video_dir_path = self.protocol_info["video_dir_path"]
         
-        if not os.path.isfile(self.exercise_yaml_path):
+        if not os.path.isfile(exercise_yaml_path):
             raise FileNotFoundError(
-                f"[{node_name}] CRITICAL: Exercise YAML file not found at: {self.exercise_yaml_path}"
+                f"[{node_name}] CRITICAL: Exercise YAML file not found at: {exercise_yaml_path}"
             )
         
         # Pre-load data to ensure YAML is valid right now
@@ -172,12 +169,7 @@ class ExerciseProtocolTree(BaseTreeRunner):
 
     def create_tree(self):
         protocol_name = self.protocol_name
-
         protocol_info = self.bb.get(protocol_name)
-
-        self.start_key = self.start_key
-        self.stop_key = self.stop_key
-        self.video_dir_path = self.video_dir_path
 
         confirmation_key = "get_confirmation"
         try:
@@ -210,7 +202,7 @@ class ExerciseProtocolTree(BaseTreeRunner):
                         name=f"{intro_flag}_Intro",
                         memory=True,  # False
                         children=[
-                            ReadScript(data["introduction"], "IntroScript"),
+                            ReadScript(text=data["introduction"], name="IntroScript", node=self.robot_interface),
                             SetDoneBB("MarkIntroDone", intro_flag),
                         ],
                     ),
@@ -243,7 +235,7 @@ class ExerciseProtocolTree(BaseTreeRunner):
                             memory=True,  # False
                             children=[
                                 ReadScript(
-                                    series["introduction"], f"{series_key}_Intro"
+                                    text=series["introduction"], name=f"{series_key}_Intro", node=self.robot_interface
                                 ),
                                 SetDoneBB(f"{series_key}_MarkIntroDone", s_intro_flag),
                             ],
@@ -263,7 +255,7 @@ class ExerciseProtocolTree(BaseTreeRunner):
 
         # ENDING
         if "ending" in data:
-            protocol.add_child(ReadScript(data["ending"], "Ending"))
+            protocol.add_child(ReadScript(text=data["ending"], name="Ending", node=self.robot_interface))
 
         # Clear BB keys at the end
         protocol.add_child(
@@ -290,7 +282,7 @@ class ExerciseProtocolTree(BaseTreeRunner):
             name="StopHandler",
             memory=False,
             children=[
-                ReadScript("Stopping exercise now.", "StopNotice"),
+                ReadScript(text="Stopping exercise now.", name="StopNotice", node=self.robot_interface),
                 ClearExerciseProgressBB(
                     name="StopHandlerClearExerciseProgressBB",
                     key_prefix=key_prefix,
@@ -325,30 +317,32 @@ class ExerciseProtocolTree(BaseTreeRunner):
                 data_key="get_confirmation",
                 debug=self.debug,
                 executor=self.executor,
+            ).create_tree()
+            
+            # Check if the user specifically said YES
+            check_yes = py_trees.behaviours.CheckBlackboardVariableValue(
+                name="Did User Say Yes?",
+                check=py_trees.common.ComparisonExpression(
+                    variable="user_wants_video",
+                    value=True,
+                    operator=lambda a, b: a == b
+                )
             )
-            ask_question = ask_question_tree.create_tree()
-            inverted_ask_question = py_trees.decorators.Inverter(
-                name="InvertConfirmation", child=ask_question
-            )  # if success then should go to fallback and play the protocol
+            
+            # Create the "Play Path"
+            # This only runs if Ask is SUCCESS AND CheckYes is SUCCESS
+            play_protocol_sequence = py_trees.composites.Sequence(name="PlayProtocolPath", memory=True)
+            play_protocol_sequence.add_children([ask_question_tree, check_yes, exercise_block])
 
-        # Full pipeline
-        if self.get_confirmation:
-            selector = py_trees.composites.Selector(
-                name=f"Run Question If Needed", memory=True
-            )
-
-            # ask first
-            # root = py_trees.composites.Sequence(
-            #     name="FullExercisePipeline",
-            #     memory=True,
-            #     children=[
-            #         exercise_block,
-            #         # charge_robot
-            #     ]
-            # )
-            ## the question happens at the perosn location so no need to move
-            selector.add_children([inverted_ask_question, exercise_block])
-            return selector
+            # Create the "Skip Path"
+            # If the sequence above fails (User said NO)
+            root_selector = py_trees.composites.Selector(name="CheckPermission", memory=True)
+            root_selector.add_children([
+                play_protocol_sequence,
+                ReadScript(text="User said No. Skipping exercise.", name="SkipNotice", node=self.robot_interface)
+            ])
+            
+            return root_selector
 
         else:
             # Standard execution without permission check
@@ -384,7 +378,7 @@ class ExerciseProtocolTree(BaseTreeRunner):
                         name="Do_{ex_key}_DescSelector",
                         memory=True,  # False
                         children=[
-                            ReadScript(ex["text"], f"{ex_key}_Description"),
+                            ReadScript(text=ex["text"], name=f"{ex_key}_Description", node=self.robot_interface),
                             SetDoneBB(f"{ex_key}_MarkDescDone", desc_flag),
                         ],
                     ),
@@ -464,24 +458,17 @@ def main(args=None):
     print("protocol_name: ", protocol_name)
 
     yaml_file_path = os.getenv("house_yaml_path", None)
-    blackboard = py_trees.blackboard.Blackboard()
+    
+    load_locations_to_blackboard(yaml_file_path, debug=False)
     load_protocols_to_bb(yaml_file_path, debug=False)
+    
     tree_runner = ExerciseProtocolTree(
         node_name="exercise_protocol_tree", protocol_name=protocol_name
     )
-    tree_runner.setup()
-
-    print("run_continuous", args.run_continuous)
-    try:
-        if args.run_continuous:
-            tree_runner.run_continuous()
-        else:
-            tree_runner.run_until_done()
-    finally:
-        for key, value in blackboard.storage.items():
-            print(f"{key} : {value}")
-
-        tree_runner.cleanup()
+    
+    tree_runner.setup()    
+    tree_runner.run_until_done()
+  
 
 
 
@@ -490,3 +477,4 @@ if __name__ == "__main__":
 
 
 # python3 exercise_protocol.py
+# ros2 topic pub /display_rx std_msgs/msg/String "data: 'exercise_requested'" 

@@ -25,6 +25,10 @@ person_location_state: "person_location"
 robot_location_state: "robot_location"
 
 # available type: ## todo set it in a way to verifiy htat yaml doesnt include 
+# reset_pattern:
+#           type: periodic
+#           hours: 1
+#           minutes: 30
 ## undefined types: text, audio, video, question_answer 
 protocols:
   XReminderProtocol:
@@ -58,16 +62,13 @@ protocols:
           permissible_locations: [living_room]
 
 ## add states with /
-  CoffeeProtocol:
+  AskAndPlayVideoProtocol:
     coffee:
       low_level:
-        first_text: "please clean the dishes"
+        question_text: "Would you like to show you how to make coffee?"
+        video_path: "file:///storage/emulated/0/maggie_coffee_video.mp4" ## path on the tablet
       high_level:
         priority: 3
-        reset_pattern:
-          type: periodic
-          hours: 1
-          minutes: 30
         requirements: 
           event: 
             - {'state': 'coffee', 'value': True}

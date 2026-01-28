@@ -103,7 +103,7 @@ protocols:
     exercise:
       low_level:
         exercise_yaml_file: "/home/olagh48652/smart_home_pytree_ws/src/smart_home_robot/smart_home_pytree/config/exercise_routine_test.yaml" 
-        video_dir_path: "file:///storage/emulated/0/Download/Exercise_Videos" ## path on the tablet 
+        video_dir_path: "/home/olagh48652/Exercise_Videos" ## path on the tablet 
         start_state_key: "start_exercise"
         stop_state_key: "stop_exercise"
         get_confirmation: "Do you want to exercise now?" ## if empty then dont ask to indicate whether the protocol should start after the person asks
@@ -114,16 +114,16 @@ protocols:
         requirements: 
           event: 
             - {'state': 'start_exercise', 'value': True}
-          time: {'from': '15:00', 'to': '17:00'}
+          time: {'from': '3:00', 'to': '7:00'}
 
   ## you should have one either random or normal exercise protocol
   ExerciseProtocolRandom:
     exercise_rand:
       low_level:
-        total_num_exercises: 3 ## total number of exercises to pick from
+        total_num_exercises: 2 ## total number of exercises to pick from
         difficulty_level: [low, medium] ## difficulty level to pick exercises from [high, medium, low] empty means all levels
         time_limit_minutes: 5 ## time limit for the exercise session
-        reps_per_exercise: 2 ## number of repetitions per exercise
+        reps_per_exercise: 1 ## number of repetitions per exercise
         time_between_exercises: 6 ## time between exercises in seconds
         time_between_reps: 3 ## time between reps in seconds
         video_dir_path: "/home/olagh48652/Exercise_Videos" ## path on the tablet 
@@ -137,7 +137,19 @@ protocols:
         requirements: 
           event: 
             - {'state': 'start_exercise', 'value': True}
-          time: {'from': '6:00', 'to': '14:00'}
+          time: {'from': '13:00', 'to': '14:00'}
+
+  AskAndPlayVideoProtocol:
+    coffee:
+      low_level:
+        question_text: "Would you like to show you how to make coffee?"
+        video_path: "/home/olagh48652/Downloads/maggie_coffee.mp4" ## path on the tablet
+      high_level:
+        priority: 3
+        requirements: 
+          event: 
+            - {'state': 'coffee', 'value': True}
+          time: {'from': '03:00', 'to': '4:00'}
 
   ChargeRobot:
     charge_robot: 

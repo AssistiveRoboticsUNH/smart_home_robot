@@ -83,10 +83,12 @@ class AskQuestionBehavior(py_trees_ros.actions.ActionClient):
 
         if answer == "yes":
             set_bb_node.update()
+            self.blackboard.set("user_wants_video", True)
             return py_trees.common.Status.SUCCESS
         elif answer == "no":
-            # set_bb_node.update() ## no need to set it will just fail the tree
-            return py_trees.common.Status.FAILURE
+            set_bb_node.update()
+            self.blackboard.set("user_wants_video", False)
+            return py_trees.common.Status.SUCCESS
         else:
             # done not updated
             self.logger.error("Unexpected answer")
