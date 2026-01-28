@@ -181,6 +181,10 @@ class BaseTreeRunner:
             try:
                 self.tree.root.tick_once()
 
+                # print("=" * 25 + " TREE STATE " + "=" * 25)
+                # print(display.unicode_tree(root=self.tree.root, show_status=True))
+                # print("\n")
+                
                 if self.debug:
                     print("=" * 25 + " TREE STATE " + "=" * 25)
                     print(display.unicode_tree(root=self.tree.root, show_status=True))

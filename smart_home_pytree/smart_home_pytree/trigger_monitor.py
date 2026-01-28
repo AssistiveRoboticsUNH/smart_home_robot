@@ -350,7 +350,6 @@ class TriggerMonitor:
         t_from = datetime.strptime(time_req["from"], fmt)
         t_to = datetime.strptime(time_req["to"], fmt)
         t_now = datetime.strptime(current_time_str, fmt)
-
         return t_from <= t_now <= t_to
 
     def check_event_requirement(self, event_reqs, current_events):

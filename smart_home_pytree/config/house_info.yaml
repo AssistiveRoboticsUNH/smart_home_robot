@@ -18,6 +18,7 @@ locations:
     yaw: 0.78
 
 
+
 ## need to be integerated to have robot interface get its info 
 person_location_state: "person_location"
 robot_location_state: "robot_location"

@@ -163,6 +163,12 @@ class RobotInterface(Node):
         elif "exercise_stop" in msg.data:
             self.state.update("stop_exercise", True)
             self.state.update("start_exercise", False)
+        elif "go_home" in msg.data:
+            self.state.update("move_away", True)
+            self.state.update("position", "home")
+        elif "move_away" in msg.data:
+            self.state.update("move_away", True)
+            self.state.update("position", "away")
 
     def robot_location_callback(self, msg):
         self.get_logger().debug(f"Robot location: {msg.data}")
@@ -187,6 +193,7 @@ class RobotInterface(Node):
     def coffee_callback(self, msg):
         self.get_logger().debug(f"coffee : {msg.data}")
         self.state.update("coffee", msg.data)
+        self.state.update("person_location", "coffee")
 
     def coffee_pot_callback(self, msg):
         self.get_logger().debug(f"coffee_pot: {msg.data}")

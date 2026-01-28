@@ -4,19 +4,22 @@ locations:
     x: -1.08
     y: -1.4811692237854004
     yaw: -1.5708   # -90 degrees
-
   living_room:
     x: 1.0967974662780762
     y: 1.9037660360336304
     yaw: 0.0       # facing forward
   home:
-    x: 2.67 #0.85 #
-    y: 3.0 #1.014 #
-    yaw:  0.554899   
+    x: 2.55 #0.85 #
+    y: 3.12 #1.014 #
+    yaw: 0.554899   
   dining:
     x: 5.066422939300537
     y: 3.4881248474121094
     yaw: -1.5708   # -90 degrees
+  coffee:
+    x: 4.18
+    y: 3.27
+    yaw: 1.57
 ## home location same as that in docking
 
 
@@ -65,11 +68,13 @@ protocols:
   AskAndPlayVideoProtocol:
     coffee:
       low_level:
-        question_text: "Would you like to show you how to make coffee?"
-        video_path: "file:///storage/emulated/0/maggie_coffee_video.mp4" ## path on the tablet
+        question_text: "Would you like me to show you how to make coffee?"
+        video_path: "file:///storage/emulated/0/Download/maggie_coffee.MP4" ## path on the tablet
       high_level:
         priority: 3
         requirements: 
+          reset_pattern:
+            type: instant 
           event: 
             - {'state': 'coffee', 'value': True}
           time: {'from': '09:00', 'to': '13:00'}
@@ -114,4 +119,5 @@ protocols:
         requirements:
           event: 
               - {'state': 'charging', 'value': False}
+
 ## TO TEST new orchestrator, start at time 10:30 during the waiting i will trigger coffee true
