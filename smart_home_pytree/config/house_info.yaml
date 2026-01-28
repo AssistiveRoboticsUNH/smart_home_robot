@@ -114,10 +114,10 @@ protocols:
         requirements: 
           event: 
             - {'state': 'start_exercise', 'value': True}
-          time: {'from': '3:00', 'to': '7:00'}
+          time: {'from': '13:00', 'to': '17:00'}
 
   ## you should have one either random or normal exercise protocol
-  ExerciseProtocolRandom:
+  ExerciseRandomProtocol:
     exercise_rand:
       low_level:
         total_num_exercises: 2 ## total number of exercises to pick from
@@ -137,7 +137,7 @@ protocols:
         requirements: 
           event: 
             - {'state': 'start_exercise', 'value': True}
-          time: {'from': '13:00', 'to': '14:00'}
+          time: {'from': '3:00', 'to': '14:00'}
 
   AskAndPlayVideoProtocol:
     coffee:

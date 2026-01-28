@@ -59,7 +59,7 @@ class DecrementRemainingExercises(py_trees.behaviour.Behaviour):
     def __init__(self, name, key="exercise_remaining"):
         super().__init__(name)
         self.key = key
-        self.bb = py_trees.blackboard.Blackboard()
+        self.bb = py_trees.blackboard.Blackboard()        
 
     def update(self):
         remaining = self.bb.get(self.key)
@@ -72,8 +72,10 @@ class DecrementRemainingExercises(py_trees.behaviour.Behaviour):
         return py_trees.common.Status.SUCCESS
 
 class ClearExerciseRunning(py_trees.behaviour.Behaviour):
-    def __init__(self, name):
+    def __init__(self, name, start_key="start_exercise", robot_interface=None):
         super().__init__(name)
+        self.start_key = start_key
+        self.robot_interface = robot_interface
         self.bb = py_trees.blackboard.Blackboard()
 
     def update(self):
@@ -81,6 +83,9 @@ class ClearExerciseRunning(py_trees.behaviour.Behaviour):
         # Also clear the selected videos so next run is fresh
         self.bb.set("exercise_selected_videos", None)
         self.bb.set("exercise_remaining", None)
+        # set start_exercise to false
+        self.robot_interface.state.update(self.start_key, False)
+
         return py_trees.common.Status.SUCCESS
 
 # --- Main Tree ---
@@ -323,7 +328,7 @@ class ExerciseRandomProtocolTree(BaseTreeRunner):
                         ReadScript(text="Stopping exercise now.", name="StopNotice", node=self.robot_interface)
                     ],
                 ),
-                ClearExerciseRunning("CleanupState"),
+                ClearExerciseRunning("CleanupState",  start_key=self.start_key, robot_interface=self.robot_interface),
             ],
         )
 
@@ -337,7 +342,7 @@ class ExerciseRandomProtocolTree(BaseTreeRunner):
         
         # --- Confirmation Logic ---
         if self.get_confirmation and not is_running:
-            # The node that asks and sets the "user_wants_video" flag
+
             ask_tree = AskQuestionTree(
                 node_name="ask_question_tree",
                 robot_interface=self.robot_interface,
@@ -347,30 +352,71 @@ class ExerciseRandomProtocolTree(BaseTreeRunner):
                 executor=self.executor,
             ).create_tree()
 
-            # Check if the user specifically said YES
+            # YES check
             check_yes = py_trees.behaviours.CheckBlackboardVariableValue(
-                name="Did User Say Yes?",
+                name="UserSaidYes",
                 check=py_trees.common.ComparisonExpression(
                     variable="user_wants_video",
                     value=True,
-                    operator=lambda a, b: a == b
-                )
+                    operator=lambda a, b: a == b,
+                ),
             )
 
-            # Create the "Play Path"
-            # This only runs if Ask is SUCCESS AND CheckYes is SUCCESS
-            play_protocol_sequence = py_trees.composites.Sequence(name="PlayProtocolPath", memory=True)
-            play_protocol_sequence.add_children([ask_tree, check_yes, lifecycle])
+            # NO check (explicit fallback)
+            check_no = py_trees.behaviours.CheckBlackboardVariableValue(
+                name="UserSaidNo",
+                check=py_trees.common.ComparisonExpression(
+                    variable="user_wants_video",
+                    value=False,
+                    operator=lambda a, b: a == b,
+                ),
+            )
 
-            # Create the "Skip Path"
-            # If the sequence above fails (User said NO)
-            root_selector = py_trees.composites.Selector(name="CheckPermission", memory=True)
-            root_selector.add_children([
-                play_protocol_sequence,
-                ReadScript(text="User said No. Skipping exercise.", name="SkipNotice", node=self.robot_interface)
-            ])
+            # YES path → run lifecycle
+            yes_path = py_trees.composites.Sequence(
+                name="YesPath",
+                memory=True,
+                children=[
+                    check_yes,
+                    lifecycle,
+                ],
+            )
 
-            return root_selector
+            # NO path → explain and succeed
+            no_path = py_trees.composites.Sequence(
+                name="NoPath",
+                memory=True,
+                children=[
+                    check_no,
+                    ReadScript(
+                        text="Okay, I will skip the exercise.",
+                        name="SkipNotice",
+                        node=self.robot_interface,
+                    ),
+                    ClearExerciseRunning("CleanupStateInNoPath",  start_key=self.start_key, robot_interface=self.robot_interface),
+                ],
+            )
+
+            # Decision gate: YES → NO → FAIL
+            decision = py_trees.composites.Selector(
+                name="UserDecision",
+                memory=True,
+                children=[
+                    yes_path,
+                    no_path,
+                ],
+            )
+
+            # Ask must succeed, decision must be explicit
+            root = py_trees.composites.Sequence(
+                name="AskAndRunExercise",
+                memory=True,
+                children=[
+                    ask_tree,
+                    decision,
+                ],
+            )
+            return root
         else:
             # Standard execution without permission check
             final_root = py_trees.composites.Sequence(

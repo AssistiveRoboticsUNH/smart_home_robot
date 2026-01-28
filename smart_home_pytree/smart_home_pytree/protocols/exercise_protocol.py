@@ -308,9 +308,8 @@ class ExerciseProtocolTree(BaseTreeRunner):
         )
         move_to_person = move_to_person_tree.create_tree()
 
-        ## todo: gaurd for confirmation
         if self.get_confirmation:
-            ask_question_tree = AskQuestionTree(
+            ask_tree = AskQuestionTree(
                 node_name="ask_question_tree",
                 robot_interface=self.robot_interface,
                 protocol_name=protocol_name,
@@ -318,32 +317,76 @@ class ExerciseProtocolTree(BaseTreeRunner):
                 debug=self.debug,
                 executor=self.executor,
             ).create_tree()
-            
-            # Check if the user specifically said YES
+
+            # YES check
             check_yes = py_trees.behaviours.CheckBlackboardVariableValue(
-                name="Did User Say Yes?",
+                name="UserSaidYes",
                 check=py_trees.common.ComparisonExpression(
                     variable="user_wants_video",
                     value=True,
-                    operator=lambda a, b: a == b
-                )
+                    operator=lambda a, b: a == b,
+                ),
             )
-            
-            # Create the "Play Path"
-            # This only runs if Ask is SUCCESS AND CheckYes is SUCCESS
-            play_protocol_sequence = py_trees.composites.Sequence(name="PlayProtocolPath", memory=True)
-            play_protocol_sequence.add_children([ask_question_tree, check_yes, exercise_block])
 
-            # Create the "Skip Path"
-            # If the sequence above fails (User said NO)
-            root_selector = py_trees.composites.Selector(name="CheckPermission", memory=True)
-            root_selector.add_children([
-                play_protocol_sequence,
-                ReadScript(text="User said No. Skipping exercise.", name="SkipNotice", node=self.robot_interface)
-            ])
-            
-            return root_selector
+            # NO check (explicit fallback)
+            check_no = py_trees.behaviours.CheckBlackboardVariableValue(
+                name="UserSaidNo",
+                check=py_trees.common.ComparisonExpression(
+                    variable="user_wants_video",
+                    value=False,
+                    operator=lambda a, b: a == b,
+                ),
+            )
 
+            # YES path → run lifecycle
+            yes_path = py_trees.composites.Sequence(
+                name="YesPath",
+                memory=True,
+                children=[
+                    check_yes,
+                    exercise_block,
+                ],
+            )
+
+            # NO path → explain and succeed
+            no_path = py_trees.composites.Sequence(
+                name="NoPath",
+                memory=True,
+                children=[
+                    check_no,
+                    ReadScript(
+                        text="Okay, I will skip the exercise.",
+                        name="SkipNotice",
+                        node=self.robot_interface,
+                    ),
+                    ClearExerciseProgressBB(
+                    name="UserSaidNoClearExerciseProgressBB",
+                    key_prefix=key_prefix,
+                    robot_interface=self.robot_interface,
+                    start_key=self.start_key,),
+                ],
+            )
+
+            # Decision gate: YES → NO → FAIL
+            decision = py_trees.composites.Selector(
+                name="UserDecision",
+                memory=True,
+                children=[
+                    yes_path,
+                    no_path,
+                ],
+            )
+
+            # Ask must succeed, decision must be explicit
+            root = py_trees.composites.Sequence(
+                name="AskAndRunExercise",
+                memory=True,
+                children=[
+                    ask_tree,
+                    decision,
+                ],
+            )
+            return root
         else:
             # Standard execution without permission check
             root = py_trees.composites.Sequence(
