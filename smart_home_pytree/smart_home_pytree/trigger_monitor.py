@@ -227,10 +227,8 @@ class TriggerMonitor:
             return False
 
         if datetime.now() >= self.pending_waits[full_name]:
-            # print(f"[Yield wait] {full_name} reached time removing from pending_waits")
             del self.pending_waits[full_name]
             # can use remove but discard doest give errors
-            # print(f"self.completed_protocols {full_name}")
             self.completed_protocols.discard(full_name)
             return True
 
@@ -247,7 +245,6 @@ class TriggerMonitor:
         # Check if the key exists using the blackboard API
         if not self.blackboard.exists(key):
             # It is valid for a protocol not to have a _done key like charging.
-            # We just return silently (or debug print) instead of printing an error.
             self.bb_logger.warn(f"[reset] Skipped {key} (not found on blackboard).")
             return
 
@@ -261,7 +258,7 @@ class TriggerMonitor:
         reset_dict = {sub_key: False for sub_key in value.keys()}
         self.blackboard.set(key, reset_dict)
 
-        print(f"[reset] Reset {key} → {reset_dict}")
+        self.bb_logger.debug(f"[reset] Reset {key} → {reset_dict}")
 
     def reset_all_protocol_dones(self):
         """
@@ -294,7 +291,7 @@ class TriggerMonitor:
         reset_dict = {sub_key: True for sub_key in value.keys()}
         self.blackboard.set(key, reset_dict)
 
-        print(f"[reset] Reset {key} → {reset_dict}")
+        self.bb_logger.debug(f"[reset] Reset {key} → {reset_dict}")
 
     # --- REQUIREMENTS CHECKS ---
     def _extract_event_keys(self):
@@ -315,8 +312,7 @@ class TriggerMonitor:
         current_events = {}
         for key in self.event_keys:
             val = self.robot_interface.state.get(key)
-            # print("val")
-            # print("key: ", key, "value: ", val)
+           
             if val is None:
                 self.bb_logger.warn(
                         f"[TriggerMonitor] Topic '{key}' not publishing or None → treating as False"
