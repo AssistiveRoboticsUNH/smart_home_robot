@@ -196,21 +196,26 @@ class ProtocolOrchestrator:
         # A. Cleanup: If a thread finished naturally, clear our memory of it
         if self.running_thread and not self.running_thread.is_alive():
             if self.debug:
-                print("[Orchestrator] Thread finished naturally. Cleaning up.")
+                self.bb_logger.info(
+                    "[Orchestrator] Thread finished naturally. Cleaning up."
+                )
             with self.lock:
                 self.running_tree = None
                 self.running_thread = None
 
         # B. Get Candidates
         satisfied = self.trigger_monitor.get_satisfied()
-        print("(((((((((((( &&****** satisfied: ", satisfied)
+        self.bb_logger.debug(
+                    "[Orchestrator] satisfied protocols {satisfied}."
+                )
         # Sort by priority (lowest number = highest priority)
         # satisfied is list of tuples: [("Name", priority_int), ...]
         best_candidate = min(satisfied, key=lambda x: x[1], default=None)
 
         if not best_candidate:
-            if self.debug:
-                print("[Orchestrator] No protocols satisfied.")
+            self.bb_logger.debug(
+                "[Orchestrator] No protocols satisfied."
+            )
             return
 
         with self.lock:
@@ -219,22 +224,24 @@ class ProtocolOrchestrator:
         # C. Decision Logic
         if not current_run:
             # Case 1: Nothing running -> Start the best one
-            if self.debug:
-                print(f"[Orchestrator] Idle. Starting {best_candidate}")
+            self.bb_logger.debug(
+                "[Orchestrator] Idle. Starting {best_candidate}"
+            )
             self.start_protocol(best_candidate)
 
         else:
             # Case 2: Something running -> Check for Preemption
-            if self.debug:
-                print("[Orchestrator] Something is running.")
+            self.bb_logger.debug(
+                "[Orchestrator]  Something is running."
+            )
+         
 
             current_priority = current_run["priority"]
             new_priority = best_candidate[1]
 
             if new_priority < current_priority:
-                if self.debug:
-                    print(
-                        f"[Orchestrator] Preempting Priority {current_priority} for Priority {new_priority}"
+                self.bb_logger.debug(
+                    f"[Orchestrator] Preempting Priority {current_priority} for Priority {new_priority}"
                     )
                 self.stop_protocol()
                 self.start_protocol(best_candidate)
@@ -244,15 +251,15 @@ class ProtocolOrchestrator:
         try:
             tree_runner.run_until_done()
         finally:
-            print("tree_runner.final_status", tree_runner.final_status)
+            self.bb_logger.info("tree_runner.final_status", tree_runner.final_status)
             if tree_runner.final_status == py_trees.common.Status.SUCCESS:
-                print(
-                    f"************** mark_completed {class_protocol_name} *************"
+                self.bb_logger.info(
+                    f"{class_protocol_name} is marked completed" 
                 )
                 self.trigger_monitor.mark_completed(class_protocol_name)
 
             with self.lock:
-                print(f"[Orchestrator] Finished: {class_protocol_name}")
+                self.bb_logger.info(f"[Orchestrator] Finished: {class_protocol_name}")
                 # tree = self.running_tree["tree"]
                 # tree.nodes_cleanup() ## script does on its own
                 self.running_tree = None
@@ -267,16 +274,14 @@ class ProtocolOrchestrator:
     def start_protocol(self, protocol_tuple):
         """Start the protocol in its own thread."""
         if protocol_tuple is None:
-            if self.debug:
-                print(
+            self.bb_logger.debug(
                     "[Orchestrator] Warning: Tried to start None protocol — skipping. HARMLESS"
                 )
             return
 
         class_protocol_name, priority = protocol_tuple
 
-        if self.debug:
-            print(
+        self.bb_logger.debug(
                 f"[Orchestrator] Starting: {class_protocol_name} (priority {priority})"
             )
 
@@ -291,10 +296,11 @@ class ProtocolOrchestrator:
             -1
         ]  # unique for a protocol ex: medicine_am
 
-        if self.debug:
-            print("**** tree_class_name : ", tree_class_name)
-            print("**** snake_case_class_name : ", snake_case_class_name)
-            print("**** protocol name: ", protocol_name)
+        self.bb_logger.debug(
+            f"**** tree_class_name : {tree_class_name}\n"
+            f"**** snake_case_class_name : {snake_case_class_name}\n"
+            f"**** protocol name : {protocol_name}"
+        )
 
         #  Dynamically import module & class
         try:
@@ -304,7 +310,7 @@ class ProtocolOrchestrator:
             # gets the class from the file in module
             tree_class = getattr(module, f"{tree_class_name}Tree")
         except Exception as e:
-            print(
+            self.bb_logger.info(
                 f"[Orchestrator] Failed to load tree '{tree_class_name}Tree' from module smart_home_pytree.trees.{snake_case_class_name} : {e}"
             )
             return
@@ -339,7 +345,7 @@ class ProtocolOrchestrator:
             if not self.running_tree:
                 return
             name = self.running_tree["name"]
-            print(f"[Orchestrator] Stopping: {name}")
+            self.bb_logger.info(f"[Orchestrator] Stopping: {name}")
             tree = self.running_tree["tree"]
 
         tree.stop_tree()
@@ -352,7 +358,8 @@ class ProtocolOrchestrator:
 
     def shutdown(self):
         """Gracefully stop everything (ROS-safe)."""
-        print("[Orchestrator] Shutting down...")
+        self.bb_logger.info("[Orchestrator] Shutting down...")
+        
 
         # 1. Stop orchestrator logic
         self.stop_flag = True
@@ -370,7 +377,7 @@ class ProtocolOrchestrator:
 
         # 3. STOP EXECUTOR FIRST (CRITICAL)
         if hasattr(self, "executor") and self.executor:
-            print("[Orchestrator] Shutting down executor...")
+            self.bb_logger.debug("[Orchestrator] Shutting down executor...")
             self.executor.shutdown()
 
         # 4. Destroy nodes AFTER executor stops
@@ -387,10 +394,10 @@ class ProtocolOrchestrator:
 
         # 6. Shutdown rclpy ONCE
         if rclpy.ok() and self.rclpy_initialized_here:
-            print("[Orchestrator] rclpy shutdown")
+            self.bb_logger.debug("[Orchestrator] rclpy shutdown")
             rclpy.shutdown()
 
-        print("[Orchestrator] Shutdown complete.")
+        self.bb_logger.notify_discord("[Orchestrator] Shutdown complete.")
 
 
 def validate_time_arg(time_str: str) -> str:
