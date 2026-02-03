@@ -4,22 +4,18 @@ locations:
     x: -1.08
     y: -1.4811692237854004
     yaw: -1.5708   # -90 degrees
-
   living_room:
     x: 1.0967974662780762
     y: 1.9037660360336304
     yaw: 0.0       # facing forward
   home:
-    x: 2.6955928802490234 #0.85 #
-    y: 3.3216073513031006 #1.014 #
-    yaw: -1.5708   # -90 degrees
-
+    x: 2.55 #0.85 #
+    y: 3.12 #1.014 #
+    yaw: 0.554899   
   dining:
     x: 5.066422939300537
     y: 3.4881248474121094
     yaw: -1.5708   # -90 degrees
-
-
 
 ## need to be integerated to have robot interface get its info 
 person_location_state: "person_location"
@@ -31,12 +27,39 @@ protocols:
   MoveAwayProtocol:
     move_away:
       low_level:
-        position_state_key: position # indicates which key it should refer to in the state dictionary
+        away_location: dining # move_away has two loc, home or away where away is the location defined here and has to be part of the locations in the yaml
+        position_state_key: position # key to indicate whether to move away or home
+        state_key: move_away
       high_level:
+        reset_pattern:
+          type: instant 
         priority: 1
         requirements: 
           event: 
             - {'state': 'move_away', 'value': True}  
+
+  ExerciseRandomProtocol:
+    exercise_rand:
+      low_level:
+        total_num_exercises: 2 ## total number of exercises to pick from
+        difficulty_level: [low, medium] ## difficulty level to pick exercises from [high, medium, low] empty means all levels
+        time_limit_minutes: 5 ## time limit for the exercise session
+        reps_per_exercise: 1 ## number of repetitions per exercise
+        time_between_exercises: 6 ## time between exercises in seconds
+        time_between_reps: 3 ## time between reps in seconds
+        video_dir_path: "file:///storage/emulated/0/Download/Exercise_Videos" ## path on the tablet 
+        start_state_key: "start_exercise"
+        stop_state_key: "stop_exercise"
+        get_confirmation: "Do you want to exercise now?" ## if empty then dont ask to indicate whether the protocol should start after the person asks
+      high_level:
+        reset_pattern:
+          type: instant ## if triggered should play directly
+        priority: 4
+        requirements: 
+          event: 
+            - {'state': 'start_exercise', 'value': True}
+          day: [thursday, saturday, sunday]
+          time: {'from': "9:30", to: "10:30"}
 
   ## permissible_locations to be incorporated
   XReminderProtocol:
@@ -77,25 +100,7 @@ protocols:
         requirements:
           time: {from: "10:00", to: "11:00"}
           permissible_locations: [living_room]
-          
-
-  ExerciseProtocol:
-    exercise:
-      low_level:
-        exercise_yaml_file: "/home/hello-robot/smarthome_ws/src/smart_home_robot/smart_home_pytree/config/exercise_routine_test.yaml" 
-        video_dir_path: "file:///storage/emulated/0/Download/Exercise_Videos" ## path on the tablet 
-        start_state_key: "start_exercise"
-        stop_state_key: "stop_exercise"
-        get_confirmation: "Do you want to exercise now?" ## if empty then dont ask to indictae whther the protocol should start after the person asks
-      high_level:
-        reset_pattern:
-          type: instant ## if triggered should play directly
-        priority: 4
-        requirements: 
-          event: 
-            - {'state': 'start_exercise', 'value': True}
-          day: [thursday, saturday, sunday]
-          time: {'from': "9:30", to: "10:30"}
+        
 
   ChargeRobot:
     charge_robot: 
