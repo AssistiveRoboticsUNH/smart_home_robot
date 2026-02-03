@@ -143,7 +143,8 @@ class ShrHumanInteractionNode(Node):
             if self._question_active:
                 return ""
             else:
-                self._dm.deactivate_wakeword_session()
+                if self._dm.get_session_trigger_reason() == DialogManager.WAKEWORD_TRIGGER:
+                    self._dm.deactivate_wakeword_session()
             # TODO: replace this with your real LLM call
             # time.sleep(0.2)
             # robot_reply = f"You said: {user_text}"
