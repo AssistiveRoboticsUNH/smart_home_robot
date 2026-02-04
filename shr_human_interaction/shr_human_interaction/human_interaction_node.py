@@ -54,7 +54,7 @@ class ShrHumanInteractionNode(Node):
         self._action_cb_group = ReentrantCallbackGroup()
 
         # ---- Parameters (override via launch/CLI) ----
-        self.declare_parameter("model", "base.en")
+        self.declare_parameter("model", "small.en")
         self.declare_parameter("device", "cpu")
         self.declare_parameter("wakeword_keywords", "hey_jarvis")
         self.declare_parameter("vad_silero_threshold", 0.5)
@@ -142,6 +142,9 @@ class ShrHumanInteractionNode(Node):
 
             if self._question_active:
                 return ""
+            else:
+                if self._dm.get_session_trigger_reason() == DialogManager.WAKEWORD_TRIGGER:
+                    self._dm.deactivate_wakeword_session()
             # TODO: replace this with your real LLM call
             # time.sleep(0.2)
             # robot_reply = f"You said: {user_text}"
@@ -157,6 +160,7 @@ class ShrHumanInteractionNode(Node):
             on_status=_on_status,
             external_policy=_external_policy,
             wakeword_keywords=self._wakeword_keywords,
+            wakeword_arm_thresh=0.1,
             wakeword_model_paths=self._wakeword_model_paths,
             vad_silero_threshold=float(self._vad_thresh),
             no_speech_timeout= self._no_speech_timeout_ms
