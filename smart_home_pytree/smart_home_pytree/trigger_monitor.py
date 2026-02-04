@@ -19,7 +19,6 @@ class TriggerMonitor:
         robot_interface,
         wake_event: threading.Event,
         yaml_path=None,
-        debug: bool = False,
         test_time: str = "",
     ):
         """
@@ -50,14 +49,18 @@ class TriggerMonitor:
         # after how much time to reset)
 
         self.blackboard = py_trees.blackboard.Blackboard()
+
+        if not self.blackboard.exists("logger"):
+            raise ValueError(
+                f"logger is not set up yet. Make sure it runs before trigger monitor"
+            )
+
         self.bb_logger = self.blackboard.get("logger")
-        
+
         # Dynamically collect event keys from YAML
         self.event_keys = self._extract_event_keys()
         self.bb_logger.info(f"[TriggerMonitor] Loaded event keys from YAML: {self.event_keys}")
 
-        
-        
         # support yield waiting
         self.pending_waits = {}
         # success_on monitoring:  support finishing a protocol if a req is met
@@ -66,12 +69,11 @@ class TriggerMonitor:
 
         # change orchestrator to become reactive
         self.satisfied_changed_event = wake_event
-        self.debug = debug
 
         # --- TIME SIMULATION LOGIC ---
         self.time_offset = None
         self.bb_logger.debug(f"[TriggerMonitor] test_time: {test_time}")
-        
+
         if test_time:
             # 1. Get real 'now'
             now = datetime.now()
@@ -86,8 +88,8 @@ class TriggerMonitor:
             self.time_offset = target_time - now
 
             self.bb_logger.debug(
-                    f"[TriggerMonitor] Time Simulation Active. Starts at {test_time} (Offset: {self.time_offset})"
-                )
+                f"[TriggerMonitor] Time Simulation Active. Starts at {test_time} (Offset: {self.time_offset})"
+            )
 
     # --- TIME HELPER ---
     def get_current_time_string(self):
@@ -183,7 +185,7 @@ class TriggerMonitor:
         for full_name, req in list(wait_requests.items()):
             seconds = req["seconds"]
             timestamp = req["timestamp"]
-            
+
             resume_time = datetime.fromtimestamp(timestamp) + timedelta(seconds=seconds)
 
             # Register resume
@@ -220,9 +222,9 @@ class TriggerMonitor:
         Returns:
             bool: if protocol should be resumed
         """
-        
+
         self.bb_logger.debug(f"[Yield wait] {full_name}: {self.pending_waits}")
-            
+
         if full_name not in self.pending_waits.keys():
             return False
 
@@ -312,11 +314,11 @@ class TriggerMonitor:
         current_events = {}
         for key in self.event_keys:
             val = self.robot_interface.state.get(key)
-           
+
             if val is None:
-                self.bb_logger.warn(
-                        f"[TriggerMonitor] Topic '{key}' not publishing or None → treating as False"
-                    )
+                self.bb_logger.debug(
+                    f"[TriggerMonitor] Topic '{key}' not publishing or None → treating as False"
+                )
                 current_events[key] = False
             else:
                 current_events[key] = val
@@ -375,13 +377,12 @@ class TriggerMonitor:
         with self.lock:
             changed = new_satisfied != self.current_satisfied_protocols
             self.current_satisfied_protocols = new_satisfied
-        
+
         if (
             changed or new_satisfied
         ):  # trigger if not empty and if change happened might be redundant
-            # if self.debug and changed:
             if changed:
-                self.bb_logger.debug("Satisfied change event : ", new_satisfied)
+                self.bb_logger.debug(f"Satisfied change event : {new_satisfied}")
             self.satisfied_changed_event.set()
 
         return changed
@@ -529,8 +530,8 @@ class TriggerMonitor:
                 # Logic: Don't block triggers (completed_protocols).
                 # Reset Blackboard flags so the behavior tree can tick again immediately.
                 self.bb_logger.debug(
-                        f"[TriggerMonitor] Type INSTANT: Resetting flags for {sub} immediately."
-                    )
+                    f"[TriggerMonitor] Type INSTANT: Resetting flags for {sub} immediately."
+                )
                 self.reset_specific_protocol_dones(sub)
                 return
 
@@ -546,18 +547,18 @@ class TriggerMonitor:
                         (full_name, timestamp, reset_seconds)
                     )
                     self.bb_logger.debug(
-                            f"[TriggerMonitor] Type PERIODIC: Scheduled reset for {full_name} in {reset_seconds}s"
-                        )
+                        f"[TriggerMonitor] Type PERIODIC: Scheduled reset for {full_name} in {reset_seconds}s"
+                    )
                 else:
                     self.bb_logger.debug(
-                            f"[ERROR] Periodic protocol {full_name} has invalid time settings."
-                        )
+                        f"[ERROR] Periodic protocol {full_name} has invalid time settings."
+                    )
 
             # --- CASE 3: DEFAULT (No Pattern) ---
             elif pattern_type == "default":
                 self.bb_logger.debug(
-                        f"[TriggerMonitor] Type DEFAULT: {full_name} marked complete (no auto-reset)."
-                    )
+                    f"[TriggerMonitor] Type DEFAULT: {full_name} marked complete (no auto-reset)."
+                )
 
             # Update satisfied list because one protocol just became "Complete" (blocked)
             self.recompute_satisfied()

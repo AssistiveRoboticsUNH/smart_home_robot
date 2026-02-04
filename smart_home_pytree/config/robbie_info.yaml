@@ -101,7 +101,6 @@ protocols:
           time: {from: "10:00", to: "11:00"}
           permissible_locations: [living_room]
         
-
   ChargeRobot:
     charge_robot: 
       high_level:
@@ -113,7 +112,6 @@ protocols:
               - {'state': 'charging', 'value': False}
 
  
-
 # 3 days a week- 9.30 am- Thursday, Saturday and Sunday 
 
 ## to be incorporased

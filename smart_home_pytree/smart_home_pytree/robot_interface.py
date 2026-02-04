@@ -144,10 +144,10 @@ class RobotInterface(Node):
         self.pub_speak.publish(msg)
         
     def amcl_callback(self, msg):
-        # print("updating robot amcl")
         x = msg.pose.pose.position.x
         y = msg.pose.pose.position.y
         self.state.update("robot_location_xy", (x, y))
+        
 
     def shutdown(self):
         """Gracefully stop the background spinner."""

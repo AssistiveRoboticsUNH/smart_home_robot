@@ -4,7 +4,7 @@ import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy
 from std_msgs.msg import String, Empty
-
+import py_trees
 
 class HumanInterface(Node):
     """
@@ -21,7 +21,6 @@ class HumanInterface(Node):
         orchestrator_wakeup: threading.Event,
         node_name: str = "voice_trigger",
         robot_interface=None,
-        debug: bool = True,
     ):
         """
         Initialize the HumanInterface node.
@@ -38,8 +37,13 @@ class HumanInterface(Node):
         self.human_interrupt_event = human_interrupt_event
         self.orchestrator_wakeup = orchestrator_wakeup
         self.robot_interface = robot_interface
-        self.debug = debug
 
+        blackboard = py_trees.blackboard.Blackboard()
+        if blackboard.exists("logger"):
+            self.bb_logger = blackboard.get("logger")
+        else:
+            self.bb_logger = None
+            
         # Timer handle for the safety timeout
         self.timeout_timer = None
         self.timeout_duration_sec = 120.0  # 2 minutes
@@ -74,11 +78,9 @@ class HumanInterface(Node):
             self.timeout_duration_sec, self._safety_timeout_callback
         )
         self.timeout_timer.start()
-        self.get_logger().info(
-            f"[HumanInterface] Native Safety Timer started ({self.timeout_duration_sec}s)"
-        )
-        if self.debug:
-            print(
+        
+        if self.bb_logger:
+            self.bb_logger.debug(
                 f"[HumanInterface] Native Safety Timer started ({self.timeout_duration_sec}s)"
             )
 
@@ -96,12 +98,9 @@ class HumanInterface(Node):
             if self.decisive_command:
                 return
         
-        self.get_logger().error(
-            "[HumanInterface] TIMEOUT! System resuming automatically."
-        )
-        if self.debug:
-            print(
-                f"[HumanInterface] Native Safety Timer started ({self.timeout_duration_sec}s)"
+        if self.bb_logger:
+            self.bb_logger.debug(
+                "[HumanInterface] TIMEOUT! System resuming automatically."
             )
 
         if self.human_interrupt_event.is_set():
@@ -109,9 +108,9 @@ class HumanInterface(Node):
             self.human_interrupt_event.clear()
             self.orchestrator_wakeup.set()
             self.pub_stop.publish(msg)
-            if self.debug:
-                print("[HumanInterface] orchestrator_wakeup SET")
-                print("[HumanInterface] human_interrupt_event clear")
+            if self.bb_logger:
+                self.bb_logger.debug("[HumanInterface] orchestrator_wakeup SET")
+                self.bb_logger.debug("[HumanInterface] human_interrupt_event clear")
 
     def voice_status_callback(self, msg: String):
         """

@@ -42,6 +42,13 @@ def generate_launch_description():
         output="screen",
     )
 
+    discord_logger = Node(
+        package="simple_logger",
+        executable="simple_logger_discord",
+        name="logger_discord",
+        output="screen",
+    )
+
     human_voice_interaction = Node(
         package="shr_human_interaction",
         executable="human_interaction_node",
@@ -80,12 +87,12 @@ def generate_launch_description():
 
     # --- Return one LaunchDescription with everything included ---
     return LaunchDescription(
-        [   tb3_launch,
+        [tb3_launch,
             display_node,
             play_video_node_cmd,
             human_voice_interaction,
             mock_dock_undock_cmd,
             charging_pub,
-            
-        ]
+            discord_logger,
+         ]
     )

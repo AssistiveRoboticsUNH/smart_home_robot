@@ -36,7 +36,6 @@ class CheckRobotStateKey_(py_trees.behaviour.Behaviour):
             self.logger.warning(f"{self.name}: '{self.key}' not found in RobotState")
             value = False
 
-        print("charging value: ", value)
         if value == True:
             # fail when true
             self.logger.debug(f"STOP EXERCISE, FAILURE")
@@ -288,18 +287,23 @@ class ExerciseRandomProtocolTree(BaseTreeRunner):
         
         protocol_seq = py_trees.composites.Sequence(name="ExerciseLoop", memory=True)
 
-        for exercise in selected_exercises:
+        for i, exercise in enumerate(selected_exercises):
             # Exercise block
             ex_node = self.build_exercise_sequence(
-                exercise["path"], self.reps_per_exercise, self.time_between_reps
+                exercise["path"],
+                self.reps_per_exercise,
+                self.time_between_reps
             )
             protocol_seq.add_child(ex_node)
-            
+
             # Decrement counter AFTER success of exercise
             protocol_seq.add_child(DecrementRemainingExercises("DecrCount"))
-            
-            # Rest between different exercises
-            protocol_seq.add_child(Wait(self.time_between_exercises, "RestBetweenEx"))
+
+            # Rest only if this is NOT the last exercise
+            if i < len(selected_exercises) - 1:
+                protocol_seq.add_child(
+                    Wait(self.time_between_exercises, "RestBetweenEx")
+                )
 
         # --- Guards ---
         stop_guard = CheckRobotStateKey_(

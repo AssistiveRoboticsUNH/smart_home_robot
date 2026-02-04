@@ -54,7 +54,8 @@ class ProtocolOrchestrator:
                     " self.rclpy_initialized_here should be false: ",
                     self.rclpy_initialized_here,
                 )
-
+        
+        
         # Events
         self.orchestrator_wakeup = threading.Event()
         self.human_interrupt_event = threading.Event()
@@ -68,19 +69,31 @@ class ProtocolOrchestrator:
         self.last_satisfied = None
 
         self.robot_interface = robot_interface or RobotInterface()
-        # Setup HumanInterface (CRITICAL: Create BEFORE Robot Interface spins)
+        
+        # Setup logger
+        blackboard = py_trees.blackboard.Blackboard()
+
+        # 3. Create  Custom Logger
+        # If robot_interface is a node, it uses it. If not, it uses print.
+        custom_logger = BlackboardLogger(node=self.robot_interface, debug_mode=debug)
+
+        # 4. SAVE IT GLOBALLY
+        # Saved globally so 'logger' is available to every single Python file in project
+        blackboard.set("logger", custom_logger)
+        self.bb_logger = blackboard.get("logger")
+        
+        # Setup HumanInterface 
         self.human_interface_node = HumanInterface(
             human_interrupt_event=self.human_interrupt_event,
             orchestrator_wakeup=self.orchestrator_wakeup,
-            robot_interface=self.robot_interface,  # Pass None for now to prevent dependency loop
+            robot_interface=self.robot_interface,
         )
-
+        
         # Setup TriggerMonitor
         self.trigger_monitor = TriggerMonitor(
             self.robot_interface,
             wake_event=self.orchestrator_wakeup,
             test_time=test_time,
-            debug=debug,
         )
 
         # ---- SINGLE executor for EVERYTHING ----
@@ -97,18 +110,6 @@ class ProtocolOrchestrator:
             target=self.trigger_monitor.start_monitor, daemon=True
         )
         self.monitor_thread.start()
-        
-        # --- Setup logger ---
-        blackboard = py_trees.blackboard.Blackboard()
-
-        # 3. Create  Custom Logger
-        # If robot_interface is a node, it uses it. If not, it uses print.
-        custom_logger = BlackboardLogger(node=self.robot_interface, debug_mode=debug)
-
-        # 4. SAVE IT GLOBALLY
-        # Saved globally so 'logger' is available to every single Python file in project
-        blackboard.set("logger", custom_logger)
-        self.bb_logger = blackboard.get("logger")
 
     def _state_is_ready(self):
         for key in self.required_state_keys:
@@ -206,7 +207,7 @@ class ProtocolOrchestrator:
         # B. Get Candidates
         satisfied = self.trigger_monitor.get_satisfied()
         self.bb_logger.debug(
-                    "[Orchestrator] satisfied protocols {satisfied}."
+                    f"[Orchestrator] satisfied protocols {satisfied}."
                 )
         # Sort by priority (lowest number = highest priority)
         # satisfied is list of tuples: [("Name", priority_int), ...]
@@ -225,7 +226,7 @@ class ProtocolOrchestrator:
         if not current_run:
             # Case 1: Nothing running -> Start the best one
             self.bb_logger.debug(
-                "[Orchestrator] Idle. Starting {best_candidate}"
+                f"[Orchestrator] Idle. Starting {best_candidate}"
             )
             self.start_protocol(best_candidate)
 
@@ -251,7 +252,7 @@ class ProtocolOrchestrator:
         try:
             tree_runner.run_until_done()
         finally:
-            self.bb_logger.info("tree_runner.final_status", tree_runner.final_status)
+            self.bb_logger.info(f"tree_runner.final_status {tree_runner.final_status}")
             if tree_runner.final_status == py_trees.common.Status.SUCCESS:
                 self.bb_logger.info(
                     f"{class_protocol_name} is marked completed" 
@@ -464,7 +465,6 @@ def main():
         )
     # blackboard = py_trees.blackboard.Blackboard()
     print("Loading location and protocol to bb")
-    
     
     load_protocols_to_bb(yaml_file_path, debug=False)
     load_locations_to_blackboard(yaml_file_path)
