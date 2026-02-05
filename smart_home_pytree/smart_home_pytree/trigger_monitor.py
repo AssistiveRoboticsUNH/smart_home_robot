@@ -56,6 +56,7 @@ class TriggerMonitor:
             )
 
         self.bb_logger = self.blackboard.get("logger")
+        self.bb_logger.debug("[TriggerMonitor] TriggerMonitor initilized") 
 
         # Dynamically collect event keys from YAML
         self.event_keys = self._extract_event_keys()
@@ -259,7 +260,7 @@ class TriggerMonitor:
         # Reset each entry to False
         reset_dict = {sub_key: False for sub_key in value.keys()}
         self.blackboard.set(key, reset_dict)
-
+          
         self.bb_logger.debug(f"[reset] Reset {key} → {reset_dict}")
 
     def reset_all_protocol_dones(self):

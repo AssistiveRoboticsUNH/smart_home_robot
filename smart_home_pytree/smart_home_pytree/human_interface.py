@@ -133,9 +133,9 @@ class HumanInterface(Node):
                 self.human_interrupt_event.set()
                 self.orchestrator_wakeup.set()
 
-                if self.debug:
-                    print("[HumanInterface] orchestrator_wakeup SET")
-                    print("[HumanInterface] human_interrupt_event SET")
+                if self.bb_logger:
+                    self.bb_logger.debug("[HumanInterface] orchestrator_wakeup SET")
+                    self.bb_logger.debug("[HumanInterface] human_interrupt_event SET")
 
                 # Start safety timer in case we never get an IDLE within timeout
                 self._start_safety_timer()
@@ -145,14 +145,14 @@ class HumanInterface(Node):
                 self.get_logger().info(
                     "[HumanInterface] Voice IDLE. Resuming Orchestrator."
                 )
-                if self.debug:
-                    print("[HumanInterface] Voice IDLE. Resuming Orchestrator.")
+                if self.bb_logger:
+                    self.bb_logger.debug("[HumanInterface] Voice IDLE. Resuming Orchestrator.")
 
                 self.human_interrupt_event.clear()
                 self.orchestrator_wakeup.set()
-                if self.debug:
-                    print("[HumanInterface] orchestrator_wakeup SET")
-                    print("[HumanInterface] human_interrupt_event clear")
+                if self.bb_logger:
+                    self.bb_logger.debug("[HumanInterface] orchestrator_wakeup SET")
+                    self.bb_logger.debug("[HumanInterface] human_interrupt_event clear")
 
                 # Interaction successful, we don't need the fallback timer anymore
                 self._cancel_safety_timer()
@@ -177,8 +177,8 @@ class HumanInterface(Node):
                     "[DECISION] User said 'home', set move_away=True, position='home'"
                 )
 
-                if self.debug:
-                    print(
+                if self.bb_logger:
+                    self.bb_logger.debug(
                         "[DECISION] User said 'home', set move_away=True, position='home'"
                     )
 
@@ -192,8 +192,8 @@ class HumanInterface(Node):
                     "[DECISION] User said 'away' → set move_away=True, position='away'"
                 )
 
-                if self.debug:
-                    print(
+                if self.bb_logger:
+                    self.bb_logger.debug(
                         "[DECISION] User said 'away' → set move_away=True, position='away'"
                     )
 
@@ -203,8 +203,8 @@ class HumanInterface(Node):
                 
         if local_decisive and self.human_interrupt_event.is_set():
             self.get_logger().info("[DECISION] Stopping human interrupt immediately")
-            if self.debug:
-                print("[DECISION] Stopping human interrupt immediately")
+            if self.bb_logger:
+                self.bb_logger.debug("[DECISION] Stopping human interrupt immediately")
                 
             # time.sleep(1s) ## or use sleep
             # Clear the human interrupt and wake orchestrator

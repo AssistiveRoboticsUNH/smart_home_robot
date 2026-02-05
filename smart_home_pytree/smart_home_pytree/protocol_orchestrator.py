@@ -82,6 +82,8 @@ class ProtocolOrchestrator:
         blackboard.set("logger", custom_logger)
         self.bb_logger = blackboard.get("logger")
         
+        self.bb_logger.notify_discord("[Orchestrator] Orchestrator initilized")          
+
         # Setup HumanInterface 
         self.human_interface_node = HumanInterface(
             human_interrupt_event=self.human_interrupt_event,

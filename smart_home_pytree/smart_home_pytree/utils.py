@@ -160,10 +160,9 @@ class BlackboardLogger:
 
         The keyword 'weblog=' is required so the Discord log scraper
         can detect and forward the message.
-        """
+        """        
         key_word = "weblog="
         full_message = f"{key_word} {message}"
-
         severity = severity.upper()
 
         if severity == "WARN":
