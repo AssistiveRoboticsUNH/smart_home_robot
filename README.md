@@ -131,44 +131,40 @@ ros2 launch stretch_nav2 navigation_mppi_dual_hesai.launch.py map:=${HELLO_FLEET
 cd ~/smarthome_ws/src/smart_home_robot/smart_home_pytree/test/mock and run python3 mock_run_actions_no_nav.py 
 
 to log to discord run
+
+```
 ros2 run simple_logger simple_logger_discord 
+```
 
 currently you need to publish person_location and charging topics. you can use the gui for that 
 cd ~/smarthome_ws/src/smart_home_robot/smart_home_pytree/test and run python3 gui_for_testing.py 
 
 
-to run specific protocol
+to run a specific protocol
+```
 python3 two_reminder_protocol.py --protocol_name medicine_am
-
-or python3 two_reminder_protocol.py --protocol_name medicine_pm
-
-
-to run the orchestrator:
-
- python3 protocol_orchestrator.py this takes test_time variable. if none it will use actual time.
-
+```
 look in the yaml file to figure out the requirements for each protocol
 
 for coffee in addtion to time being between 9:30 and 1 it requires two topics to be true
 
+```
 ros2 topic pub /coffee std_msgs/msg/Bool "data: True"
 ros2 topic pub /coffee_pot std_msgs/msg/Bool "data: True"
-
+```
 will support later to change the time dynamically you can also pub a string with to the /sim_time topic
 
 helper commands:
 to find free ports:
-
+```
  for port in {5556..5600}; do   if ! ss -tuln | grep -q ":$port "; then     echo "Port $port is free";   fi; done
+```
 
 run video action:
-
+```
 ros2 action send_goal /play_video shr_msgs/action/PlayVideoRequest "file_name: 'file:///storage/emulated/0/Download/maggie_coffee.mp4'"
-
-ros2 run smart_home_pytree protocol_orchestrator -- --test_time 13:00
-
-
-To trigger start_exercise its should be either formt he display or ros2 topic pub /display_rx std_msgs/msg/String "data: 'exercise_requested'" 
+```
+To trigger start_exercise its should be either for the display or ```ros2 topic pub /display_rx std_msgs/msg/String "data: 'exercise_requested'" ```
 
 ### Set up Webapp
 Install the application in https://github.com/AssistiveRoboticsUNH/Hello_Face on your tablet
