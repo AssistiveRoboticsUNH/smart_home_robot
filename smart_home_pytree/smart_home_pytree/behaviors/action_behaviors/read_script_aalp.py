@@ -25,7 +25,7 @@ class ReadScript(py_trees.behaviour.Behaviour):
         self.timeout = timeout
 
         self.pub = None
-        self.sub_robot = None
+        # self.sub_robot = None
         self.sub_status = None
 
         self._acknowledged = False
@@ -43,9 +43,9 @@ class ReadScript(py_trees.behaviour.Behaviour):
             String, "/voice/speak", VOICE_QOS
         )
 
-        self.sub_robot = self.node.create_subscription(
-            String, "/voice/robot", self._robot_cb, VOICE_QOS
-        )
+        # self.sub_robot = self.node.create_subscription(
+        #     String, "/voice/robot", self._robot_cb, VOICE_QOS
+        # )
 
         self.sub_status = self.node.create_subscription(
             String, "/voice/status", self._status_cb, VOICE_QOS
@@ -59,15 +59,15 @@ class ReadScript(py_trees.behaviour.Behaviour):
             f"[ReadScript] Sent script to /voice/speak"
         )
 
-    def _robot_cb(self, msg: String):
-        """
-        Robot confirms it accepted the script.
-        """
-        if msg.data == self.text:
-            self._acknowledged = True
-            self.node.get_logger().info(
-                "[ReadScript] Script acknowledged by robot"
-            )
+    # def _robot_cb(self, msg: String):
+    #     """
+    #     Robot confirms it accepted the script.
+    #     """
+    #     if msg.data == self.text:
+    #         self._acknowledged = True
+    #         self.node.get_logger().info(
+    #             "[ReadScript] Script acknowledged by robot"
+    #         )
 
     def _status_cb(self, msg: String):
         """
@@ -75,8 +75,8 @@ class ReadScript(py_trees.behaviour.Behaviour):
         """
         status = msg.data.upper()
 
-        if not self._acknowledged:
-            return
+        # if not self._acknowledged:
+        #     return
 
         if status == "SPEAKING":
             self._speaking = True
@@ -84,6 +84,7 @@ class ReadScript(py_trees.behaviour.Behaviour):
 
         elif status == "IDLE" and self._speaking:
             self._finished = True
+            self._speaking = False
             self.node.get_logger().info("[ReadScript] Speaking finished")
 
     def update(self):
@@ -99,9 +100,9 @@ class ReadScript(py_trees.behaviour.Behaviour):
         return py_trees.common.Status.RUNNING
 
     def terminate(self, new_status):
-        if self.sub_robot:
-            self.node.destroy_subscription(self.sub_robot)
-            self.sub_robot = None
+        # if self.sub_robot:
+        #     self.node.destroy_subscription(self.sub_robot)
+        #     self.sub_robot = None
 
         if self.sub_status:
             self.node.destroy_subscription(self.sub_status)
