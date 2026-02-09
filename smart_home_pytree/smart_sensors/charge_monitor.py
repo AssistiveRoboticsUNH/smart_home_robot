@@ -45,6 +45,10 @@ class ChargingMonitor(Node):
             # Access the Pimu status
             pimu = self.robot.status["pimu"]
             is_charging = pimu["charger_is_charging"]
+            batter_percent = pimu["battery_soc"]
+
+            if batter_percent < 30:
+                self.get_logger().warn("weblog=WARNING!! BATTERY PERCENTAGE DROPPED BEYOND 30 %")
 
             # Check if state has changed
             if is_charging != self.last_charging_state:
