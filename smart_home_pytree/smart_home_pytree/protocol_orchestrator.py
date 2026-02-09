@@ -26,7 +26,7 @@ class ProtocolOrchestrator:
     interruptions, and manages the execution threads of specific protocol trees.
     """
 
-    def __init__(self, robot_interface=None, test_time: str = "", debug=False):
+    def __init__(self, robot_interface=None, test_time: str = "", debug=False, yaml_path_key=None):
         """
         Initialize the Orchestrator.
 
@@ -95,6 +95,7 @@ class ProtocolOrchestrator:
         self.trigger_monitor = TriggerMonitor(
             self.robot_interface,
             wake_event=self.orchestrator_wakeup,
+            yaml_path_key=yaml_path_key,
             test_time=test_time,
         )
 
@@ -459,7 +460,9 @@ def main():
     args, _ = parser.parse_known_args()
     test_time = args.test_time
 
+
     # Resolve YAML file path from environment variable
+    print(f"Environment variable path is set to  '{args.env_yaml_file_name}'")
     yaml_file_path = os.getenv(args.env_yaml_file_name)
     if yaml_file_path is None:
         raise RuntimeError(
@@ -477,7 +480,7 @@ def main():
         print("[INFO] Using system time")
 
     # For testing:
-    orch = ProtocolOrchestrator(test_time=test_time, debug=args.debug)
+    orch = ProtocolOrchestrator(test_time=test_time, debug=args.debug, yaml_path_key=args.env_yaml_file_name)
 
     try:
         print("ORCHI LOOP")

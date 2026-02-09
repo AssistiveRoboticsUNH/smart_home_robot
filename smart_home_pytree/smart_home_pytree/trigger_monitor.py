@@ -18,7 +18,7 @@ class TriggerMonitor:
         self,
         robot_interface,
         wake_event: threading.Event,
-        yaml_path=None,
+        yaml_path_key=None,
         test_time: str = "",
     ):
         """
@@ -31,13 +31,17 @@ class TriggerMonitor:
         """
 
         self.robot_interface = robot_interface
-
-        if yaml_path is None:
+        print(f"[TriggerMonitor]: yaml_path key {yaml_path_key}")
+        if yaml_path_key is None:
             yaml_path = os.getenv("house_yaml_path")
+        else:
+            print(f"[TriggerMonitor]: Using yaml_path_key: {yaml_path_key}")
+            yaml_path = os.getenv(yaml_path_key)
 
         with open(yaml_path, "r") as f:
             self.protocols_yaml = yaml.safe_load(f)
 
+        print(f"[TriggerMonitor]: yaml_path {yaml_path}")
         self.current_satisfied_protocols = []  # [(full_name, priority)]
         # Use RLock (Re-entrant Lock) to prevent deadlocks
         self.lock = threading.RLock()
@@ -56,7 +60,7 @@ class TriggerMonitor:
             )
 
         self.bb_logger = self.blackboard.get("logger")
-        self.bb_logger.debug("[TriggerMonitor] TriggerMonitor initilized") 
+        self.bb_logger.notify_discord("[TriggerMonitor] TriggerMonitor initilized") 
 
         # Dynamically collect event keys from YAML
         self.event_keys = self._extract_event_keys()
