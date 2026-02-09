@@ -117,7 +117,7 @@ class ExerciseRandomProtocolTree(BaseTreeRunner):
         required_keys = [
             "total_num_exercises", "difficulty_level", "time_limit_minutes",
             "reps_per_exercise", "time_between_exercises", "time_between_reps",
-            "start_state_key", "stop_state_key", "video_dir_path",
+            "start_state_key", "stop_state_key", "video_dir_path"
         ]
         for key in required_keys:
             if key not in self.protocol_info:
@@ -133,6 +133,11 @@ class ExerciseRandomProtocolTree(BaseTreeRunner):
         self.start_key = self.protocol_info["start_state_key"]
         self.stop_key = self.protocol_info["stop_state_key"]
         self.video_dir_path = self.protocol_info["video_dir_path"]
+
+        if "storage/emulated/0" in self.video_dir_path:
+            self.tablet = True
+        else:
+            self.tablet = False
 
     def extract_difficulty(self, video_path: Path) -> str:
         """
@@ -152,6 +157,41 @@ class ExerciseRandomProtocolTree(BaseTreeRunner):
             raise ValueError(f"Invalid difficulty in: {video_path.name}")
         return difficulty
 
+    def build_video_pool_tablet(self, root_dir: str) -> List[Dict]:
+        # 1. Standard Tablet path file ..
+        tablet_base_path = root_dir.replace("file://", "")
+        
+        ##  todo make this work fro any tablet
+        # 2. USB path (The path the Laptop needs to scan the files)
+        usb_base_path = "/run/user/1000/gvfs/mtp:host=SAMSUNG_SAMSUNG_Android_R52X10DHJDW/Internal storage/Download/Exercise_Videos"
+
+        # Decide which one to use for scanning
+        scan_root = Path(usb_base_path) if Path(usb_base_path).exists() else Path(tablet_base_path)
+
+        if not scan_root.exists():
+            raise FileNotFoundError(f"Could not find video directory at {scan_root}, MAKE SURE TABLET IS CONNECTED TO MACHINE USB MODE NOT CHARGING ONLY ")
+
+        video_pool = []
+        for video_path in scan_root.rglob("*.mp4"):
+            try:
+                # Get the relative path (everything after 'Exercise_Videos/')
+                relative_video_path = video_path.relative_to(scan_root)
+                
+                # Reconstruct the "Tablet-friendly" path for the dictionary
+                final_tablet_path = os.path.join(root_dir, str(relative_video_path))
+
+                diff = self.extract_difficulty(video_path)
+                video_pool.append({
+                    "name": video_path.stem,
+                    "path": final_tablet_path,
+                    "difficulty": diff,
+                    "category": video_path.parent.name,
+                })
+            except Exception as e:
+                print(f"Skipping {video_path}: {e}")
+                
+        return video_pool
+
     def build_video_pool(self, root_dir: str) -> List[Dict]:
         """
         Recursively collect all exercise videos under a root directory.
@@ -159,7 +199,8 @@ class ExerciseRandomProtocolTree(BaseTreeRunner):
         :param root_dir: Root directory containing exercise subfolders
         :return: List of dicts with video metadata
         """
-        root = Path(root_dir).expanduser().resolve()
+        # root = Path(root_dir).expanduser().resolve()
+        root = root_dir
         if not root.exists():
             raise FileNotFoundError(f"Directory not found: {root}")
 
@@ -271,7 +312,11 @@ class ExerciseRandomProtocolTree(BaseTreeRunner):
         
         if not is_running or not selected_exercises:
             # Start Fresh
-            video_pool = self.build_video_pool(self.video_dir_path)
+            if self.tablet:
+                video_pool = self.build_video_pool_tablet(self.video_dir_path)
+            else:
+                video_pool = self.build_video_pool(self.video_dir_path)
+
             selected_exercises = self.sample_exercises(
                 video_pool,
                 self.total_num_exercises, 
@@ -460,7 +505,7 @@ def main(args=None):
     protocol_name = args.protocol_name
     print("protocol_name: ", protocol_name)
 
-    yaml_file_path = os.getenv("house_yaml_path", None)
+    yaml_file_path = os.getenv("house_yaml_path_test", None)
     load_locations_to_blackboard(yaml_file_path, debug=False)
     load_protocols_to_bb(yaml_file_path, debug=True)
 
@@ -471,6 +516,7 @@ def main(args=None):
     tree_runner.setup()
 
     tree_runner.run_until_done()
+
 
 
 if __name__ == "__main__":
