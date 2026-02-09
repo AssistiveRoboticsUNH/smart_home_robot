@@ -39,7 +39,7 @@ class PlayVideoActionServer(GenericActionServer):
         self.get_logger().info(f"[{self._action_name}] Cancel requested: {goal_handle}")
 
         # stop video
-        self.display_pub.publish(String(data="exp:neutral"))
+        self.display_pub.publish(String(data="stop_video"))
         # By default, allow cancel
         return CancelResponse.ACCEPT
 
