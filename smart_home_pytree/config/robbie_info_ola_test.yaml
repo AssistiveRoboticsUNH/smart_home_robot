@@ -1,0 +1,129 @@
+## store infromation needed for all protocols
+locations:
+  bedroom:
+    x: -1.08
+    y: -1.4811692237854004
+    yaw: -1.5708   # -90 degrees
+  living_room:
+    x: 1.0967974662780762
+    y: 1.9037660360336304
+    yaw: 0.0       # facing forward
+  home:
+    x: 2.55 #0.85 #
+    y: 3.12 #1.014 #
+    yaw: 0.554899   
+  dining:
+    x: 5.066422939300537
+    y: 3.4881248474121094
+    yaw: -1.5708   # -90 degrees
+  coffee:
+    x: 4.18
+    y: 3.27
+    yaw: 1.57
+
+## need to be integerated to have robot interface get its info 
+person_location_state: "person_location"
+robot_location_state: "robot_location"
+
+# available type: ## todo set it in a way to verifiy that yaml doesnt include 
+## undefined types: text, audio, video, question_answer 
+protocols:
+  MoveAwayProtocol:
+    move_away:
+      low_level:
+        away_location: dining # move_away has two loc, home or away where away is the location defined here and has to be part of the locations in the yaml
+        position_state_key: position # key to indicate whether to move away or home
+        state_key: move_away
+      high_level:
+        reset_pattern:
+          type: instant 
+        priority: 1
+        requirements: 
+          event: 
+            - {'state': 'move_away', 'value': True}  
+
+  ExerciseRandomProtocol:
+    exercise_rand:
+      low_level:
+        total_num_exercises: 2 ## total number of exercises to pick from
+        difficulty_level: [low, medium] ## difficulty level to pick exercises from [high, medium, low] empty means all levels
+        time_limit_minutes: 5 ## time limit for the exercise session
+        reps_per_exercise: 1 ## number of repetitions per exercise
+        time_between_exercises: 6 ## time between exercises in seconds
+        time_between_reps: 3 ## time between reps in seconds
+        video_dir_path: "file:///storage/emulated/0/Download/Exercise_Videos" ## path on the tablet 
+        start_state_key: "start_exercise"
+        stop_state_key: "stop_exercise"
+        get_confirmation: "Do you want to exercise now?" ## if empty then dont ask to indicate whether the protocol should start after the person asks
+      high_level:
+        reset_pattern:
+          type: instant ## if triggered should play directly
+        priority: 4
+        requirements: 
+          event: 
+            - {'state': 'start_exercise', 'value': True}
+          day: [monday, thursday, saturday, sunday]
+          time: {'from': "13:00", to: "13:30"}
+
+  ## permissible_locations to be incorporated
+  XReminderProtocol:
+    lunch_1:
+      low_level:
+        reminder_1: "Hey BE it is time for you to eat Lunch 1 and take your medicine"
+        type_1: text
+        number_of_protocols: 1
+      high_level:
+        priority: 2
+        requirements:
+          day: [thursday, saturday, sunday]
+          time: {from: "13:10", to: "13:25"}
+          permissible_locations: [living_room]
+
+    lunch_2:
+      low_level:
+        reminder_1: "Hey BE it is time for lunch 2 and a no caffeine drink & snack."
+        type_1: text
+        number_of_protocols: 1
+      high_level:
+        priority: 2
+        requirements:
+          time: {from: "13:25", to: "13:40"}
+          permissible_locations: [living_room]
+
+    pm_routine:
+      low_level:
+        reminder_1: "BE it is time for your PM routine- steps are on your poster in the bathroom"
+        type_1: text
+        wait_1: 2*60 ## 2 minutes
+        reminder_2:  "BE this the second reminder for your PM routine- steps are on your poster in the bathroom"
+        type_2: text
+        number_of_protocols: 2
+      high_level:
+        priority: 3
+        success_on: {'state': 'bathroom_sensor', 'value': True}
+        requirements:
+          time: {from: "13:40", to: "14:00"}
+          permissible_locations: [living_room]
+        
+  ChargeRobot:
+    charge_robot: 
+      high_level:
+        priority: 100
+        reset_pattern:
+          type: instant 
+        requirements:
+          event: 
+              - {'state': 'charging', 'value': False}
+
+ 
+# 3 days a week- 9.30 am- Thursday, Saturday and Sunday 
+
+## to be incorporased
+# If yes, our exercise videos will start playing for a 10-15 minute session- Different set of exercises each day 
+
+# 7 pm everyday 
+# BE is spotted in the living area 
+# Robbie moves to protocol location 
+# “BE it is time for your PM routine- steps are on your poster in the bathroom” 
+# Robbie goes back to docking 
+# If no motion detected in the bathroom within the next 45 mins 

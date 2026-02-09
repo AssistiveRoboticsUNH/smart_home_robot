@@ -122,22 +122,13 @@ You can also run with ros
 ros2 run smart_home_pytree protocol_orchestrator -- --debug --test_time 10:30 --env_yaml_file_name house_yaml_path
 ```
 
-## Instructions to run planner. Will make it nicer later
+## Instructions to run planner. Will make it nicer 
+
 TO TEST AT OLSON
+follow the instruction in file Desktop/Running_demo.txt on the robot 
 
-run the following to have the action servers needed 
-ros2 launch stretch_nav2 navigation_mppi_dual_hesai.launch.py map:=${HELLO_FLEET_PATH}/maps/map_olson.yaml
 
-cd ~/smarthome_ws/src/smart_home_robot/smart_home_pytree/test/mock and run python3 mock_run_actions_no_nav.py 
-
-to log to discord run
-
-```
-ros2 run simple_logger simple_logger_discord 
-```
-
-currently you need to publish person_location and charging topics. you can use the gui for that 
-cd ~/smarthome_ws/src/smart_home_robot/smart_home_pytree/test and run python3 gui_for_testing.py 
+currently you need to publish person_location. by default it uses perosn_location at living_room
 
 
 to run a specific protocol
@@ -152,9 +143,8 @@ for coffee in addtion to time being between 9:30 and 1 it requires two topics to
 ros2 topic pub /coffee std_msgs/msg/Bool "data: True"
 ros2 topic pub /coffee_pot std_msgs/msg/Bool "data: True"
 ```
-will support later to change the time dynamically you can also pub a string with to the /sim_time topic
 
-helper commands:
+Helper commands:
 to find free ports:
 ```
  for port in {5556..5600}; do   if ! ss -tuln | grep -q ":$port "; then     echo "Port $port is free";   fi; done
@@ -165,6 +155,7 @@ run video action:
 ros2 action send_goal /play_video shr_msgs/action/PlayVideoRequest "file_name: 'file:///storage/emulated/0/Download/maggie_coffee.mp4'"
 ```
 To trigger start_exercise its should be either for the display or ```ros2 topic pub /display_rx std_msgs/msg/String "data: 'exercise_requested'" ```
+
 
 ### Set up Webapp
 Install the application in https://github.com/AssistiveRoboticsUNH/Hello_Face on your tablet
