@@ -228,7 +228,7 @@ class ProtocolOrchestrator:
         # C. Decision Logic
         if not current_run:
             # Case 1: Nothing running -> Start the best one
-            self.bb_logger.debug(
+            self.bb_logger.notify_discord(
                 f"[Orchestrator] Idle. Starting {best_candidate}"
             )
             self.start_protocol(best_candidate)
@@ -244,7 +244,7 @@ class ProtocolOrchestrator:
             new_priority = best_candidate[1]
 
             if new_priority < current_priority:
-                self.bb_logger.debug(
+                self.bb_logger.notify_discord(
                     f"[Orchestrator] Preempting Priority {current_priority} for Priority {new_priority}"
                     )
                 self.stop_protocol()
@@ -255,7 +255,7 @@ class ProtocolOrchestrator:
         try:
             tree_runner.run_until_done()
         finally:
-            self.bb_logger.info(f"tree_runner.final_status {tree_runner.final_status}")
+            self.bb_logger.notify_discord(f"tree_runner.final_status {tree_runner.final_status}")
             if tree_runner.final_status == py_trees.common.Status.SUCCESS:
                 self.bb_logger.info(
                     f"{class_protocol_name} is marked completed" 
@@ -314,7 +314,7 @@ class ProtocolOrchestrator:
             # gets the class from the file in module
             tree_class = getattr(module, f"{tree_class_name}Tree")
         except Exception as e:
-            self.bb_logger.info(
+            self.bb_logger.notify_discord(
                 f"[Orchestrator] Failed to load tree '{tree_class_name}Tree' from module smart_home_pytree.trees.{snake_case_class_name} : {e}"
             )
             return
@@ -349,7 +349,7 @@ class ProtocolOrchestrator:
             if not self.running_tree:
                 return
             name = self.running_tree["name"]
-            self.bb_logger.info(f"[Orchestrator] Stopping: {name}")
+            self.bb_logger.notify_discord(f"[Orchestrator] Stopping: {name}")
             tree = self.running_tree["tree"]
 
         tree.stop_tree()
@@ -362,7 +362,7 @@ class ProtocolOrchestrator:
 
     def shutdown(self):
         """Gracefully stop everything (ROS-safe)."""
-        self.bb_logger.info("[Orchestrator] Shutting down...")
+        self.bb_logger.notify_discord("[Orchestrator] Shutting down...")
         
 
         # 1. Stop orchestrator logic
@@ -400,8 +400,6 @@ class ProtocolOrchestrator:
         if rclpy.ok() and self.rclpy_initialized_here:
             self.bb_logger.debug("[Orchestrator] rclpy shutdown")
             rclpy.shutdown()
-
-        self.bb_logger.notify_discord("[Orchestrator] Shutdown complete.")
 
 
 def validate_time_arg(time_str: str) -> str:

@@ -1,21 +1,15 @@
 ## store infromation needed for all protocols
 locations:
-  bedroom:
-    x: -1.08
-    y: -1.4811692237854004
-    yaw: -1.5708   # -90 degrees
   living_room:
-    x: 1.0967974662780762
-    y: 1.9037660360336304
-    yaw: 0.0       # facing forward
+    x: 0.5519
+    y: 2.3848
+    yaw: 1.5       # facing forward
   home:
-    x: 2.55 #0.85 #
-    y: 3.12 #1.014 #
-    yaw: 0.554899   
-  dining:
-    x: 5.066422939300537
-    y: 3.4881248474121094
-    yaw: -1.5708   # -90 degrees
+    x: 0.618 #0.85 #
+    y: -3.045 #1.014 #
+    yaw: 2.904 ## same as intial pose
+    ## use hme posiotn for staging position 
+
 
 ## need to be integerated to have robot interface get its info 
 person_location_state: "person_location"
@@ -27,7 +21,7 @@ protocols:
   MoveAwayProtocol:
     move_away:
       low_level:
-        away_location: dining # move_away has two loc, home or away where away is the location defined here and has to be part of the locations in the yaml
+        away_location: living_room # move_away has two loc, home or away where away is the location defined here and has to be part of the locations in the yaml
         position_state_key: position # key to indicate whether to move away or home
         state_key: move_away
       high_level:
@@ -41,23 +35,23 @@ protocols:
   ExerciseRandomProtocol:
     exercise_rand:
       low_level:
-        total_num_exercises: 2 ## total number of exercises to pick from
+        total_num_exercises: 10 ## total number of exercises to pick from
         difficulty_level: [low, medium] ## difficulty level to pick exercises from [high, medium, low] empty means all levels
         time_limit_minutes: 5 ## time limit for the exercise session
         reps_per_exercise: 1 ## number of repetitions per exercise
-        time_between_exercises: 6 ## time between exercises in seconds
-        time_between_reps: 3 ## time between reps in seconds
+        time_between_exercises: 30 ## time between exercises in seconds
+        time_between_reps: 2 ## time between reps in seconds
         video_dir_path: "file:///storage/emulated/0/Download/Exercise_Videos" ## path on the tablet 
         start_state_key: "start_exercise"
         stop_state_key: "stop_exercise"
-        get_confirmation: "Do you want to exercise now?" ## if empty then dont ask to indicate whether the protocol should start after the person asks
+        get_confirmation: "Hey, Brian. Do you want to exercise now?" ## if empty then dont ask to indicate whether the protocol should start after the person asks
       high_level:
-        reset_pattern:
-          type: instant ## if triggered should play directly
+        # reset_pattern:
+        #   type: instant ## if triggered should play directly
         priority: 4
         requirements: 
-          event: 
-            - {'state': 'start_exercise', 'value': True}
+          # event: 
+          #   - {'state': 'start_exercise', 'value': True}
           day: [thursday, saturday, sunday]
           time: {'from': "9:30", to: "10:30"}
 
@@ -65,7 +59,7 @@ protocols:
   XReminderProtocol:
     lunch_1:
       low_level:
-        reminder_1: "Hey BE it is time for you to eat Lunch 1 and take your medicine"
+        reminder_1: "Hey, Brian. it is time for you to eat Lunch 1 and take your medicine"
         type_1: text
         number_of_protocols: 1
       high_level:
@@ -77,7 +71,7 @@ protocols:
 
     lunch_2:
       low_level:
-        reminder_1: "Hey BE it is time for lunch 2 and a no caffeine drink & snack."
+        reminder_1: "Hey, Brian. it is time for lunch 2 and a no caffeine drink & snack."
         type_1: text
         number_of_protocols: 1
       high_level:
@@ -88,17 +82,17 @@ protocols:
 
     pm_routine:
       low_level:
-        reminder_1: "BE it is time for your PM routine- steps are on your poster in the bathroom"
+        reminder_1: "Hey, Brian. It is time for your PM routine. steps are on your poster in the bathroom"
         type_1: text
         wait_1: 45*60 ## 45 minutes
-        reminder_2:  "BE this the second reminder for your PM routine- steps are on your poster in the bathroom"
+        reminder_2:  "Hey, Brian. this the second reminder for your PM routine. steps are on your poster in the bathroom"
         type_2: text
         number_of_protocols: 2
       high_level:
         priority: 3
         success_on: {'state': 'bathroom_sensor', 'value': True}
         requirements:
-          time: {from: "10:00", to: "11:00"}
+          time: {from: "20:00", to: "21:00"}
           permissible_locations: [living_room]
         
   ChargeRobot:
