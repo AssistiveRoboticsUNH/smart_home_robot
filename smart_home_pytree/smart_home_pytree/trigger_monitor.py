@@ -60,7 +60,7 @@ class TriggerMonitor:
             )
 
         self.bb_logger = self.blackboard.get("logger")
-        self.bb_logger.notify_discord("[TriggerMonitor] TriggerMonitor initilized") 
+        self.bb_logger.notify_discord("[TriggerMonitor] TriggerMonitor initilized")
 
         # Dynamically collect event keys from YAML
         self.event_keys = self._extract_event_keys()
@@ -264,7 +264,7 @@ class TriggerMonitor:
         # Reset each entry to False
         reset_dict = {sub_key: False for sub_key in value.keys()}
         self.blackboard.set(key, reset_dict)
-          
+
         self.bb_logger.debug(f"[reset] Reset {key} → {reset_dict}")
 
     def reset_all_protocol_dones(self):
@@ -328,6 +328,20 @@ class TriggerMonitor:
             else:
                 current_events[key] = val
         return current_events
+
+    def check_location_requirement(self, permissible_locations):
+        """Check if the person is in one of the allowed locations."""
+        if not permissible_locations:
+            return True
+
+        # Get the current person location from the robot state
+        current_loc = self.robot_interface.state.get("person_location")
+
+        if current_loc is None:
+            self.bb_logger.debug("[TriggerMonitor] 'person_location' not found in state.")
+            return False
+
+        return current_loc in permissible_locations
 
     def check_day_requirement(self, day_req, current_day=None):
         """Check if the current day satisfies the day requirement."""
@@ -426,11 +440,13 @@ class TriggerMonitor:
                     event_reqs = reqs.get("event", [])
                     time_req = reqs.get("time", {})
                     day_req = reqs.get("day", [])
+                    loc_req = reqs.get("permissible_locations", [])
 
                     if (
                         self.check_day_requirement(day_req, current_day)
                         and self.check_event_requirement(event_reqs, current_events)
                         and self.check_time_requirement(time_req)
+                        and self.check_location_requirement(loc_req)
                     ):
                         priority = high_level_subdata.get("priority", 1)
                         satisfied.append((full_name, priority))
