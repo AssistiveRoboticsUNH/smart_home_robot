@@ -343,23 +343,37 @@ class ShrHumanInteractionNode(Node):
 
     def _wait_for_yes_no(self, goal_handle, timeout_s: float) -> Optional[str]:
         deadline = time.time() + timeout_s
-        while time.time() < deadline:
+        saw_other = False
+        while True:
             if self._cancel_requested(goal_handle):
                 return _CANCELLED
+            now = time.time()
+            remaining = deadline - now
             try:
-                text = self._question_response_q.get(timeout=0.25)
+                if remaining > 0:
+                    text = self._question_response_q.get(timeout=min(0.25, remaining))
+                else:
+                    text = self._question_response_q.get_nowait()
             except queue.Empty:
                 text = None
             if text:
                 if text == _CANCELLED:
                     return _CANCELLED
                 parsed = self._normalize_yes_no(text)
-                return parsed
-                
-            # if self._latest_status == DialogManager.IDLE:
-                # Session dropped back to idle; allow re-trigger by caller
-                # break
-        return None
+                if parsed in ("yes", "no"):
+                    return parsed
+                saw_other = True
+                # Keep listening in the same attempt; a valid yes/no may arrive next.
+                continue
+
+            if remaining <= 0:
+                # If transcription is still running, keep waiting for the final text.
+                if self._latest_status == DialogManager.TRANSCRIBING:
+                    time.sleep(0.05)
+                    continue
+                if saw_other:
+                    return "other"
+                return None
 
     def _execute_question_request(self, goal_handle):
         question_text = goal_handle.request.question or ""
@@ -385,16 +399,29 @@ class ShrHumanInteractionNode(Node):
                 self._wait_for_status({DialogManager.IDLE}, timeout_s=5.0, goal_handle=goal_handle)
                 if self._cancel_requested(goal_handle):
                     return self._cancel_goal(goal_handle)
-                
+
+                # Drop stale transcripts from previous attempts before speaking.
+                self._clear_question_queue()
                 self.speak(prompt)
                 if self._cancel_requested(goal_handle):
                     return self._cancel_goal(goal_handle)
 
-                self._clear_question_queue()
-                self._dm.trigger_wakeword()
-                self._wait_for_status({DialogManager.LISTENING, DialogManager.RECORDING}, timeout_s=5.0, goal_handle=goal_handle)
+                # Ensure we're back to idle after TTS before opening the mic session.
+                self._wait_for_status({DialogManager.IDLE}, timeout_s=5.0, goal_handle=goal_handle)
                 if self._cancel_requested(goal_handle):
                     return self._cancel_goal(goal_handle)
+
+                self._dm.trigger_wakeword()
+                listening_started = self._wait_for_status(
+                    {DialogManager.LISTENING, DialogManager.RECORDING},
+                    timeout_s=5.0,
+                    goal_handle=goal_handle,
+                )
+                if self._cancel_requested(goal_handle):
+                    return self._cancel_goal(goal_handle)
+                if not listening_started:
+                    prompt = f"I couldn't start listening. {question} Please answer yes or no."
+                    continue
 
                 response = self._wait_for_yes_no(goal_handle, timeout_s=self._ask_no_speech_timeout_ms / 1000.0 + 0.1)
                 if response == _CANCELLED:
