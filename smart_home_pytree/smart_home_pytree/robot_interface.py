@@ -118,7 +118,7 @@ class RobotInterface(Node):
 
         # subcription for protocol events
         self.create_subscription(Bool, "coffee", self.coffee_callback, 10)
-        self.create_subscription(Bool, "coffee_pot", self.coffee_pot_callback, 10)
+        self.create_subscription(Bool, "bathroom_sensor", self.bathroom_sensor_callback, 10)
         self.create_subscription(
             Bool, "charging", self.charging_callback, self.qos_profile
         )
@@ -137,6 +137,7 @@ class RobotInterface(Node):
             "person_location initialset to living_room. SHOULD BE ONLY USED FOR TESTING"
         )
         self.state.update("person_location", "living_room")
+        # self.state.update("person_location", "bedroom")
 
     def speak(self, text:str):
         msg = String()
@@ -195,9 +196,9 @@ class RobotInterface(Node):
         self.state.update("coffee", msg.data)
         self.state.update("person_location", "coffee")
 
-    def coffee_pot_callback(self, msg):
-        self.get_logger().debug(f"coffee_pot: {msg.data}")
-        self.state.update("coffee_pot", msg.data)
+    def bathroom_sensor_callback(self, msg):
+        self.get_logger().debug(f"bathroom_sensor: {msg.data}")
+        self.state.update("bathroom_sensor", msg.data)
 
     def sim_time_callback(self, msg: String):
         self.get_logger().debug(f"Simulated time: {msg.data}")

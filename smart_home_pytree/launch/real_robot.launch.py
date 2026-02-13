@@ -44,11 +44,19 @@ def generate_launch_description():
         name="human_interaction_node",
         output="screen",
     )
+    
+    homeseer_sensor = Node(
+        package="smart_home_pytree",
+        executable="homeseer_sensor",
+        name="homeseer_sensor",
+        output="screen",
+    )
 
     ld.add_action(charge_monitor)
     ld.add_action(discord_logger)
     ld.add_action(display_node)
     ld.add_action(play_video_node_cmd)
     ld.add_action(human_voice_interaction)
+    # ld.add_action(homeseer_sensor)
 
     return ld
