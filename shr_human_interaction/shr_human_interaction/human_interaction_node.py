@@ -26,6 +26,8 @@ from std_msgs.msg import String, Empty
 # Install aalap from https://github.com/MnAkash/aalap.git
 from aalap.dialogue_manager import DialogManager
 from shr_msgs.action import QuestionRequest
+from shr_msgs.srv import Speak
+from .command_interpreter import CommandInterpreter, InterpreterConfig
 
 # Sentinel used to short-circuit the ask_question flow when a cancel is requested
 _CANCELLED = "__cancelled__"
@@ -41,6 +43,12 @@ class ShrHumanInteractionNode(Node):
       /voice/speak          : std_msgs/String  (Listens all speak requests)
       /voice/system_trigger : std_msgs/Empty   (Programmatically trigger a wakeword session when idle)
       /voice/stop_session   : std_msgs/Empty   (Force-stop an active session and TTS)
+
+    Services:
+      /voice/speak : shr_msgs/Speak
+        - Blocking speech request with request.text.
+        - Returns success=True only after speaking completes.
+        - Returns success=False if busy, invalid text, or speaking failed/timed out.
 
     Action Servers:
       /ask_question : shr_msgs/QuestionRequest
@@ -61,6 +69,7 @@ class ShrHumanInteractionNode(Node):
         self.declare_parameter("no_speech_timeout_ms", 3000)
         self.declare_parameter("no_speech_timeout_ms_action_server", 8000)
         self.declare_parameter("ask_attempts", 3)
+        self.declare_parameter("use_llm_interpreter", False)
 
         # If you have model paths, provide a list via YAML/launch; empty => None
         self.declare_parameter("wakeword_model_paths", [])  # list[str]
@@ -68,19 +77,14 @@ class ShrHumanInteractionNode(Node):
         # How frequently to drain queues and publish
         self.declare_parameter("publish_hz", 20.0)
 
-        self._model: str = self.get_parameter("model").get_parameter_value().string_value
-        self._device: str = self.get_parameter("device").get_parameter_value().string_value
-        self._wakeword_keywords: str = (
-            self.get_parameter("wakeword_keywords").get_parameter_value().string_value
-        )
-        self._vad_thresh: float = (
-            self.get_parameter("vad_silero_threshold").get_parameter_value().double_value
-        )
-        self._no_speech_timeout_ms: int = self.get_parameter("no_speech_timeout_ms").get_parameter_value().integer_value
-        self._ask_no_speech_timeout_ms: int = (
-            self.get_parameter("no_speech_timeout_ms_action_server").get_parameter_value().integer_value
-        )
-        self._ask_attempts: int = self.get_parameter("ask_attempts").get_parameter_value().integer_value
+        self._model: str                    = self.get_parameter("model").get_parameter_value().string_value
+        self._device: str                   = self.get_parameter("device").get_parameter_value().string_value
+        self._wakeword_keywords: str        = (self.get_parameter("wakeword_keywords").get_parameter_value().string_value)
+        self._vad_thresh: float             = (self.get_parameter("vad_silero_threshold").get_parameter_value().double_value)
+        self._no_speech_timeout_ms: int     = self.get_parameter("no_speech_timeout_ms").get_parameter_value().integer_value
+        self._ask_no_speech_timeout_ms: int = (self.get_parameter("no_speech_timeout_ms_action_server").get_parameter_value().integer_value)
+        self._ask_attempts: int             = self.get_parameter("ask_attempts").get_parameter_value().integer_value
+        self._use_llm_interpreter: bool     = (self.get_parameter("use_llm_interpreter").get_parameter_value().bool_value)
 
         self._wakeword_model_paths = self.get_parameter("wakeword_model_paths").value
         if isinstance(self._wakeword_model_paths, list) and len(self._wakeword_model_paths) == 0:
@@ -103,6 +107,7 @@ class ShrHumanInteractionNode(Node):
         self._question_response_q: "queue.Queue[str]" = queue.Queue(maxsize=10)
         self._question_active = False
         self._question_cancel_event = threading.Event()
+        self._speak_service_lock = threading.Lock()
 
         # ---- Control topics (volatile, keep only freshest) ----
         volatile_qos = QoSProfile(
@@ -116,7 +121,15 @@ class ShrHumanInteractionNode(Node):
         self.sub_stop_session = self.create_subscription(
             Empty, "/voice/stop_session", self._on_stop_session, volatile_qos
         )
+        self.srv_speak = self.create_service(Speak, "/voice/speak", self._on_speak_service)
 
+        self._interpreter: Optional[CommandInterpreter] = None
+        if self._use_llm_interpreter:
+            self._interpreter = CommandInterpreter(config=InterpreterConfig(), logger=self.get_logger())
+            self._interpreter.start()
+        else:
+            self.get_logger().info("LLM interpreter disabled by parameter: use_llm_interpreter=false")
+        
         # ---- Create DialogManager (library) ----
         def _on_transcript(text: str):
             # Called from DialogManager internals; do not publish directly from here
@@ -142,15 +155,12 @@ class ShrHumanInteractionNode(Node):
 
             if self._question_active:
                 return ""
-            else:
-                if self._dm.get_session_trigger_reason() == DialogManager.WAKEWORD_TRIGGER:
-                    self._dm.deactivate_wakeword_session()
-            # TODO: replace this with your real LLM call
-            # time.sleep(0.2)
-            # robot_reply = f"You said: {user_text}"
+            if self._dm.get_session_trigger_reason() == DialogManager.WAKEWORD_TRIGGER:
+                self._dm.deactivate_wakeword_session()
 
-            # Enqueue for publishing on /voice/robot
-            # self._robot_q.put(robot_reply)
+            if self._use_llm_interpreter and self._interpreter is not None:
+                if not self._interpreter.enqueue(user_text):
+                    self.get_logger().warn("CommandInterpreter queue full; dropped user text")
             return ""
 
         self._dm = DialogManager(
@@ -211,6 +221,41 @@ class ShrHumanInteractionNode(Node):
         except Exception as e:
             self.get_logger().warn(f"Failed to speak incoming /voice/speak text: {e}")
 
+    def _wait_for_speaking_complete(self, timeout_s: float = 30.0, start_window_s: float = 2.0) -> bool:
+        start = time.time()
+        speaking_seen = self._latest_status == DialogManager.SPEAKING
+        while time.time() - start < timeout_s:
+            if self._latest_status == DialogManager.SPEAKING:
+                speaking_seen = True
+            elif speaking_seen:
+                return True
+            elif time.time() - start >= start_window_s:
+                # No speaking observed in the start window; treat as completed.
+                return True
+            time.sleep(0.05)
+        return False
+
+    def _on_speak_service(self, request: Speak.Request, response: Speak.Response):
+        text = (request.text or "").strip()
+        if not text:
+            response.success = False
+            return response
+
+        if not self._speak_service_lock.acquire(blocking=False):
+            response.success = False
+            return response
+        try:
+            # Busy if a speech is already in progress.
+            if self._latest_status == DialogManager.SPEAKING:
+                response.success = False
+                return response
+
+            self.speak(text)
+            response.success = self._wait_for_speaking_complete()
+            return response
+        finally:
+            self._speak_service_lock.release()
+
     def _drain_and_publish(self):
         # Drain all available items each tick to avoid lag
         try:
@@ -238,6 +283,11 @@ class ShrHumanInteractionNode(Node):
         # Clean shutdown
         try:
             self._ask_question_server.destroy()
+        except Exception:
+            pass
+        try:
+            if self._interpreter is not None:
+                self._interpreter.stop()
         except Exception:
             pass
         try:

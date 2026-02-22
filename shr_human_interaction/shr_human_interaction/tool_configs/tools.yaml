@@ -1,0 +1,54 @@
+version: 1
+
+tools:
+  - name: speak
+    description: Speak a short acknowledgement or status update or answer to any question asked in brief.
+    handler: speak
+    config:
+      service_name: /voice/speak
+      wait_for_service_s: 3.0
+      service_timeout_s: 35.0
+    parameters:
+      type: object
+      properties:
+        text:
+          type: string
+      required: [text]
+
+  - name: listen
+    description: Trigger robot listening mode to wait for user's next voice response.
+    handler: listen
+    parameters:
+      type: object
+      properties: {}
+
+  - name: dock_robot
+    description: Dock the robot using the docking action server.
+    handler: dock_robot
+    config:
+      action_name: /dock_robot
+      wait_for_server_s: 3.0
+    parameters:
+      type: object
+      properties:
+        dock_type:
+          type: string
+        max_docking_time:
+          type: number
+        goal:
+          type: object
+
+  - name: append_grocery_items
+    description: If the user asks to add items to a grocery list, append only the items to the grocery list.
+    handler: append_lines_file
+    config:
+      path: ~/.shr/grocery_list.txt
+      lines_field: items
+    parameters:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            type: string
+      required: [items]

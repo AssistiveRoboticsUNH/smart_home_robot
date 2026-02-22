@@ -28,9 +28,14 @@ set(action_files
         action/QuestionRequest.action
         )
 
+set(srv_files
+        srv/Speak.srv
+        )
+
 rosidl_generate_interfaces(shr_msgs
         ${msg_files}
         ${action_files}
+        ${srv_files}
         DEPENDENCIES
         action_msgs
         std_msgs
