@@ -93,7 +93,7 @@ class YieldWait(py_trees.behaviour.Behaviour):
         protocol_info = bb.get(self.protocol_name)
         wait_time_unparsed = protocol_info[self.wait_time_key]
         wait_seconds = parse_duration(wait_time_unparsed)
-        # Construct full protocol identifier (e.g., "XReminderProtocol.medicine_am")
+        # Construct full protocol identifier (e.g., "GenericProtocol.medicine_am")
         request_key = f"{self.class_name}.{self.protocol_name}"
    
         compound_key = f"{self.protocol_name}_done.{self.wait_time_key}_done"
@@ -188,7 +188,7 @@ def main():
     # ---- setup blackboard ----
     bb = py_trees.blackboard.Blackboard()
 
-    class_name = "TwoReminderProtocol"
+    class_name = "GenericProtocol"
     protocol_name = "medicine_am"
     wait_time_key = "wait_time_between_reminders"
 
