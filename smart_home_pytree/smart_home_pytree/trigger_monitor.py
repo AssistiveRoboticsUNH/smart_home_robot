@@ -4,13 +4,15 @@ import time
 from datetime import datetime, timedelta
 
 import py_trees
-import yaml
+
+from smart_home_pytree.protocol_schema import load_house_config_yaml
 
 
 class TriggerMonitor:
     # pylint: disable=too-many-instance-attributes
     """
-    Monitors robot state and reports which protocol has its requirements satisfied, the requirements can be time or event based and they are defined in a YAML file.
+    Monitors robot state and reports which protocols have their triggers satisfied.
+    Triggers can be time, event, and/or location based and are defined in YAML.
     It supports periodic resets, monitoring waiting of protocols, and checking success conditions for waiting protocols.
     """
 
@@ -38,8 +40,7 @@ class TriggerMonitor:
             print(f"[TriggerMonitor]: Using yaml_path_key: {yaml_path_key}")
             yaml_path = os.getenv(yaml_path_key)
 
-        with open(yaml_path, "r") as f:
-            self.protocols_yaml = yaml.safe_load(f)
+        self.protocols_yaml = load_house_config_yaml(yaml_path)
 
         print(f"[TriggerMonitor]: yaml_path {yaml_path}")
         self.current_satisfied_protocols = []  # [(full_name, priority)]
@@ -200,10 +201,8 @@ class TriggerMonitor:
             # register success_on if present
             # only done once
             try:
-                protocol, sub = full_name.split(".")
-                high_level = self.protocols_yaml["protocols"][protocol][sub][
-                    "high_level"
-                ]
+                _runner, sub = full_name.split(".", 1)
+                high_level = self.protocols_yaml["protocols"][sub]["high_level"]
                 success_on = high_level.get("success_on", None)
 
                 if success_on:
@@ -300,18 +299,17 @@ class TriggerMonitor:
 
         self.bb_logger.debug(f"[reset] Reset {key} → {reset_dict}")
 
-    # --- REQUIREMENTS CHECKS ---
+    # --- TRIGGER CHECKS ---
     def _extract_event_keys(self):
         """Collect all event topic names used in the YAML protocols."""
         event_keys = set()
         for _, protocol_data in self.protocols_yaml.get("protocols", {}).items():
-            for _, sub_data in protocol_data.items():
-                high_level_subdata = sub_data["high_level"]
-                reqs = high_level_subdata.get("requirements", {})
-                event_reqs = reqs.get("event", [])
-                for ev in event_reqs:
-                    if "state" in ev:
-                        event_keys.add(ev["state"])
+            high_level_subdata = protocol_data.get("high_level", {})
+            triggers = high_level_subdata.get("triggers", {})
+            event_reqs = triggers.get("event", [])
+            for ev in event_reqs:
+                if "state" in ev:
+                    event_keys.add(ev["state"])
         return sorted(event_keys)
 
     def _collect_current_events(self):
@@ -344,7 +342,7 @@ class TriggerMonitor:
         return current_loc in permissible_locations
 
     def check_day_requirement(self, day_req, current_day=None):
-        """Check if the current day satisfies the day requirement."""
+        """Check if the current day satisfies the day trigger (from triggers.time.day)."""
         if not day_req or len(day_req) == 0:
             return True
 
@@ -369,12 +367,12 @@ class TriggerMonitor:
         return t_from <= t_now <= t_to
 
     def check_event_requirement(self, event_reqs, current_events):
-        """Check if all event requirements listed in the yaml are satisfied.
+        """Check if all event trigger conditions listed in YAML are satisfied.
         Args:
-            event_reqs (list): list of event requirement dicts with 'state' and 'value' keys.
+            event_reqs (list): list of event trigger dicts with 'state' and 'value' keys.
             current_events (dict): current event states.
         Returns:
-            bool: True if all event requirements are satisfied, False otherwise.
+            bool: True if all event trigger conditions are satisfied, False otherwise.
         """
         if not event_reqs:
             return True
@@ -407,7 +405,7 @@ class TriggerMonitor:
         return changed
 
     def satisfied_protocols(self, current_events, current_day=None):
-        """Determine which protocols have their requirements satisfied.
+        """Determine which protocols have their triggers satisfied.
         Args:
             current_events (dict): current event states.
             current_day (str, optional): current day name. Defaults to None which uses the actually time.
@@ -417,44 +415,44 @@ class TriggerMonitor:
         """
         satisfied = []
         for protocol_name, protocol_data in self.protocols_yaml["protocols"].items():
-            for sub_name, sub_data in protocol_data.items():
-                high_level_subdata = sub_data["high_level"]
-                full_name = f"{protocol_name}.{sub_name}"
+            high_level_subdata = protocol_data["high_level"]
+            runner = protocol_data.get("runner", "GenericProtocol")
+            full_name = f"{runner}.{protocol_name}"
 
-                # Yield Wait Check
-                resumed = self.wait_resumed(full_name)
+            # Yield Wait Check
+            resumed = self.wait_resumed(full_name)
 
-                # If currently waiting (and not just resumed), skip it
-                if full_name in self.pending_waits:
-                    self.bb_logger.debug(f"[TriggerMonitor] Skipping {full_name} (PENDING WAIT)")
-                    continue
+            # If currently waiting (and not just resumed), skip it
+            if full_name in self.pending_waits:
+                self.bb_logger.debug(f"[TriggerMonitor] Skipping {full_name} (PENDING WAIT)")
+                continue
 
-                # Completed Check
+            # Completed Check
+            if (
+                full_name in self.completed_protocols
+            ):  # skip completed ones ## when resumed it deletes the protocol from completed
+                continue
+
+            if not resumed:
+                triggers = high_level_subdata.get("triggers", {})
+                event_reqs = triggers.get("event", [])
+                time_req = triggers.get("time", {})
+                # Day is nested under triggers.time.day
+                day_req = time_req.get("day", []) if isinstance(time_req, dict) else []
+                loc_req = triggers.get("permissible_locations", [])
+
                 if (
-                    full_name in self.completed_protocols
-                ):  # skip completed ones ## when resumed it deletes the protocol from completed
-                    continue
-
-                if not resumed:
-                    reqs = high_level_subdata.get("requirements", {})
-                    event_reqs = reqs.get("event", [])
-                    time_req = reqs.get("time", {})
-                    day_req = reqs.get("day", [])
-                    loc_req = reqs.get("permissible_locations", [])
-
-                    if (
-                        self.check_day_requirement(day_req, current_day)
-                        and self.check_event_requirement(event_reqs, current_events)
-                        and self.check_time_requirement(time_req)
-                        and self.check_location_requirement(loc_req)
-                    ):
-                        priority = high_level_subdata.get("priority", 1)
-                        satisfied.append((full_name, priority))
-                else:
-                    # resume  dont check for req thye were already satisfied
-                    # modify to track keys for req resuming.
+                    self.check_day_requirement(day_req, current_day)
+                    and self.check_event_requirement(event_reqs, current_events)
+                    and self.check_time_requirement(time_req)
+                    and self.check_location_requirement(loc_req)
+                ):
                     priority = high_level_subdata.get("priority", 1)
                     satisfied.append((full_name, priority))
+            else:
+                # resume  dont check for req thye were already satisfied
+                priority = high_level_subdata.get("priority", 1)
+                satisfied.append((full_name, priority))
 
         satisfied.sort(key=lambda x: x[1])
         return satisfied
@@ -519,21 +517,26 @@ class TriggerMonitor:
         Rules:
         1. INSTANT: Do NOT mark complete. Reset flags immediately so it can run again.
         2. PERIODIC: Mark complete. Schedule a reset based on time.
-        3. NO PATTERN / OTHER: Mark complete (runs once until daily reset).
+        3. EOD / NO PATTERN: Mark complete (runs once until end-of-day/daily reset).
         """
         with self.lock:
             self.bb_logger.debug(f"[TriggerMonitor] Marking {full_name} as completed.")
 
             # Parse Name & Validate
             try:
-                main, sub = full_name.split(".")
+                main, sub = full_name.split(".", 1)
             except ValueError:
                 self.bb_logger.error(f"[ERROR] Invalid protocol name format: {full_name}")
                 return
 
             # Retrieve YAML Config
             try:
-                sub_data = self.protocols_yaml["protocols"][main][sub]
+                sub_data = self.protocols_yaml["protocols"][sub]
+                configured_runner = sub_data.get("runner", "GenericProtocol")
+                if configured_runner != main:
+                    self.bb_logger.warn(
+                        f"[TriggerMonitor] Runner mismatch for {full_name}: yaml has {configured_runner}"
+                    )
                 high_level = sub_data["high_level"]
                 reset_pattern = high_level.get("reset_pattern", None)  # None if missing
             except KeyError:
@@ -541,10 +544,11 @@ class TriggerMonitor:
                 return
 
             # Determine Type
-            # If no pattern exists, we treat it as "default" (run once)
-            pattern_type = (
-                reset_pattern.get("type", "default") if reset_pattern else "default"
-            )
+            # If no pattern exists, treat it as end-of-day (daily reset).
+            pattern_type = reset_pattern.get("type", "eod") if reset_pattern else "eod"
+            if pattern_type == "default":
+                # Backward-compatible alias.
+                pattern_type = "eod"
 
             # --- CASE 1: INSTANT ---
             if pattern_type == "instant":
@@ -575,10 +579,10 @@ class TriggerMonitor:
                         f"[ERROR] Periodic protocol {full_name} has invalid time settings."
                     )
 
-            # --- CASE 3: DEFAULT (No Pattern) ---
-            elif pattern_type == "default":
+            # --- CASE 3: EOD (No Pattern / daily reset) ---
+            elif pattern_type == "eod":
                 self.bb_logger.debug(
-                    f"[TriggerMonitor] Type DEFAULT: {full_name} marked complete (no auto-reset)."
+                    f"[TriggerMonitor] Type EOD: {full_name} marked complete (until daily reset)."
                 )
 
             # Update satisfied list because one protocol just became "Complete" (blocked)
@@ -593,7 +597,7 @@ class TriggerMonitor:
             if (now - finished_time).total_seconds() >= reset_seconds:
                 self.bb_logger.info(f"[TriggerMonitor] Auto-resetting protocol: {name}")
 
-                sub_name = name.split(".")[-1]
+                sub_name = name.split(".", 1)[-1]
                 self.reset_specific_protocol_dones(sub_name)
 
                 if name in self.completed_protocols:

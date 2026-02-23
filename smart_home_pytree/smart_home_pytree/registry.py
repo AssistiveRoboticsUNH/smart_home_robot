@@ -2,10 +2,8 @@
 import os
 
 import py_trees
-import py_trees_ros
-import yaml
 
-from smart_home_pytree.utils import BlackboardLogger
+from smart_home_pytree.protocol_schema import RUN_TREE_SPECS, load_house_config_yaml
 
 
 def update_protocol_config(protocol_name: str, key_to_update: str, new_value: str, debug: bool = False) -> bool:
@@ -60,8 +58,7 @@ def load_locations_to_blackboard(yaml_path: str, debug: bool = False):
     # ------------------------
 
     # Load YAML
-    with open(yaml_path, "r") as file:
-        data = yaml.safe_load(file)
+    data = load_house_config_yaml(yaml_path)
 
     if "locations" not in data:
         raise KeyError("YAML file must contain a 'locations' field.")
@@ -94,62 +91,106 @@ def load_protocols_to_bb(yaml_path: str, debug: bool = False):
     blackboard = py_trees.blackboard.Blackboard()
 
     # Load YAML
-    with open(yaml_path, "r") as file:
-        data = yaml.safe_load(file)
+    data = load_house_config_yaml(yaml_path)
 
     # Ensure structure is correct
     if "protocols" not in data:
-        raise KeyError("YAML must contain protocols -> TwoReminderProtocol structure.")
+        raise KeyError("YAML must contain a top-level 'protocols' mapping.")
 
     protocols = data["protocols"]
 
-    for protocol_type in protocols.keys():
+    for protocol_name, protocol_data in protocols.items():
         if debug:
-            print("Protocol type: ", protocol_type)
-        for protocol_name in protocols[protocol_type].keys():
-            if debug:
-                print("protocol name : ", protocol_name)
-            protocol_dict = {}
-            protocol_dict_done = {}
+            print("protocol name : ", protocol_name)
 
-            # low_level = protocols[protocol_type][protocol_name]["low_level"]
-            # 1. Get the specific protocol data
-            protocol_data = protocols[protocol_type][protocol_name]
+        runner = protocol_data.get("runner", "GenericProtocol")
+        protocol_dict = {}
+        protocol_dict_done = {}
 
-            # 2. Try to get 'low_level'. If missing, default to None.
-            low_level = protocol_data.get("low_level")
+        # Generic protocols store action.steps and synthesize blackboard keys for existing trees.
+        if runner == "GenericProtocol":
+            action_config = protocol_data.get("action", {}) or {}
+            steps = action_config.get("steps", []) or []
+            protocol_dict["steps"] = steps
 
-            # 3. If it exists but is empty in YAML (None), make it an empty dict
-            if low_level is None:
-                if debug:
-                    print("low_level is none for protocol : ", protocol_name)
-                continue
+            def _add_executable_step(prefix: str, action_step: dict):
+                tree_name = action_step.get("tree_name")
+                protocol_dict_done[f"{prefix}_done"] = False
 
-            for key, value in low_level.items():
-                if debug:
-                    print(key, value)
-                protocol_dict[key] = value
+                spec = RUN_TREE_SPECS.get(tree_name, {})
+                payload_param = spec.get("blackboard_value_param")
+                tree_params = action_step.get("tree_params") or {}
+                if payload_param:
+                    protocol_dict[prefix] = tree_params.get(payload_param)
 
-                if key.startswith("type_"):
-                    # Skip creating *_done entry
-                    continue
+            def _add_step_wait(wait_key: str, wait_after, has_following_step: bool):
+                if has_following_step and wait_after not in (None, 0, 0.0, "", "0"):
+                    protocol_dict[wait_key] = wait_after
+                    protocol_dict_done[f"{wait_key}_done"] = False
 
-                if key.startswith("number_of_protocols"):
-                    # Skip creating *_done entry
-                    continue
-
-                if "exercise" in protocol_name:
-                    if key != "get_confirmation":
+            def _synth_branch_steps(branch_prefix: str, branch_steps: list):
+                for b_idx, b_step in enumerate(branch_steps, start=1):
+                    if not isinstance(b_step, dict):
                         continue
-                protocol_dict_done[f"{key}_done"] = False
+                    step_key = f"{branch_prefix}_step_{b_idx}"
+                    wait_key = f"{branch_prefix}_wait_{b_idx}"
+                    _add_executable_step(step_key, b_step)
+                    _add_step_wait(
+                        wait_key=wait_key,
+                        wait_after=b_step.get("wait_after", 0),
+                        has_following_step=(b_idx < len(branch_steps)),
+                    )
+
+            for idx, step in enumerate(steps, start=1):
+                if not isinstance(step, dict):
+                    continue
+
+                step_key = f"step_{idx}"
+                confirm_key = f"confirm_{idx}"
+                wait_key = f"wait_{idx}"
+
+                if "confirmation" in step:
+                    confirmation = step.get("confirmation") or {}
+                    protocol_dict[confirm_key] = confirmation.get("question")
+                    protocol_dict_done[f"{confirm_key}_done"] = False
+                    _synth_branch_steps(f"yes_{idx}", confirmation.get("on_yes") or [])
+                    _synth_branch_steps(f"no_{idx}", confirmation.get("on_no") or [])
+                else:
+                    _add_executable_step(step_key, step)
+
+                _add_step_wait(
+                    wait_key=wait_key,
+                    wait_after=step.get("wait_after", 0),
+                    has_following_step=(idx < len(steps)),
+                )
 
             blackboard.set(protocol_name, protocol_dict)
-
-            if "exercise" in protocol_name:
-                if key != "get_confirmation":
-                    continue
-
             blackboard.set(f"{protocol_name}_done", protocol_dict_done)
+            continue
+
+        # Legacy/special protocols keep low_level schema.
+        low_level = protocol_data.get("low_level")
+        if low_level is None:
+            if debug:
+                print("low_level is none for protocol : ", protocol_name)
+            continue
+
+        for key, value in low_level.items():
+            if debug:
+                print(key, value)
+            protocol_dict[key] = value
+
+            if key.startswith("type_"):
+                continue
+            if key.startswith("number_of_protocols"):
+                continue
+
+            if "exercise" in protocol_name and key != "get_confirmation":
+                continue
+            protocol_dict_done[f"{key}_done"] = False
+
+        blackboard.set(protocol_name, protocol_dict)
+        blackboard.set(f"{protocol_name}_done", protocol_dict_done)
 
     if debug:
         for key, value in blackboard.storage.items():
