@@ -86,7 +86,7 @@ class AskAndPlayVideoProtocolTree(BaseTreeRunner):
         check_yes = py_trees.behaviours.CheckBlackboardVariableValue(
             name="UserSaidYes",
             check=py_trees.common.ComparisonExpression(
-                variable="user_wants_video",
+                variable="user_confirmation_result",
                 value=True,
                 operator=lambda a, b: a == b
             )
@@ -95,7 +95,7 @@ class AskAndPlayVideoProtocolTree(BaseTreeRunner):
         check_no = py_trees.behaviours.CheckBlackboardVariableValue(
             name="UserSaidNo",
             check=py_trees.common.ComparisonExpression(
-                variable="user_wants_video",
+                variable="user_confirmation_result",
                 value=False,
                 operator=lambda a, b: a == b
             )

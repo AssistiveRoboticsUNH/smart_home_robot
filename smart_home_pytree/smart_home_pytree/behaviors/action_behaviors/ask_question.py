@@ -10,6 +10,8 @@ from shr_msgs.action import QuestionRequest  # Ensure this import is correct
 from smart_home_pytree.behaviors.set_protocol_bb import SetProtocolBB
 from smart_home_pytree.registry import load_protocols_to_bb
 
+GENERIC_CONFIRMATION_RESULT_KEY = "user_confirmation_result"
+
 
 class AskQuestionBehavior(py_trees_ros.actions.ActionClient):
     """
@@ -83,11 +85,13 @@ class AskQuestionBehavior(py_trees_ros.actions.ActionClient):
 
         if answer == "yes":
             set_bb_node.update()
-            self.blackboard.set("user_wants_video", True)
+            # Generic confirmation result for all protocols/workflows.
+            self.blackboard.set(GENERIC_CONFIRMATION_RESULT_KEY, True)
             return py_trees.common.Status.SUCCESS
         elif answer == "no":
             set_bb_node.update()
-            self.blackboard.set("user_wants_video", False)
+            # Generic confirmation result for all protocols/workflows.
+            self.blackboard.set(GENERIC_CONFIRMATION_RESULT_KEY, False)
             return py_trees.common.Status.SUCCESS
         else:
             # done not updated
