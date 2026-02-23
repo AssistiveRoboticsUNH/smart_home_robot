@@ -212,13 +212,13 @@ def test_protocol_orchestrator_one_protocol_true():
     satisfied = orch.trigger_monitor.get_satisfied()
     print("Satisfied protocols:", satisfied)
 
-    expected = [("TwoReminderProtocol.medicine_am", 2)]
+    expected = [("GenericProtocol.medicine_am", 2)]
     assert satisfied == expected, (
         f"Expected only medicine_am to be satisfied, got {satisfied}"
     )
 
     assert_protocol_completed(orch, expected)
-    run_orchestrator_until_all_completed(orch, ["TwoReminderProtocol.medicine_am"])
+    run_orchestrator_until_all_completed(orch, ["GenericProtocol.medicine_am"])
     assert_blackboard_protocol_done(blackboard, "medicine_am")
 
     executor.shutdown()
@@ -318,14 +318,14 @@ def test_protocol_orchestrator_two_protocol_true():
     satisfied = orch.trigger_monitor.get_satisfied()
     print("Satisfied protocols:", satisfied)
 
-    expected = [("TwoReminderProtocol.medicine_am", 2), ("CoffeeProtocol.coffee", 3)]
+    expected = [("GenericProtocol.medicine_am", 2), ("GenericProtocol.coffee", 3)]
     assert satisfied == expected, (
         f"Expected medicine_am and coffee to be satisfied, got {satisfied}"
     )
 
     assert_protocol_completed(orch, expected)
     run_orchestrator_until_all_completed(
-        orch, ["TwoReminderProtocol.medicine_am", "CoffeeProtocol.coffee"]
+        orch, ["GenericProtocol.medicine_am", "GenericProtocol.coffee"]
     )
     assert_blackboard_protocol_done(blackboard, "medicine_am")
     assert_blackboard_protocol_done(blackboard, "coffee")
@@ -344,5 +344,3 @@ def test_protocol_orchestrator_two_protocol_true():
     mock_dock_server.destroy_node()
     mock_undock_server.destroy_node()
 
-
-# ~/smart_home_pytree_ws/src/smart_home_pytree: run  python3 -m  pytest test/unit/test_two_reminder_protocol_tree.py -vv
