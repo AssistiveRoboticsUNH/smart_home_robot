@@ -1,3 +1,19 @@
+#!/usr/bin/env python3
+
+"""
+Charge robot behavior tree.
+
+This tree:
+1. Returns success immediately if the robot is already charging
+2. Otherwise moves to `home`
+3. Attempts docking
+4. Verifies charging state
+5. Retries the charge sequence up to `num_attempts`
+
+When used from `GenericProtocol` (`tree_name: charge_robot`), `num_attempts` can
+be provided via `tree_params.num_attempts`.
+"""
+
 import argparse
 import operator
 
@@ -26,21 +42,19 @@ def required_actions_():
 
 class ChargeRobotTree(BaseTreeRunner):
     """
-    This class is responsible for creating the charge robot tree.
+    Behavior tree runner for the charging sequence.
 
-    The tree should check if the robot is charging and exit. Otherwise it moves the robot to home position then dock the robot and checks if it succcessfully charged. It will try for num_attempts then log if it fails
+    The tree checks if the robot is already charging. If not, it moves the robot
+    to home and runs the docking action, retrying the sequence up to
+    `num_attempts` times before failing.
+
+    Configurable kwargs:
+    - `num_attempts` (int, default 3)
     """
 
     def __init__(
         self, node_name: str, robot_interface=None, executor=None, debug=False, **kwargs
     ):
-        """
-        Initialize the ChargeRobotTree.
-
-        Args:
-            node_name (str): name of the ROS node.
-            **kwargs: extra arguments such as location.
-        """
         super().__init__(
             node_name=node_name,
             robot_interface=robot_interface,
@@ -48,24 +62,14 @@ class ChargeRobotTree(BaseTreeRunner):
             executor=executor,
             **kwargs,
         )
-        
-        self.num_attempts = self.kwargs.get("num_attempts", 3) ## just to expose the variable
+        self.num_attempts = self.kwargs.get("num_attempts", 3)
+
     def create_tree(self) -> py_trees.behaviour.Behaviour:
-        """
-        Create a tree to handle charging the robot
-
-        Returns:
-            the root of the tree
-        """
-
         target_location = "home"
         num_attempts = self.num_attempts
-        print("num_attempts", num_attempts)
 
-        # --- Task Selector Equivalent to Fallback---
         charge_robot = py_trees.composites.Selector(name="Tasks", memory=True)
 
-        # Behavior to check charging
         charging_status = CheckRobotStateKey(
             name="Check_Charging_charge_robot",
             robot_interface=self.robot_interface,
@@ -74,8 +78,6 @@ class ChargeRobotTree(BaseTreeRunner):
             comparison=operator.eq,
         )
 
-        # In py_trees, a single behavior instance cannot be added to the tree in more than one place — it must be cloned or instantiated again, because each node maintains its own state
-        # Same as above
         check_charging_charge_seq = CheckRobotStateKey(
             name="Check_Charging_ChargeSeq",
             robot_interface=self.robot_interface,
@@ -84,19 +86,15 @@ class ChargeRobotTree(BaseTreeRunner):
             comparison=operator.eq,
         )
 
-        # # takes position as input x, y, theta
-        # docking routine doesnt have cancellation until then i will be moving to
-        # location then trigger docking
         move_to_home_tree = MoveToLocationTree(
             node_name="move_to_location_tree",
             robot_interface=self.robot_interface,
-            location=target_location,  # pass any location here
+            location=target_location,
             debug=self.debug,
             executor=self.executor,
         )
         move_to_home = move_to_home_tree.create_tree()
 
-        # Dock robot action (empty goal)
         docking_goal = DockRobot.Goal()
         dock_robot = py_trees_ros.actions.ActionClient(
             name="Dock_Robot",
@@ -106,7 +104,6 @@ class ChargeRobotTree(BaseTreeRunner):
             wait_for_server_timeout_sec=120.0,
         )
 
-        # Logging behaviors has to be a behavior
         log_message_success = LoggingBehavior(
             name="Log_Success",
             message="Charging sequence completed successfully",
@@ -114,7 +111,6 @@ class ChargeRobotTree(BaseTreeRunner):
             robot_interface=self.robot_interface,
         )
 
-        # SUCCESS actually the default so no need to use status
         log_message_fail = LoggingBehavior(
             name="Log_Fail",
             message="Failed to charge after retry attempts",
@@ -122,25 +118,17 @@ class ChargeRobotTree(BaseTreeRunner):
             robot_interface=self.robot_interface,
         )
 
-        # Charge sequence
-        charge_sequence = py_trees.composites.Sequence(
-            name="Charge Sequence", memory=True
-        )
-        # handled by the docking routine
+        charge_sequence = py_trees.composites.Sequence(name="Charge Sequence", memory=True)
         charge_sequence.add_children(
             [move_to_home, dock_robot, charging_status, log_message_success]
         )
-        # charge_sequence.add_children([dock_robot, charging_status, log_message_success])
 
-        # Retry decorator around charge sequence
         charge_sequence_with_retry = py_trees.decorators.Retry(
             name="Charge Sequence with Retry",
             child=charge_sequence,
             num_failures=num_attempts,
         )
 
-        # Final selector order: if already charging -> success, else run retry
-        # sequence, else log failure
         charge_robot.add_children(
             [check_charging_charge_seq, charge_sequence_with_retry, log_message_fail]
         )
@@ -183,29 +171,22 @@ def main(args=None):
 
     args, _ = parser.parse_known_args()
 
-    # Pass the same instance into the tree
     tree_runner = ChargeRobotTree(
         node_name="charge_robot_tree",
+        num_attempts=args.num_attempts,
     )
     tree_runner.setup()
 
-    print("run_continuous", args.run_continuous)
     try:
         if args.run_continuous:
             tree_runner.run_continuous()
         else:
             tree_runner.run_until_done()
-            print("##################")
-            # print("\nTICK HISTORY:\n", tree_runner._tick_history)
     finally:
-        # robot_interface.shutdown()
         tree_runner.cleanup()
 
-    # Examine collected feedback
     rclpy.shutdown()
 
 
 if __name__ == "__main__":
     main()
-
-# python3 charge_robot_tree.py --num_attempts 4

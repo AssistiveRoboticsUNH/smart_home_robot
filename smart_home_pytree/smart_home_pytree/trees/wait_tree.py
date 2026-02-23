@@ -14,7 +14,7 @@ import rclpy
 from smart_home_pytree.behaviors.action_behaviors import wait
 from smart_home_pytree.behaviors.set_protocol_bb import SetProtocolBB
 from smart_home_pytree.behaviors.check_protocol_bb import CheckProtocolBB
-from smart_home_pytree.protocols.charge_robot import ChargeRobotTree
+from smart_home_pytree.trees.charge_robot_tree import ChargeRobotTree
 from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
 from smart_home_pytree.utils import parse_duration, str2bool
 
