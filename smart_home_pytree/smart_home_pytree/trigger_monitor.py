@@ -369,7 +369,7 @@ class TriggerMonitor:
     def check_event_requirement(self, event_reqs, current_events):
         """Check if all event trigger conditions listed in YAML are satisfied.
         Args:
-            event_reqs (list): list of event trigger dicts with 'state' and 'value' keys.
+            event_reqs (list): list of event trigger dicts with 'state', 'value', and optional 'op'.
             current_events (dict): current event states.
         Returns:
             bool: True if all event trigger conditions are satisfied, False otherwise.
@@ -377,10 +377,81 @@ class TriggerMonitor:
         if not event_reqs:
             return True
         for ev in event_reqs:
-            topic, val = ev["state"], ev["value"]
-            if topic not in current_events or current_events[topic] != val:
+            topic = ev["state"]
+            if topic not in current_events:
+                return False
+            if topic == "robot_location_xy":
+                if not self._event_xy_within_point_match(current_events[topic], ev):
+                    return False
+                continue
+
+            expected = ev["value"]
+            op = ev.get("op", "=")
+            if not self._event_condition_match(current_events[topic], expected, op):
                 return False
         return True
+
+    def _event_xy_within_point_match(self, current_value, event_rule: dict) -> bool:
+        """Evaluate proximity trigger for robot_location_xy against a target point."""
+        if (
+            not isinstance(current_value, (tuple, list))
+            or len(current_value) < 2
+            or not isinstance(current_value[0], (int, float))
+            or not isinstance(current_value[1], (int, float))
+        ):
+            return False
+
+        within_m = event_rule.get("within_m")
+        point_xy = event_rule.get("point_xy")
+        if (
+            isinstance(within_m, bool)
+            or not isinstance(within_m, (int, float))
+            or within_m <= 0
+        ):
+            return False
+        if (
+            not isinstance(point_xy, (tuple, list))
+            or len(point_xy) != 2
+            or isinstance(point_xy[0], bool)
+            or isinstance(point_xy[1], bool)
+            or not isinstance(point_xy[0], (int, float))
+            or not isinstance(point_xy[1], (int, float))
+        ):
+            return False
+        cx, cy = float(current_value[0]), float(current_value[1])
+        threshold_sq = float(within_m) ** 2
+        tx, ty = float(point_xy[0]), float(point_xy[1])
+        dx = cx - tx
+        dy = cy - ty
+        return (dx * dx + dy * dy) <= threshold_sq
+
+    def _event_condition_match(self, current_value, expected_value, op: str) -> bool:
+        """Evaluate an event trigger comparison operator."""
+        if op == "=":
+            return current_value == expected_value
+        if op == "!=":
+            return current_value != expected_value
+
+        # Numeric comparisons only.
+        if (
+            isinstance(current_value, bool)
+            or isinstance(expected_value, bool)
+            or not isinstance(current_value, (int, float))
+            or not isinstance(expected_value, (int, float))
+        ):
+            return False
+
+        if op == ">":
+            return current_value > expected_value
+        if op == ">=":
+            return current_value >= expected_value
+        if op == "<":
+            return current_value < expected_value
+        if op == "<=":
+            return current_value <= expected_value
+
+        self.bb_logger.debug(f"[TriggerMonitor] Unsupported event operator '{op}'")
+        return False
 
     # --- SATISFIED LOGIC ---
     def recompute_satisfied(self):

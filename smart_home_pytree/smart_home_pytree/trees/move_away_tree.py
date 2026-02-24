@@ -5,7 +5,7 @@ Reusable move-away tree for GenericProtocol (`tree_name: move_away`).
 
 Behavior:
 1. Read the robot state command from `position_state_key`
-2. Resolve target location (`home_location` or `away_location`)
+2. Resolve target location (`home` or `away_location`)
 3. Move to the target location
 4. Optionally sleep (`end_sleep`) using a normal in-tree wait
 5. Reset `state_key` to False in robot_interface.state
@@ -41,7 +41,6 @@ class MoveAwayTree(BaseTreeRunner):
     - `away_location` (required)
     - `position_state_key` (required)
     - `state_key` (required)
-    - `home_location` (optional, default `"home"`)
     - `end_sleep` (optional duration, default `0`)
     """
 
@@ -63,7 +62,7 @@ class MoveAwayTree(BaseTreeRunner):
         self.away_location = self.kwargs["away_location"]
         self.position_state_key = self.kwargs["position_state_key"]
         self.state_key = self.kwargs["state_key"]
-        self.home_location = self.kwargs.get("home_location", "home")
+        self.home_location = "home"
         self.end_sleep = parse_duration(self.kwargs.get("end_sleep", 0))
 
     def create_tree(self) -> py_trees.behaviour.Behaviour:

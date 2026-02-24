@@ -49,6 +49,7 @@ ALLOWED_DAY_NAMES = {
     "saturday",
     "sunday",
 }
+ALLOWED_EVENT_OPERATORS = {"=", "!=", ">", ">=", "<", "<="}
 
 # Central metadata for executable step `tree_name`.
 # Used for schema validation and as developer-facing documentation of supported
@@ -99,7 +100,7 @@ RUN_TREE_SPECS = {
     },
     "move_away": {
         "description": (
-            "Move to 'home' or configured away location based on robot_interface.state[position_state_key], "
+            "Move to 'home' or configured away location based on position_state_key, "
             "optionally perform a tree-local sleep, then reset a trigger state key to False."
         ),
         "required_params": {
@@ -108,7 +109,6 @@ RUN_TREE_SPECS = {
             "state_key": "str (robot state key to set False after execution)",
         },
         "optional_params": {
-            "home_location": "str (default: 'home', must exist in top-level locations)",
             "end_sleep": "number|string duration (tree-local sleep after move, before reset)",
         },
     },
@@ -288,7 +288,7 @@ def _validate_triggers(protocol_name: str, triggers: Any, locations: dict) -> No
     if "time" in triggers:
         _validate_time_requirement(triggers["time"], f"{path}.time")
     if "event" in triggers:
-        _validate_event_conditions(triggers["event"], f"{path}.event")
+        _validate_event_conditions(triggers["event"], f"{path}.event", locations)
     if "permissible_locations" in triggers:
         _validate_permissible_locations(
             triggers["permissible_locations"],
@@ -312,17 +312,50 @@ def _validate_time_requirement(time_req: Any, path: str) -> None:
         _validate_day_requirement(time_req["day"], f"{path}.day")
 
 
-def _validate_event_conditions(event_reqs: Any, path: str) -> None:
+def _validate_event_conditions(event_reqs: Any, path: str, locations: dict) -> None:
     _ensure_type(event_reqs, list, path)
     if not event_reqs:
         raise ValueError(f"{path} must be a non-empty list when provided")
     for idx, cond in enumerate(event_reqs, start=1):
         cpath = f"{path}[{idx}]"
         _ensure_type(cond, dict, cpath)
-        _reject_unknown_keys(cond, {"state", "value"}, cpath)
-        _ensure_non_empty_string(cond.get("state"), f"{cpath}.state")
+        state_name = cond.get("state")
+        _ensure_non_empty_string(state_name, f"{cpath}.state")
+
+        if state_name == "robot_location_xy":
+            _reject_unknown_keys(cond, {"state", "within_m", "point_xy"}, cpath)
+            if "within_m" not in cond:
+                raise ValueError(f"{cpath}.within_m is required for robot_location_xy event")
+            within_m = cond.get("within_m")
+            if isinstance(within_m, bool) or not isinstance(within_m, (int, float)):
+                raise ValueError(f"{cpath}.within_m must be a number > 0")
+            if within_m <= 0:
+                raise ValueError(f"{cpath}.within_m must be > 0")
+            point_xy = cond.get("point_xy")
+            _ensure_type(point_xy, list, f"{cpath}.point_xy")
+            if len(point_xy) != 2:
+                raise ValueError(f"{cpath}.point_xy must contain exactly [x, y]")
+            for pidx, pval in enumerate(point_xy, start=1):
+                if isinstance(pval, bool) or not isinstance(pval, (int, float)):
+                    raise ValueError(f"{cpath}.point_xy[{pidx}] must be numeric")
+            continue
+
+        _reject_unknown_keys(cond, {"state", "value", "op"}, cpath)
         if "value" not in cond:
             raise ValueError(f"{cpath}.value is required")
+        if "op" in cond:
+            op = cond.get("op")
+            _ensure_non_empty_string(op, f"{cpath}.op")
+            if op not in ALLOWED_EVENT_OPERATORS:
+                raise ValueError(
+                    f"{cpath}.op='{op}' is invalid. Allowed: {sorted(ALLOWED_EVENT_OPERATORS)}"
+                )
+            if op in {">", ">=", "<", "<="}:
+                val = cond.get("value")
+                if isinstance(val, bool) or not isinstance(val, (int, float)):
+                    raise ValueError(
+                        f"{cpath}.value must be numeric when using op '{op}'"
+                    )
 
 
 def _validate_day_requirement(days: Any, path: str) -> None:
@@ -374,9 +407,9 @@ def _validate_tree_params(tree_name: str, tree_params: dict, path: str, location
     # Type/value checks for known params used today.
     for key, value in tree_params.items():
         key_path = f"{path}.tree_params.{key}"
-        if key in {"away_location", "home_location", "position_state_key", "state_key", "location"}:
+        if key in {"away_location", "position_state_key", "state_key", "location"}:
             _ensure_non_empty_string(value, key_path)
-            if key in {"away_location", "home_location", "location"} and locations is not None:
+            if key in {"away_location", "location"} and locations is not None:
                 if value not in locations:
                     raise ValueError(
                         f"{key_path}='{value}' is not defined in top-level locations"

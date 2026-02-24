@@ -8,6 +8,58 @@ from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPo
 from std_msgs.msg import Bool, Int32, String
 
 
+ROBOT_STATE_SPECS = {
+    "person_location": {
+        "kind": "string",
+        "ui_kind": "location_name",
+        "description": "Current detected person location label.",
+    },
+    "robot_location": {
+        "kind": "string",
+        "ui_kind": "location_name",
+        "description": "Current robot landmark/location label.",
+    },
+    "position": {
+        "kind": "string",
+        "ui_kind": "location_name",
+        "description": "Move-away target mode (typically 'home' or 'away').",
+    },
+    "move_away": {
+        "kind": "bool",
+        "description": "Trigger to run move-away behavior.",
+    },
+    "coffee": {
+        "kind": "bool",
+        "description": "Coffee-related trigger event.",
+    },
+    "bathroom_sensor": {
+        "kind": "bool",
+        "description": "Bathroom motion/sensor event.",
+    },
+    "charging": {
+        "kind": "bool",
+        "description": "Whether robot is charging.",
+    },
+    "start_exercise": {
+        "kind": "bool",
+        "description": "Exercise start trigger.",
+    },
+    "stop_exercise": {
+        "kind": "bool",
+        "description": "Exercise stop trigger.",
+    },
+    "sim_time": {
+        "kind": "string",
+        "description": "Simulated clock override string (HH:MM).",
+    },
+    "robot_location_xy": {
+        "kind": "tuple",
+        "ui_kind": "xy_proximity",
+        "description": "Robot XY coordinates from AMCL in format (x, y).",
+    },
+}
+
+
 class RobotState:
     """Thread-safe singleton state container."""
 
