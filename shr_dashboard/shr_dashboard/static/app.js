@@ -803,8 +803,15 @@
             </select>
           </div>
           <div class="col-6">
-            <label>wait_after</label>
-            <input type="text" data-action="step-wait-after" ${scopeAttrs} value="${escapeAttr(step.wait_after ?? '')}" placeholder="optional" />
+            <label title="Scheduler pause before the next step (other protocols may run)">next_step_after</label>
+            <input
+              type="text"
+              data-action="step-wait-after"
+              title="Scheduler pause before the next step (other protocols may run)"
+              ${scopeAttrs}
+              value="${escapeAttr(step.next_step_after ?? step.wait_after ?? '')}"
+              placeholder="optional"
+            />
           </div>
           ${renderTreeParams(step, { scope, stepIdx: idx, parentIdx })}
         </div>`}
@@ -851,8 +858,16 @@
             <input type="text" data-action="confirm-question" data-step-idx="${idx}" value="${escapeAttr(confirmation.question || '')}" />
           </div>
           <div class="col-6">
-            <label>wait_after (after confirmation branch)</label>
-            <input type="text" data-action="step-wait-after" data-scope="top" data-step-idx="${idx}" value="${escapeAttr(step.wait_after ?? '')}" placeholder="optional" />
+            <label title="Scheduler pause before the next step (other protocols may run)">next_step_after (after confirmation branch)</label>
+            <input
+              type="text"
+              data-action="step-wait-after"
+              title="Scheduler pause before the next step (other protocols may run)"
+              data-scope="top"
+              data-step-idx="${idx}"
+              value="${escapeAttr(step.next_step_after ?? step.wait_after ?? '')}"
+              placeholder="optional"
+            />
           </div>
           <div class="col-12 branch-columns">
             ${renderBranchSteps(step, idx, 'on_yes')}
@@ -1587,8 +1602,9 @@
         const stepIdx = Number(target.dataset.stepIdx);
         const parentIdx = target.dataset.parentIdx !== undefined ? Number(target.dataset.parentIdx) : null;
         const arr = selectedStepsByScope(scope, stepIdx, parentIdx);
-        if (target.value === '') delete arr[stepIdx].wait_after;
-        else arr[stepIdx].wait_after = parseMaybeNumber(target.value);
+        if (target.value === '') delete arr[stepIdx].next_step_after;
+        else arr[stepIdx].next_step_after = parseMaybeNumber(target.value);
+        delete arr[stepIdx].wait_after; // migrate old key if present
         setDirty(true);
         return;
       }

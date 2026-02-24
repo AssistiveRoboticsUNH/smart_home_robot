@@ -123,9 +123,9 @@ def load_protocols_to_bb(yaml_path: str, debug: bool = False):
                 if payload_param:
                     protocol_dict[prefix] = tree_params.get(payload_param)
 
-            def _add_step_wait(wait_key: str, wait_after, has_following_step: bool):
-                if has_following_step and wait_after not in (None, 0, 0.0, "", "0"):
-                    protocol_dict[wait_key] = wait_after
+            def _add_step_wait(wait_key: str, next_step_after, has_following_step: bool):
+                if has_following_step and next_step_after not in (None, 0, 0.0, "", "0"):
+                    protocol_dict[wait_key] = next_step_after
                     protocol_dict_done[f"{wait_key}_done"] = False
 
             def _synth_branch_steps(branch_prefix: str, branch_steps: list):
@@ -137,7 +137,7 @@ def load_protocols_to_bb(yaml_path: str, debug: bool = False):
                     _add_executable_step(step_key, b_step)
                     _add_step_wait(
                         wait_key=wait_key,
-                        wait_after=b_step.get("wait_after", 0),
+                        next_step_after=b_step.get("next_step_after", 0),
                         has_following_step=(b_idx < len(branch_steps)),
                     )
 
@@ -160,7 +160,7 @@ def load_protocols_to_bb(yaml_path: str, debug: bool = False):
 
                 _add_step_wait(
                     wait_key=wait_key,
-                    wait_after=step.get("wait_after", 0),
+                    next_step_after=step.get("next_step_after", 0),
                     has_following_step=(idx < len(steps)),
                 )
 

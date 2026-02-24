@@ -36,8 +36,8 @@ ALLOWED_HIGH_LEVEL_KEYS = {"priority", "triggers", "reset_pattern", "success_on"
 ALLOWED_TRIGGER_KEYS = {"time", "event", "permissible_locations"}
 ALLOWED_ACTION_BLOCK_KEYS = {"steps"}
 
-ALLOWED_TREE_STEP_KEYS = {"tree_name", "tree_params", "wait_after"}
-ALLOWED_CONFIRMATION_STEP_KEYS = {"confirmation", "wait_after"}
+ALLOWED_TREE_STEP_KEYS = {"tree_name", "tree_params", "next_step_after"}
+ALLOWED_CONFIRMATION_STEP_KEYS = {"confirmation", "next_step_after"}
 ALLOWED_CONFIRMATION_BLOCK_KEYS = {"question", "on_yes", "on_no"}
 ALLOWED_RESET_TYPES = {"eod", "instant", "periodic", "default"}
 ALLOWED_DAY_NAMES = {
@@ -210,8 +210,8 @@ def _validate_step_object(step: Any, path: str, allow_confirmation_branch: bool,
             raise ValueError(f"{path} confirmation branching is not allowed in this context")
         _reject_unknown_keys(step, ALLOWED_CONFIRMATION_STEP_KEYS, path)
         _validate_confirmation_step(step.get("confirmation"), f"{path}.confirmation", locations)
-        if "wait_after" in step:
-            _validate_wait_after(step.get("wait_after"), f"{path}.wait_after")
+        if "next_step_after" in step:
+            _validate_wait_after(step.get("next_step_after"), f"{path}.next_step_after")
         return
 
     _validate_tree_step(
@@ -233,8 +233,8 @@ def _validate_tree_step(
     _ensure_type(tree_params, dict, f"{path}.tree_params")
     _validate_tree_params(tree_name, tree_params, path, locations=locations)
 
-    if "wait_after" in step:
-        _validate_wait_after(step.get("wait_after"), f"{path}.wait_after")
+    if "next_step_after" in step:
+        _validate_wait_after(step.get("next_step_after"), f"{path}.next_step_after")
 
 
 def _validate_confirmation_step(confirmation: Any, path: str, locations: dict) -> None:

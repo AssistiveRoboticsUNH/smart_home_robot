@@ -66,7 +66,7 @@ protocols:
         - tree_name: play_text
           tree_params:
             text: "This is a reminder to take your morning medicine"
-          wait_after: 10
+          next_step_after: 10
         - confirmation:
             question: "Have you taken your medication yet?"
             on_yes:
@@ -95,7 +95,7 @@ protocols:
         - tree_name: play_text
           tree_params:
             text: "please take your night medicine"
-          wait_after: 10
+          next_step_after: 10
         - confirmation:
             question: "Have you taken your medication yet?"
             on_yes:
@@ -125,7 +125,7 @@ protocols:
         - tree_name: play_audio
           tree_params:
             audio_path: "/home/olagh48652/smart-home/src/smart-home-robot/shr_resources/resources/food_reminder.mp3"
-          wait_after: 10
+          next_step_after: 10
         - confirmation:
             question: "Have you taken your medication yet?"
             on_yes:

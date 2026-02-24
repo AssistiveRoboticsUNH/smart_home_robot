@@ -40,7 +40,7 @@ def test_generic_protocol_builds_action_and_wait_steps(monkeypatch):
         "demo_protocol",
         {
             "steps": [
-                {"tree_name": "play_text", "tree_params": {"text": "hello"}, "wait_after": 5},
+                {"tree_name": "play_text", "tree_params": {"text": "hello"}, "next_step_after": 5},
                 {"tree_name": "play_text", "tree_params": {"text": "bye"}},
             ],
             "step_1": "hello",
@@ -181,4 +181,3 @@ def test_generic_protocol_rejects_nested_confirmation(monkeypatch):
     tree_runner = _make_tree("bad_protocol")
     with pytest.raises(ValueError, match="Nested confirmation branches are not supported"):
         tree_runner.create_tree()
-

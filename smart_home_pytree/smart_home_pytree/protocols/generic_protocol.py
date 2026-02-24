@@ -14,7 +14,7 @@ This is intentionally a constrained builder, not a general-purpose BT compiler.
 Supported step features:
 - executable tree steps (`tree_name`, `tree_params`) via the centralized tree registry
 - explicit confirmation branching (`confirmation.question`, `on_yes`, `on_no`)
-- `wait_after` pauses between steps (via `YieldWait`)
+- `next_step_after` pauses between steps (via `YieldWait`)
 
 
 Standalone usage example (run `medicine_am` once):
@@ -158,15 +158,15 @@ class GenericProtocolTree(BaseTreeRunner):
         self,
         parent_sequence: py_trees.composites.Sequence,
         wait_key: str,
-        wait_after,
+        next_step_after,
     ) -> None:
         """
-        Append a YieldWait child if `wait_after` resolves to a positive duration.
+        Append a YieldWait child if `next_step_after` resolves to a positive duration.
 
         This helper keeps wait insertion logic consistent across top-level and
         branch sequences.
         """
-        wait_seconds = parse_duration(wait_after)
+        wait_seconds = parse_duration(next_step_after)
         if wait_seconds <= 0:
             return
 
@@ -264,7 +264,7 @@ class GenericProtocolTree(BaseTreeRunner):
                 if branch_info
                 else self._wait_key(idx)
             )
-            self._maybe_add_wait(root, wait_key=wait_key, wait_after=step.get("wait_after", 0))
+            self._maybe_add_wait(root, wait_key=wait_key, next_step_after=step.get("next_step_after", 0))
 
         return root
 
