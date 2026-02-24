@@ -6,3 +6,4 @@ discord
 timedelta
 zmq
 PyYAML
+Flask
