@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>SHR Dashboard</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div id="app" class="app-shell">
+    <aside class="sidebar">
+      <button class="brand" id="sidebarToggle" type="button" title="Collapse/expand navigation">
+        <div class="brand-mark">SHR</div>
+        <div class="brand-copy">
+          <div class="brand-title">Dashboard</div>
+          <div class="brand-subtitle">Robot Console</div>
+        </div>
+      </button>
+      <nav class="nav-list" aria-label="Main">
+        <button class="nav-item" data-route="home" title="Home">
+          <span class="nav-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 10.5 12 3l9 7.5" />
+              <path d="M5 9.5V21h14V9.5" />
+              <path d="M9.5 21v-6h5v6" />
+            </svg>
+          </span>
+          <span class="nav-text">Home</span>
+        </button>
+        <button class="nav-item" data-route="protocol-designer" title="Protocol Designer">
+          <span class="nav-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M4 6h10" />
+              <path d="M18 6h2" />
+              <circle cx="16" cy="6" r="2" />
+              <path d="M4 12h2" />
+              <path d="M10 12h10" />
+              <circle cx="8" cy="12" r="2" />
+              <path d="M4 18h10" />
+              <path d="M18 18h2" />
+              <circle cx="16" cy="18" r="2" />
+            </svg>
+          </span>
+          <span class="nav-text">Protocol Designer</span>
+        </button>
+      </nav>
+      <div class="sidebar-footer">
+        <div id="yamlPathLabel" class="muted small"></div>
+      </div>
+    </aside>
+
+    <main class="main-panel">
+      <header class="topbar">
+        <div>
+          <h1 id="pageTitle">Home</h1>
+          <p id="pageSubtitle" class="muted">Operator dashboard</p>
+        </div>
+        <div class="topbar-actions">
+          <span id="statusChip" class="chip">Loading…</span>
+        </div>
+      </header>
+
+      <section id="flashBar" class="flash hidden"></section>
+      <section id="routeView" class="route-view"></section>
+    </main>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

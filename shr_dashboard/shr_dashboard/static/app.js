@@ -1,0 +1,1642 @@
+(() => {
+  const state = {
+    route: 'home',
+    loading: true,
+    bootError: null,
+    config: null,
+    metadata: null,
+    yamlPath: '',
+    yamlPreview: '',
+    selectedProtocol: null,
+    flash: null,
+    dirty: false,
+    validation: {
+      status: 'idle', // idle | ok | error
+      messages: [],
+      lastValidatedAt: null,
+    },
+    lastSavedAt: null,
+    lastSaveInfo: null,
+    ui: {
+      listSearch: '',
+      listSort: 'name_asc',
+      filters: {
+        hasTime: false,
+        hasEvent: false,
+      },
+      specialCollapsed: true,
+      sidebarCollapsed: false,
+      sectionsOpen: {
+        general: true,
+        triggers: true,
+        reset: true,
+        actions: true,
+        yaml: false,
+      },
+      scroll: {
+        list: 0,
+        editor: 0,
+      },
+      stepCollapsed: {},
+      recentProtocols: [],
+    },
+  };
+
+  const els = {
+    appShell: document.getElementById('app'),
+    sidebarToggle: document.getElementById('sidebarToggle'),
+    routeView: document.getElementById('routeView'),
+    pageTitle: document.getElementById('pageTitle'),
+    pageSubtitle: document.getElementById('pageSubtitle'),
+    statusChip: document.getElementById('statusChip'),
+    yamlPathLabel: document.getElementById('yamlPathLabel'),
+    flashBar: document.getElementById('flashBar'),
+    navItems: [...document.querySelectorAll('.nav-item')],
+  };
+
+  const deepClone = (obj) => JSON.parse(JSON.stringify(obj));
+
+  function nowTimeLabel() {
+    const d = new Date();
+    return d.toLocaleTimeString();
+  }
+
+  function setFlash(type, message) {
+    state.flash = message ? { type, message } : null;
+    renderFlash();
+  }
+
+  function clearFlash() {
+    state.flash = null;
+    renderFlash();
+  }
+
+  function renderFlash() {
+    if (!state.flash) {
+      els.flashBar.className = 'flash hidden';
+      els.flashBar.textContent = '';
+      return;
+    }
+    els.flashBar.className = `flash ${state.flash.type}`;
+    els.flashBar.textContent = state.flash.message;
+  }
+
+  async function api(path, options = {}) {
+    const res = await fetch(path, {
+      headers: { 'Content-Type': 'application/json' },
+      ...options,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.ok === false) {
+      throw new Error(data.error || `Request failed (${res.status})`);
+    }
+    return data;
+  }
+
+  function metadataForTree(treeName) {
+    return state.metadata?.run_trees?.[treeName] || { params: [], description: '' };
+  }
+
+  function robotStateSpecs() {
+    return state.metadata?.robot_states || [];
+  }
+
+  function robotStateSpec(stateKey) {
+    return robotStateSpecs().find((s) => s.name === stateKey) || null;
+  }
+
+  function eventUiKindForState(stateKey) {
+    return robotStateSpec(stateKey)?.ui_kind || null;
+  }
+
+  function eventKindForState(stateKey, fallbackValue) {
+    const spec = robotStateSpec(stateKey);
+    if (spec?.kind) return spec.kind;
+    return guessValueType(fallbackValue);
+  }
+
+  function locationValueOptionsForState(stateKey) {
+    const locs = Object.keys(state.config?.locations || {});
+    if (stateKey === 'position') {
+      const set = new Set(locs);
+      set.add('away');
+      return [...set];
+    }
+    return locs;
+  }
+
+  function guessValueType(value) {
+    if (typeof value === 'boolean') return 'bool';
+    if (typeof value === 'number') return 'number';
+    return 'string';
+  }
+
+  function makeDefaultEventTrigger() {
+    return { state: '', value: '' };
+  }
+
+  function makeDefaultParamValue(param) {
+    switch (param.kind) {
+      case 'integer':
+        return param.name === 'num_attempts' ? 3 : 1;
+      case 'location':
+        return Object.keys(state.config?.locations || {})[0] || '';
+      case 'duration':
+      case 'number_or_duration':
+        return 0;
+      default:
+        if (param.name === 'position_state_key') return 'position';
+        return '';
+    }
+  }
+
+  function makeDefaultTreeStep(treeName = 'play_text') {
+    const meta = metadataForTree(treeName);
+    const tree_params = {};
+    for (const p of meta.params || []) {
+      if (p.required) tree_params[p.name] = makeDefaultParamValue(p);
+    }
+    if (treeName === 'play_text' && tree_params.text === '') tree_params.text = 'New message';
+    if (treeName === 'move_away') {
+      if (tree_params.position_state_key === '') tree_params.position_state_key = 'position';
+      if (tree_params.state_key === '') tree_params.state_key = 'move_away';
+    }
+    return { tree_name: treeName, tree_params };
+  }
+
+  function makeDefaultConfirmationStep() {
+    return {
+      confirmation: {
+        question: 'Do you want me to continue?',
+        on_yes: [makeDefaultTreeStep('play_text')],
+        on_no: [makeDefaultTreeStep('play_text')],
+      },
+    };
+  }
+
+  function getProtocols() {
+    return state.config?.protocols || {};
+  }
+
+  function getGenericProtocolNamesRaw() {
+    return Object.entries(getProtocols())
+      .filter(([, p]) => p && p.runner === 'GenericProtocol')
+      .map(([name]) => name);
+  }
+
+  function getGenericProtocolNames() {
+    return getGenericProtocolNamesRaw().sort();
+  }
+
+  function getFilteredGenericProtocols() {
+    let items = getGenericProtocolNamesRaw().map((name) => ({ name, protocol: getProtocols()[name] }));
+    const search = state.ui.listSearch.trim().toLowerCase();
+    if (search) {
+      items = items.filter(({ name, protocol }) => {
+        const hay = `${name} ${triggerSummary(protocol)}`.toLowerCase();
+        return hay.includes(search);
+      });
+    }
+    if (state.ui.filters.hasTime) {
+      items = items.filter(({ protocol }) => !!protocol?.high_level?.triggers?.time);
+    }
+    if (state.ui.filters.hasEvent) {
+      items = items.filter(({ protocol }) => (protocol?.high_level?.triggers?.event || []).length > 0);
+    }
+    const sort = state.ui.listSort;
+    items.sort((a, b) => {
+      if (sort === 'priority_asc') {
+        return (a.protocol?.high_level?.priority ?? 9999) - (b.protocol?.high_level?.priority ?? 9999)
+          || a.name.localeCompare(b.name);
+      }
+      if (sort === 'recent') {
+        const ra = state.ui.recentProtocols.indexOf(a.name);
+        const rb = state.ui.recentProtocols.indexOf(b.name);
+        const va = ra === -1 ? Number.MAX_SAFE_INTEGER : ra;
+        const vb = rb === -1 ? Number.MAX_SAFE_INTEGER : rb;
+        return va - vb || a.name.localeCompare(b.name);
+      }
+      return a.name.localeCompare(b.name);
+    });
+    return items;
+  }
+
+  function getSpecialProtocolNames() {
+    return Object.entries(getProtocols())
+      .filter(([, p]) => p && p.runner !== 'GenericProtocol')
+      .map(([name, p]) => ({ name, runner: p.runner || 'Unknown' }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  function selectedProtocolObj() {
+    return state.selectedProtocol ? getProtocols()[state.selectedProtocol] : null;
+  }
+
+  function ensureGenericShapes(protocol) {
+    protocol.high_level ||= {};
+    protocol.high_level.priority ??= 10;
+    protocol.high_level.triggers ||= {};
+    protocol.high_level.reset_pattern ||= { type: 'eod' };
+    protocol.action ||= {};
+    protocol.action.steps ||= [];
+  }
+
+  function currentSteps(protocol = selectedProtocolObj()) {
+    if (!protocol) return [];
+    ensureGenericShapes(protocol);
+    return protocol.action.steps;
+  }
+
+  function getBranchSteps(step, branchName) {
+    step.confirmation ||= { question: '', on_yes: [], on_no: [] };
+    step.confirmation[branchName] ||= [];
+    return step.confirmation[branchName];
+  }
+
+  function markRecentProtocol(name) {
+    if (!name) return;
+    state.ui.recentProtocols = [name, ...state.ui.recentProtocols.filter((n) => n !== name)].slice(0, 30);
+  }
+
+  function setDirty(flag = true) {
+    state.dirty = flag;
+    if (flag) {
+      if (state.validation.status === 'ok') {
+        state.validation.status = 'idle';
+      }
+    }
+    updateStatusChip();
+  }
+
+  function validationStatusLabel() {
+    if (state.loading) return 'Loading…';
+    if (state.validation.status === 'error') return 'Validation error';
+    if (state.validation.status === 'ok') return 'Validated';
+    if (state.lastSavedAt && !state.dirty) return 'Saved';
+    if (state.dirty) return 'Unsaved';
+    return 'Ready';
+  }
+
+  function updateStatusChip(text) {
+    const label = text || validationStatusLabel();
+    els.statusChip.textContent = label;
+    els.statusChip.className = 'chip';
+    if (state.validation.status === 'error') els.statusChip.classList.add('chip-error');
+    else if (state.dirty) els.statusChip.classList.add('chip-warn');
+    else if (state.lastSavedAt || state.validation.status === 'ok') els.statusChip.classList.add('chip-ok');
+  }
+
+  function renderNav() {
+    for (const btn of els.navItems) {
+      btn.classList.toggle('active', btn.dataset.route === state.route);
+    }
+  }
+
+  function renderSidebarMode() {
+    els.appShell.classList.toggle('sidebar-collapsed', !!state.ui.sidebarCollapsed);
+    if (els.sidebarToggle) {
+      els.sidebarToggle.setAttribute(
+        'aria-label',
+        state.ui.sidebarCollapsed ? 'Expand navigation' : 'Collapse navigation',
+      );
+      els.sidebarToggle.setAttribute(
+        'title',
+        state.ui.sidebarCollapsed ? 'Expand navigation' : 'Collapse navigation',
+      );
+    }
+  }
+
+  function routeMeta(route) {
+    if (route === 'protocol-designer') {
+      return {
+        title: 'Protocol Designer',
+        subtitle: 'Edit GenericProtocol entries from the active house YAML',
+      };
+    }
+    return { title: 'Home', subtitle: 'Blank landing page (dashboard modules will be added here)' };
+  }
+
+  function setRoute(route) {
+    state.route = route;
+    const meta = routeMeta(route);
+    els.pageTitle.textContent = meta.title;
+    els.pageSubtitle.textContent = meta.subtitle;
+    renderNav();
+    renderRoute();
+  }
+
+  function captureDesignerScroll() {
+    const listPanel = els.routeView.querySelector('.designer-list-panel');
+    const editorPanel = els.routeView.querySelector('.designer-editor-panel');
+    if (listPanel) state.ui.scroll.list = listPanel.scrollTop;
+    if (editorPanel) state.ui.scroll.editor = editorPanel.scrollTop;
+  }
+
+  function restoreDesignerScroll() {
+    const listPanel = els.routeView.querySelector('.designer-list-panel');
+    const editorPanel = els.routeView.querySelector('.designer-editor-panel');
+    if (listPanel) listPanel.scrollTop = state.ui.scroll.list || 0;
+    if (editorPanel) editorPanel.scrollTop = state.ui.scroll.editor || 0;
+  }
+
+  function renderRoute() {
+    const shouldPreserveDesignerScroll = state.route === 'protocol-designer';
+    if (shouldPreserveDesignerScroll) captureDesignerScroll();
+    if (state.loading) {
+      els.routeView.innerHTML = '<div class="blank-card">Loading dashboard…</div>';
+      return;
+    }
+    if (state.bootError) {
+      els.routeView.innerHTML = `<div class="panel"><h2>Bootstrap Error</h2><p class="muted">${escapeHtml(state.bootError)}</p></div>`;
+      return;
+    }
+    if (state.route === 'protocol-designer') {
+      renderProtocolDesigner();
+      restoreDesignerScroll();
+      return;
+    }
+    els.routeView.innerHTML = `
+      <div class="blank-card blank-card-dark">
+        <div>
+          <div style="font-size:20px; font-weight:600; text-align:center;">SHR Dashboard</div>
+          <div class="muted" style="margin-top:6px; text-align:center;">Home page is intentionally blank for now.</div>
+        </div>
+      </div>
+    `;
+  }
+
+  function triggerSummary(protocol) {
+    const triggers = protocol?.high_level?.triggers || {};
+    const bits = [];
+    if (triggers.event?.length) bits.push(`event:${triggers.event.length}`);
+    if (triggers.time?.from && triggers.time?.to) bits.push(`${triggers.time.from}-${triggers.time.to}`);
+    if (triggers.permissible_locations?.length) bits.push(`loc:${triggers.permissible_locations.length}`);
+    return bits.join(' · ') || 'No triggers';
+  }
+
+  function renderProtocolListPanel() {
+    const items = getFilteredGenericProtocols();
+    const specials = getSpecialProtocolNames();
+
+    const listHtml = items.map(({ name, protocol }) => {
+      const active = name === state.selectedProtocol ? ' active' : '';
+      const prio = protocol?.high_level?.priority ?? '-';
+      return `
+        <button class="protocol-item${active}" data-action="select-protocol" data-name="${escapeAttr(name)}">
+          <div class="title">${escapeHtml(name)}</div>
+          <div class="meta">Priority ${prio} · ${escapeHtml(triggerSummary(protocol))}</div>
+        </button>`;
+    }).join('');
+
+    const specialList = specials.length
+      ? specials.map((p) => `<div class="inline-note">${escapeHtml(p.name)} <span class="param-chip">${escapeHtml(p.runner)}</span></div>`).join('')
+      : '<div class="inline-note">No special protocol runners</div>';
+
+    return `
+      <div class="panel stack designer-list-panel">
+        <div class="section-header">
+          <h2 style="margin:0; font-size:18px;">Protocols</h2>
+          <button class="btn small primary" data-action="add-protocol">Add</button>
+        </div>
+
+        <div class="section stack">
+          <div class="row">
+            <div class="col-12">
+              <label>Search</label>
+              <input type="text" data-action="list-search" value="${escapeAttr(state.ui.listSearch)}" placeholder="Search by name or trigger summary" />
+            </div>
+            <div class="col-6">
+              <label>Sort</label>
+              <select data-action="list-sort">
+                <option value="name_asc" ${state.ui.listSort === 'name_asc' ? 'selected' : ''}>Name (A-Z)</option>
+                <option value="priority_asc" ${state.ui.listSort === 'priority_asc' ? 'selected' : ''}>Priority</option>
+                <option value="recent" ${state.ui.listSort === 'recent' ? 'selected' : ''}>Recently edited</option>
+              </select>
+            </div>
+            <div class="col-6">
+              <label>Filters</label>
+              <div class="filter-grid">
+                <label class="checkbox-line"><input type="checkbox" data-action="list-filter" data-key="hasTime" ${state.ui.filters.hasTime ? 'checked' : ''}/> <span>Time</span></label>
+                <label class="checkbox-line"><input type="checkbox" data-action="list-filter" data-key="hasEvent" ${state.ui.filters.hasEvent ? 'checked' : ''}/> <span>Event</span></label>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="protocol-list">${listHtml || '<div class="inline-note">No GenericProtocol entries match the current filters.</div>'}</div>
+
+        <div class="section stack">
+          <button class="btn small ghost" data-action="toggle-special-panel">${state.ui.specialCollapsed ? 'Show' : 'Hide'} Special Runners</button>
+          ${state.ui.specialCollapsed ? '' : `<div class="stack">${specialList}</div>`}
+        </div>
+      </div>`;
+  }
+
+  function renderEventRows(protocol) {
+    const events = protocol.high_level?.triggers?.event || [];
+    return `
+      <div class="section stack compact-section nested-card">
+        <div class="section-header">
+          <div>
+            <h3>Event Trigger</h3>
+          </div>
+          <button class="btn small primary" data-action="event-add">Add Event Trigger</button>
+        </div>
+        ${events.map((evt, idx) => renderEventRow(evt, idx)).join('')}
+      </div>`;
+  }
+
+  function clientValidationForSelected() {
+    const protocol = selectedProtocolObj();
+    if (!protocol) return { fieldErrors: {}, messages: [] };
+    ensureGenericShapes(protocol);
+    const errors = {};
+    const messages = [];
+    const push = (key, message) => {
+      errors[key] = message;
+      messages.push(message);
+    };
+
+    const triggers = protocol.high_level?.triggers || {};
+    const time = triggers.time;
+    const hhmm = /^([01]\d|2[0-3]):([0-5]\d)$/;
+    if (time) {
+      if (time.from && !hhmm.test(String(time.from))) push('time.from', 'Time Trigger "From" must be HH:MM');
+      if (time.to && !hhmm.test(String(time.to))) push('time.to', 'Time Trigger "To" must be HH:MM');
+    }
+
+    (triggers.event || []).forEach((evt, idx) => {
+      if (!evt?.state || !String(evt.state).trim()) {
+        push(`event.${idx}.state`, `Event ${idx + 1}: Event Key is required`);
+        return;
+      }
+      if (evt?.state === 'robot_location_xy') {
+        if (!(typeof evt.within_m === 'number') || Number.isNaN(evt.within_m) || evt.within_m <= 0) {
+          push(`event.${idx}.within_m`, `Event ${idx + 1}: Within (m) must be > 0`);
+        }
+        const p = evt.point_xy;
+        if (!Array.isArray(p) || p.length !== 2 || p.some((v) => typeof v !== 'number' || Number.isNaN(v))) {
+          push(`event.${idx}.point_xy`, `Event ${idx + 1}: Target XY must be two numbers`);
+        }
+      }
+    });
+
+    const reset = protocol.high_level?.reset_pattern || {};
+    if (reset.type === 'periodic') {
+      const h = Number(reset.hours || 0);
+      const m = Number(reset.minutes || 0);
+      if ((Number.isNaN(h) || h < 0) || (Number.isNaN(m) || m < 0) || (h === 0 && m === 0)) {
+        push('reset.periodic', 'Periodic reset requires hours > 0 or minutes > 0');
+      }
+    }
+
+    return { fieldErrors: errors, messages };
+  }
+
+  function fieldError(key) {
+    return clientValidationForSelected().fieldErrors[key] || '';
+  }
+
+  function errorHtml(key) {
+    const msg = fieldError(key);
+    return msg ? `<div class="field-error">${escapeHtml(msg)}</div>` : '';
+  }
+
+  function renderScalarEventRow(evt, idx, kind, isLocationValue) {
+    const rawValue = evt?.value;
+    const op = kind === 'number' ? (evt?.op || '=') : '=';
+    let textValue = '';
+    if (kind === 'bool') textValue = rawValue ? 'true' : 'false';
+    else textValue = rawValue == null ? '' : String(rawValue);
+    const locationOptions = isLocationValue ? locationValueOptionsForState(evt?.state) : [];
+
+    return `
+      <div class="section event-row">
+        <div class="row">
+          <div class="col-4">
+            <label>Event Key</label>
+            ${renderEventStateSelect(evt, idx)}
+            ${errorHtml(`event.${idx}.state`)}
+          </div>
+          <div class="col-2">
+            <label>Op</label>
+            ${kind === 'number' ? `
+              <select data-action="event-op" data-idx="${idx}">
+                <option value="=" ${op === '=' ? 'selected' : ''}>=</option>
+                <option value="!=" ${op === '!=' ? 'selected' : ''}>!=</option>
+                <option value=">" ${op === '>' ? 'selected' : ''}>&gt;</option>
+                <option value=">=" ${op === '>=' ? 'selected' : ''}>&gt;=</option>
+                <option value="<" ${op === '<' ? 'selected' : ''}>&lt;</option>
+                <option value="<=" ${op === '<=' ? 'selected' : ''}>&lt;=</option>
+              </select>` : '<input type="text" value="=" disabled />'}
+          </div>
+          <div class="col-6">
+            <label>Expected Value</label>
+            ${kind === 'bool' ? `
+              <select data-action="event-value" data-idx="${idx}" data-type="bool">
+                <option value="true" ${rawValue === true ? 'selected' : ''}>true</option>
+                <option value="false" ${rawValue === false ? 'selected' : ''}>false</option>
+              </select>` : isLocationValue ? `
+              <select data-action="event-value" data-idx="${idx}" data-type="string">
+                ${locationOptions.map((loc) => `<option value="${escapeAttr(loc)}" ${String(rawValue ?? '') === loc ? 'selected' : ''}>${escapeHtml(loc)}</option>`).join('')}
+              </select>` : `
+              <input type="${kind === 'number' ? 'number' : 'text'}" data-action="event-value" data-idx="${idx}" data-type="${kind}" value="${escapeAttr(textValue)}" />`
+            }
+          </div>
+          <div class="col-12 btns">
+            <button class="btn small danger" data-action="event-remove" data-idx="${idx}">Remove</button>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  function renderXYProximityEventRow(evt, idx) {
+    const p = Array.isArray(evt?.point_xy) && evt.point_xy.length === 2 ? evt.point_xy : [];
+    const pointCsv = p.length === 2 ? `${p[0]}, ${p[1]}` : '';
+    return `
+      <div class="section event-row event-row-special">
+        <div class="section-header" style="margin-bottom:4px;">
+          <h3 style="margin:0">Proximity Trigger (robot_location_xy)</h3>
+          <button class="btn small danger" data-action="event-remove" data-idx="${idx}">Remove</button>
+        </div>
+        <div class="row">
+          <div class="col-4">
+            <label>Event Key</label>
+            ${renderEventStateSelect(evt, idx)}
+            ${errorHtml(`event.${idx}.state`)}
+          </div>
+          <div class="col-3">
+            <label>Within (m)</label>
+            <input type="number" step="0.01" min="0" data-action="event-within-m" data-idx="${idx}" value="${escapeAttr(evt?.within_m ?? 1.0)}" />
+            ${errorHtml(`event.${idx}.within_m`)}
+          </div>
+          <div class="col-5">
+            <label>Target XY (x, y)</label>
+            <input type="text" data-action="event-point-xy-csv" data-idx="${idx}" value="${escapeAttr(pointCsv)}" placeholder="2.10, 3.45" />
+            ${errorHtml(`event.${idx}.point_xy`)}
+          </div>
+          <div class="col-12">
+            <div class="inline-note">Enter two floats separated by comma. Trigger fires when robot is within the radius of this point.</div>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  function renderEventStateSelect(evt, idx) {
+    const description = robotStateSpec(evt?.state)?.description || '';
+    const options = [
+      `<option value="" ${!(evt?.state) ? 'selected' : ''}>Select Event</option>`,
+      ...robotStateSpecs().map((s) => `<option value="${escapeAttr(s.name)}" ${s.name === (evt?.state || '') ? 'selected' : ''}>${escapeHtml(s.name)}</option>`),
+    ].join('');
+    return `<select data-action="event-state" data-idx="${idx}" title="${escapeAttr(description)}">${options}</select>`;
+  }
+
+  function renderEventRow(evt, idx) {
+    const kind = eventKindForState(evt?.state, evt?.value);
+    const uiKind = eventUiKindForState(evt?.state);
+    if (uiKind === 'xy_proximity') return renderXYProximityEventRow(evt, idx);
+    if (uiKind === 'location_name') return renderScalarEventRow(evt, idx, 'string', true);
+    return renderScalarEventRow(evt, idx, kind, false);
+  }
+
+  function renderTimeSection(protocol) {
+    const time = protocol.high_level?.triggers?.time || {};
+    const enabled = !!(protocol.high_level?.triggers && Object.prototype.hasOwnProperty.call(protocol.high_level.triggers, 'time'));
+    const days = new Set(time.day || []);
+    const dayChecks = (state.metadata?.day_options || []).map((day) => `
+      <label class="checkbox-line">
+        <input type="checkbox" data-action="time-day-toggle" data-day="${day}" ${days.has(day) ? 'checked' : ''} ${!enabled ? 'disabled' : ''}/>
+        <span>${capitalize(day)}</span>
+      </label>`).join('');
+
+    return `
+      <div class="section stack compact-section nested-card">
+        <div class="section-header">
+          <div>
+            <h3>Time Window</h3>
+          </div>
+          ${enabled
+            ? '<button class="btn small danger" data-action="time-remove">Remove Time Window</button>'
+            : '<button class="btn small primary" data-action="time-add">Add Time Trigger</button>'}
+        </div>
+        ${!enabled ? '' : `
+        <div class="row">
+          <div class="col-6">
+            <label>From (HH:MM)</label>
+            <input type="time" step="60" data-action="time-field" data-field="from" value="${escapeAttr(time.from || '')}" />
+            ${errorHtml('time.from')}
+          </div>
+          <div class="col-6">
+            <label>To (HH:MM)</label>
+            <input type="time" step="60" data-action="time-field" data-field="to" value="${escapeAttr(time.to || '')}" />
+            ${errorHtml('time.to')}
+          </div>
+          <div class="col-12">
+            <label>Days (empty = every day)</label>
+            <div class="day-grid">${dayChecks}</div>
+          </div>
+        </div>`}
+      </div>`;
+  }
+
+  function renderPermissibleLocationsSection(protocol) {
+    const locations = Object.keys(state.config?.locations || {});
+    const selected = new Set(protocol.high_level?.triggers?.permissible_locations || []);
+    const enabled = protocol.high_level?.triggers && Array.isArray(protocol.high_level.triggers.permissible_locations);
+    return `
+      <div class="section stack compact-section nested-card">
+        <div class="section-header">
+          <div>
+            <h3>Permisible Location</h3>
+          </div>
+          ${enabled
+            ? '<button class="btn small danger" data-action="permloc-remove">Remove Location Filter</button>'
+            : '<button class="btn small primary" data-action="permloc-add">Add Location Filter</button>'}
+        </div>
+        ${!enabled ? '<div class="inline-note"></div>' : `
+        <div class="day-grid">
+          ${locations.map((loc) => `
+            <label class="checkbox-line">
+              <input type="checkbox" data-action="permloc-toggle" data-location="${escapeAttr(loc)}" ${selected.has(loc) ? 'checked' : ''}/>
+              <span>${escapeHtml(loc)}</span>
+            </label>`).join('')}
+        </div>`}
+      </div>`;
+  }
+
+  function renderTriggersOverview(protocol) {
+    const triggers = protocol?.high_level?.triggers || {};
+    const bits = [];
+    bits.push(`State triggers: ${(triggers.event || []).length}`);
+    bits.push(`Time window: ${triggers.time ? 'on' : 'off'}`);
+    bits.push(`Location filter: ${Array.isArray(triggers.permissible_locations) ? 'on' : 'off'}`);
+    return `<div class="inline-note trigger-overview">${escapeHtml(bits.join(' · '))}</div>`;
+  }
+
+  function renderResetSection(protocol) {
+    const reset = protocol.high_level?.reset_pattern || { type: 'eod' };
+    const periodic = reset.type === 'periodic';
+    return `
+      <div class="section stack">
+        <div class="inline-note">Scheduling priority and protocol re-trigger reset behavior.</div>
+        <div class="row">
+          <div class="col-4">
+            <label>Priority</label>
+            <input type="number" data-action="priority" value="${escapeAttr(protocol.high_level?.priority ?? 10)}" />
+          </div>
+          <div class="${periodic ? 'col-4' : 'col-8'}">
+            <label>Reset Pattern</label>
+            <select data-action="reset-type">
+              ${(state.metadata?.reset_types || ['eod', 'instant', 'periodic']).map((t) => `<option value="${t}" ${reset.type === t ? 'selected' : ''}>${t}</option>`).join('')}
+            </select>
+          </div>
+          ${periodic ? `
+          <div class="col-2">
+            <label>Hours</label>
+            <input type="number" data-action="reset-periodic-hours" value="${escapeAttr(reset.hours ?? '')}" />
+          </div>
+          <div class="col-2">
+            <label>Minutes</label>
+            <input type="number" data-action="reset-periodic-minutes" value="${escapeAttr(reset.minutes ?? '')}" />
+          </div>` : ''}
+          <div class="col-12">
+            ${errorHtml('reset.periodic')}
+          </div>
+        </div>
+      </div>`;
+  }
+
+  function renderTreeParams(step, stepCtx) {
+    const treeName = step.tree_name || '';
+    const meta = metadataForTree(treeName);
+    const params = meta.params || [];
+    if (!params.length) return '<div class="inline-note">No parameters for this action.</div>';
+    const locationNames = Object.keys(state.config?.locations || {});
+    return params.map((param) => {
+      const value = step.tree_params?.[param.name];
+      const requiredChip = param.required ? '<span class="param-chip">required</span>' : '<span class="param-chip">optional</span>';
+      const common = `data-action="step-tree-param" data-scope="${stepCtx.scope}" data-step-idx="${stepCtx.stepIdx}" data-param="${param.name}" ${stepCtx.parentIdx != null ? `data-parent-idx="${stepCtx.parentIdx}"` : ''}`;
+      let control;
+      if (param.kind === 'location') {
+        control = `<select ${common}>${locationNames.map((loc) => `<option value="${escapeAttr(loc)}" ${String(value ?? '') === loc ? 'selected' : ''}>${escapeHtml(loc)}</option>`).join('')}</select>`;
+      } else if (param.kind === 'integer') {
+        control = `<input type="number" ${common} value="${escapeAttr(value ?? '')}" />`;
+      } else {
+        control = `<input type="text" ${common} value="${escapeAttr(value ?? '')}" />`;
+      }
+      return `
+        <div class="col-6">
+          <label>${escapeHtml(param.name)} ${requiredChip}</label>
+          ${control}
+          <div class="inline-note">${escapeHtml(param.type_hint || '')}</div>
+        </div>`;
+    }).join('');
+  }
+
+  function stepKey(scope, idx, parentIdx = null) {
+    return parentIdx == null ? `${scope}:${idx}` : `${scope}:${parentIdx}:${idx}`;
+  }
+
+  function isStepCollapsed(scope, idx, parentIdx = null) {
+    return !!state.ui.stepCollapsed[stepKey(scope, idx, parentIdx)];
+  }
+
+  function setStepCollapsed(scope, idx, collapsed, parentIdx = null) {
+    const key = stepKey(scope, idx, parentIdx);
+    if (collapsed) state.ui.stepCollapsed[key] = true;
+    else delete state.ui.stepCollapsed[key];
+  }
+
+  function stepSummary(step) {
+    if (!step) return '';
+    if (step.confirmation) {
+      const q = step.confirmation.question || 'Confirmation';
+      return `confirmation -> ${truncate(q, 52)}`;
+    }
+    const treeName = step.tree_name || 'tree';
+    const params = step.tree_params || {};
+    let detail = '';
+    if (treeName === 'play_text') detail = params.text || '';
+    else if (treeName === 'play_audio') detail = params.audio_path || '';
+    else if (treeName === 'play_video') detail = params.video_path || '';
+    else detail = Object.keys(params).length ? JSON.stringify(params) : '';
+    return `${treeName}${detail ? ` -> ${truncate(String(detail), 56)}` : ''}`;
+  }
+
+  function truncate(text, n) {
+    if (!text) return '';
+    return text.length > n ? `${text.slice(0, n - 1)}…` : text;
+  }
+
+  function renderTreeStep(step, idx, scope = 'top', parentIdx = null) {
+    const treeName = step.tree_name || '';
+    const meta = metadataForTree(treeName);
+    const treeNames = Object.keys(state.metadata?.run_trees || {}).sort();
+    const scopeAttrs = `data-scope="${scope}" data-step-idx="${idx}" ${parentIdx != null ? `data-parent-idx="${parentIdx}"` : ''}`;
+    const collapsed = isStepCollapsed(scope, idx, parentIdx);
+    const titleLabel = scope === 'top' ? `Step ${idx + 1}` : `Branch Step ${idx + 1}`;
+
+    return `
+      <div class="step-card ${collapsed ? 'collapsed' : ''}">
+        <div class="step-header">
+          <div>
+            <div class="step-title">${titleLabel} · Action</div>
+            <div class="step-summary">${escapeHtml(stepSummary(step))}</div>
+          </div>
+          <div class="btns">
+            <button class="btn small ghost btn-toggle-icon" data-action="step-toggle-collapse" ${scopeAttrs} title="${collapsed ? 'Expand' : 'Collapse'}">
+              <span class="chevron-icon ${collapsed ? 'is-collapsed' : 'is-open'}" aria-hidden="true"></span>
+            </button>
+            <button class="btn small ghost" data-action="step-add-below" ${scopeAttrs}>+ Below</button>
+            <button class="btn small ghost" data-action="step-duplicate" ${scopeAttrs}>Duplicate</button>
+            <button class="btn small ghost" data-action="step-move-up" ${scopeAttrs}>↑</button>
+            <button class="btn small ghost" data-action="step-move-down" ${scopeAttrs}>↓</button>
+            <button class="btn small danger" data-action="step-delete" ${scopeAttrs}>Delete</button>
+          </div>
+        </div>
+        ${collapsed ? '' : `
+        <div class="row">
+          <div class="col-6">
+            <label>Action Name</label>
+            <select data-action="step-tree-name" ${scopeAttrs} title="${escapeAttr(meta.description || '')}">
+              ${treeNames.map((name) => `<option value="${escapeAttr(name)}" ${name === treeName ? 'selected' : ''}>${escapeHtml(name)}</option>`).join('')}
+            </select>
+          </div>
+          <div class="col-6">
+            <label>wait_after</label>
+            <input type="text" data-action="step-wait-after" ${scopeAttrs} value="${escapeAttr(step.wait_after ?? '')}" placeholder="optional" />
+          </div>
+          ${renderTreeParams(step, { scope, stepIdx: idx, parentIdx })}
+        </div>`}
+      </div>`;
+  }
+
+  function renderBranchSteps(step, parentIdx, branchName) {
+    const steps = getBranchSteps(step, branchName);
+    return `
+      <div class="branch-box stack">
+        <div class="section-header">
+          <h3 style="margin:0">${branchName === 'on_yes' ? `On Yes (${steps.length})` : `On No (${steps.length})`}</h3>
+          <button class="btn small" data-action="branch-step-add" data-parent-idx="${parentIdx}" data-branch="${branchName}">Add Action Step</button>
+        </div>
+        ${steps.map((branchStep, idx) => renderTreeStep(branchStep, idx, branchName, parentIdx)).join('') || '<div class="inline-note">No branch steps</div>'}
+      </div>`;
+  }
+
+  function renderConfirmationStep(step, idx) {
+    const confirmation = step.confirmation || { question: '', on_yes: [], on_no: [] };
+    const collapsed = isStepCollapsed('top', idx, null);
+    return `
+      <div class="step-card ${collapsed ? 'collapsed' : ''}">
+        <div class="step-header">
+          <div>
+            <div class="step-title">Step ${idx + 1} · Confirmation</div>
+            <div class="step-summary">${escapeHtml(stepSummary(step))}</div>
+          </div>
+          <div class="btns">
+            <button class="btn small ghost btn-toggle-icon" data-action="step-toggle-collapse" data-scope="top" data-step-idx="${idx}" title="${collapsed ? 'Expand' : 'Collapse'}">
+              <span class="chevron-icon ${collapsed ? 'is-collapsed' : 'is-open'}" aria-hidden="true"></span>
+            </button>
+            <button class="btn small ghost" data-action="step-add-below" data-scope="top" data-step-idx="${idx}">+ Below</button>
+            <button class="btn small ghost" data-action="step-duplicate" data-scope="top" data-step-idx="${idx}">Duplicate</button>
+            <button class="btn small ghost" data-action="step-move-up" data-scope="top" data-step-idx="${idx}">↑</button>
+            <button class="btn small ghost" data-action="step-move-down" data-scope="top" data-step-idx="${idx}">↓</button>
+            <button class="btn small danger" data-action="step-delete" data-scope="top" data-step-idx="${idx}">Delete</button>
+          </div>
+        </div>
+        ${collapsed ? '' : `
+        <div class="row">
+          <div class="col-12">
+            <label>Question</label>
+            <input type="text" data-action="confirm-question" data-step-idx="${idx}" value="${escapeAttr(confirmation.question || '')}" />
+          </div>
+          <div class="col-6">
+            <label>wait_after (after confirmation branch)</label>
+            <input type="text" data-action="step-wait-after" data-scope="top" data-step-idx="${idx}" value="${escapeAttr(step.wait_after ?? '')}" placeholder="optional" />
+          </div>
+          <div class="col-12 branch-columns">
+            ${renderBranchSteps(step, idx, 'on_yes')}
+            ${renderBranchSteps(step, idx, 'on_no')}
+          </div>
+        </div>`}
+      </div>`;
+  }
+
+  function renderStepsSection(protocol) {
+    const steps = currentSteps(protocol);
+    return `
+      <div class="section stack">
+        <div class="section-header">
+          <div>
+            <h3>Action Steps</h3>
+            <div class="inline-note">Build the protocol action flow. Nested confirmation is not supported.</div>
+          </div>
+          <div class="btns">
+            <button class="btn small" data-action="steps-expand-all">Expand All</button>
+            <button class="btn small" data-action="steps-collapse-all">Collapse All</button>
+            <button class="btn small primary" data-action="step-add-tree">Add Action Step</button>
+            <button class="btn small primary" data-action="step-add-confirmation">Add Confirmation</button>
+          </div>
+        </div>
+        ${steps.map((step, idx) => ('confirmation' in step ? renderConfirmationStep(step, idx) : renderTreeStep(step, idx))).join('') || '<div class="inline-note">No steps defined.</div>'}
+      </div>`;
+  }
+
+  function renderEditorHeader(protocolName) {
+    const statusLabel = validationStatusLabel();
+    const saveMeta = state.lastSavedAt && state.lastSaveInfo
+      ? `Saved ${state.lastSavedAt} · Backup: ${state.lastSaveInfo.backup_path}`
+      : state.lastSavedAt ? `Saved ${state.lastSavedAt}` : '';
+    return `
+      <div class="editor-sticky-header">
+        <div class="editor-sticky-right">
+          <div class="btns">
+            <button class="btn btn-iconable" data-action="reload-bootstrap" title="Reload">
+              <span class="btn-icon" aria-hidden="true">↻</span>
+              <span class="btn-text">Reload</span>
+            </button>
+            <button class="btn btn-iconable" data-action="duplicate-protocol" title="Duplicate protocol">
+              <span class="btn-icon" aria-hidden="true">⧉</span>
+              <span class="btn-text">Duplicate</span>
+            </button>
+            <button class="btn danger btn-iconable" data-action="delete-protocol" title="Delete protocol">
+              <span class="btn-icon" aria-hidden="true">✕</span>
+              <span class="btn-text">Delete</span>
+            </button>
+            <button class="btn primary btn-iconable" data-action="save-config" title="Save">
+              <span class="btn-icon mobile-only" aria-hidden="true">✓</span>
+              <span class="btn-text">Save</span>
+            </button>
+          </div>
+          ${saveMeta ? `<div class="inline-note editor-save-meta">${escapeHtml(saveMeta)}</div>` : ''}
+        </div>
+      </div>`;
+  }
+
+  function renderCollapsibleSection(key, title, desc, innerHtml) {
+    const open = state.ui.sectionsOpen[key] !== false;
+    return `
+      <div class="section collapsible-section primary-section ${open ? '' : 'is-collapsed'}">
+        <div class="section-header" data-action="section-toggle" data-section="${escapeAttr(key)}" role="button" tabindex="0" aria-expanded="${open ? 'true' : 'false'}">
+          <div>
+            <h3>${escapeHtml(title)}</h3>
+            ${desc ? `<div class="inline-note">${escapeHtml(desc)}</div>` : ''}
+          </div>
+          <button class="btn small ghost btn-toggle-icon" data-action="section-toggle" data-section="${escapeAttr(key)}" title="${open ? 'Collapse section' : 'Expand section'}">
+            <span class="chevron-icon ${open ? 'is-open' : 'is-collapsed'}" aria-hidden="true"></span>
+          </button>
+        </div>
+        ${open ? innerHtml : ''}
+      </div>`;
+  }
+
+  function renderEditorPanel() {
+    const protocol = selectedProtocolObj();
+    if (!protocol) {
+      return `<div class="panel"><h2>Protocol Editor</h2><p class="muted">Select a GenericProtocol from the list or create a new one.</p></div>`;
+    }
+    ensureGenericShapes(protocol);
+    const name = state.selectedProtocol;
+
+    return `
+      <div class="panel stack designer-editor-panel">
+        ${renderEditorHeader(name)}
+
+        <div class="section primary-section">
+          <div class="section-header protocol-name-header">
+            <h3>1. Protocol Name</h3>
+            <div class="protocol-name-inline">
+              <input type="text" data-action="protocol-rename" value="${escapeAttr(name)}" />
+            </div>
+          </div>
+        </div>
+
+        ${renderCollapsibleSection('triggers', '2. Triggers', 'Define when the protocol becomes eligible to run.', `
+          ${renderTriggersOverview(protocol)}
+          ${renderEventRows(protocol)}
+          ${renderTimeSection(protocol)}
+          ${renderPermissibleLocationsSection(protocol)}
+        `)}
+
+        ${renderCollapsibleSection('actions', '3. Actions', 'Compose action steps and confirmation branches for this protocol.', renderStepsSection(protocol))}
+
+        ${renderCollapsibleSection('reset', '4. Scheduling & Reset', 'Priority and reset pattern determine how often the protocol can run.', renderResetSection(protocol))}
+
+        ${renderCollapsibleSection('yaml', '5. YAML Preview', 'Preview updates after save validation.', `
+          <pre class="code-preview">${escapeHtml(state.yamlPreview || '')}</pre>
+        `)}
+      </div>`;
+  }
+
+  function renderProtocolDesigner() {
+    els.routeView.innerHTML = `
+      <div class="designer-layout">
+        ${renderProtocolListPanel()}
+        ${renderEditorPanel()}
+      </div>`;
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+  const escapeAttr = escapeHtml;
+  const capitalize = (v) => (v ? v.charAt(0).toUpperCase() + v.slice(1) : '');
+
+  function applyBootstrapData(data) {
+    state.config = data.config;
+    state.metadata = data.metadata;
+    state.yamlPath = data.yaml_path;
+    state.yamlPreview = data.yaml_preview || '';
+    const generics = getGenericProtocolNames();
+    if (!state.selectedProtocol || !generics.includes(state.selectedProtocol)) {
+      state.selectedProtocol = generics[0] || null;
+    }
+    markRecentProtocol(state.selectedProtocol);
+    els.yamlPathLabel.textContent = state.yamlPath;
+    setDirty(false);
+    clearFlash();
+    updateStatusChip();
+  }
+
+  async function bootstrap() {
+    state.loading = true;
+    state.bootError = null;
+    updateStatusChip();
+    renderRoute();
+    try {
+      const data = await api('/api/dashboard/bootstrap');
+      applyBootstrapData(data);
+    } catch (err) {
+      state.bootError = err.message;
+      setFlash('error', err.message);
+    } finally {
+      state.loading = false;
+      updateStatusChip();
+      renderRoute();
+    }
+  }
+
+  function selectedStepsByScope(scope, stepIdx, parentIdx) {
+    const protocol = selectedProtocolObj();
+    const topSteps = currentSteps(protocol);
+    if (scope === 'top') return topSteps;
+    const parent = topSteps[parentIdx];
+    if (!parent || !parent.confirmation) throw new Error('Invalid branch parent step');
+    return getBranchSteps(parent, scope);
+  }
+
+  function parseMaybeNumber(text) {
+    if (text === '' || text == null) return '';
+    if (/^-?\d+$/.test(String(text))) return Number.parseInt(text, 10);
+    if (/^-?\d+\.\d+$/.test(String(text))) return Number.parseFloat(text);
+    return text;
+  }
+
+  function normalizeTreeParamsForStep(step) {
+    const meta = metadataForTree(step.tree_name);
+    const nextParams = {};
+    for (const param of meta.params || []) {
+      const existing = step.tree_params?.[param.name];
+      if (existing !== undefined && existing !== '') nextParams[param.name] = existing;
+      else if (param.required) nextParams[param.name] = makeDefaultParamValue(param);
+    }
+    if (step.tree_name === 'move_away') {
+      if (nextParams.position_state_key === '' || nextParams.position_state_key == null) {
+        nextParams.position_state_key = 'position';
+      }
+      if (nextParams.state_key === '' || nextParams.state_key == null) {
+        nextParams.state_key = 'move_away';
+      }
+    }
+    step.tree_params = nextParams;
+  }
+
+  function normalizeScalarEvent(evt) {
+    const uiKind = eventUiKindForState(evt.state);
+    if (uiKind === 'xy_proximity') return normalizeXYEvent(evt);
+    delete evt.within_m;
+    delete evt.point_xy;
+    const kind = eventKindForState(evt.state, evt.value);
+    if (kind === 'number') {
+      evt.value = typeof evt.value === 'number' ? evt.value : 0;
+      evt.op = evt.op || '=';
+    } else if (kind === 'bool') {
+      evt.value = evt.value === true;
+      delete evt.op;
+    } else if (uiKind === 'location_name') {
+      const opts = locationValueOptionsForState(evt.state);
+      if (!opts.includes(evt.value)) evt.value = opts[0] || '';
+      delete evt.op;
+    } else {
+      evt.value = (evt.value == null || typeof evt.value === 'object') ? '' : String(evt.value);
+      delete evt.op;
+    }
+  }
+
+  function normalizeXYEvent(evt) {
+    delete evt.value;
+    delete evt.op;
+    evt.within_m = typeof evt.within_m === 'number' ? evt.within_m : 1.0;
+    if (!Array.isArray(evt.point_xy) || evt.point_xy.length !== 2) evt.point_xy = [0.0, 0.0];
+  }
+
+  function ensureTriggers(protocol) {
+    ensureGenericShapes(protocol);
+    protocol.high_level.triggers ||= {};
+    return protocol.high_level.triggers;
+  }
+
+  async function validateCurrentConfig() {
+    const client = clientValidationForSelected();
+    if (client.messages.length) {
+      state.validation.status = 'error';
+      state.validation.messages = client.messages;
+      state.validation.lastValidatedAt = nowTimeLabel();
+      setFlash('warn', 'Client-side validation found issues. Fix highlighted fields or run Validate to confirm backend errors.');
+      renderRoute();
+      return;
+    }
+
+    try {
+      const data = await api('/api/dashboard/validate', {
+        method: 'POST',
+        body: JSON.stringify({ config: state.config }),
+      });
+      state.yamlPreview = data.yaml_preview || '';
+      state.validation.status = 'ok';
+      state.validation.messages = ['Schema validation passed.'];
+      state.validation.lastValidatedAt = nowTimeLabel();
+      setFlash('success', 'Validation passed.');
+      renderRoute();
+    } catch (err) {
+      state.validation.status = 'error';
+      state.validation.messages = [err.message];
+      state.validation.lastValidatedAt = nowTimeLabel();
+      setFlash('error', err.message);
+      renderRoute();
+    }
+  }
+
+  async function saveCurrentConfig() {
+    try {
+      const client = clientValidationForSelected();
+      if (client.messages.length) {
+        state.validation.status = 'error';
+        state.validation.messages = client.messages;
+        state.validation.lastValidatedAt = nowTimeLabel();
+        setFlash('error', 'Cannot save: fix the highlighted fields first.');
+        renderRoute();
+        return;
+      }
+
+      const validateData = await api('/api/dashboard/validate', {
+        method: 'POST',
+        body: JSON.stringify({ config: state.config }),
+      });
+      state.yamlPreview = validateData.yaml_preview || state.yamlPreview;
+      state.validation.status = 'ok';
+      state.validation.messages = ['Schema validation passed.'];
+      state.validation.lastValidatedAt = nowTimeLabel();
+
+      const data = await api('/api/dashboard/save', {
+        method: 'POST',
+        body: JSON.stringify({ config: state.config, yaml_path: state.yamlPath }),
+      });
+      applyBootstrapData(data);
+      state.lastSaveInfo = data.save || null;
+      state.lastSavedAt = data.save?.saved_at ? new Date(data.save.saved_at).toLocaleTimeString() : nowTimeLabel();
+      state.validation.status = 'ok';
+      state.validation.messages = ['Saved and schema validation passed.'];
+      state.validation.lastValidatedAt = nowTimeLabel();
+      setFlash('success', `Saved. Backup: ${data.save.backup_path}`);
+      renderRoute();
+    } catch (err) {
+      state.validation.status = 'error';
+      state.validation.messages = [err.message];
+      setFlash('error', err.message);
+      renderRoute();
+    }
+  }
+
+  function addProtocol() {
+    const name = prompt('New GenericProtocol name (unique key):');
+    if (!name) return;
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    if (getProtocols()[trimmed]) {
+      setFlash('error', `Protocol '${trimmed}' already exists.`);
+      return;
+    }
+    getProtocols()[trimmed] = {
+      runner: 'GenericProtocol',
+      high_level: { priority: 10, triggers: {}, reset_pattern: { type: 'eod' } },
+      action: { steps: [makeDefaultTreeStep('play_text')] },
+    };
+    state.selectedProtocol = trimmed;
+    markRecentProtocol(trimmed);
+    setDirty(true);
+    renderRoute();
+  }
+
+  function duplicateSelectedProtocol() {
+    if (!state.selectedProtocol) return;
+    const base = state.selectedProtocol;
+    let proposed = `${base}_copy`;
+    let i = 2;
+    while (getProtocols()[proposed]) {
+      proposed = `${base}_copy_${i++}`;
+    }
+    const entered = prompt('Duplicate protocol as:', proposed);
+    if (!entered) return;
+    const newName = entered.trim();
+    if (!newName) return;
+    if (getProtocols()[newName]) {
+      setFlash('error', `Protocol '${newName}' already exists.`);
+      return;
+    }
+    getProtocols()[newName] = deepClone(getProtocols()[base]);
+    state.selectedProtocol = newName;
+    markRecentProtocol(newName);
+    setDirty(true);
+    renderRoute();
+  }
+
+  function deleteSelectedProtocol() {
+    if (!state.selectedProtocol) return;
+    const name = state.selectedProtocol;
+    if (!confirm(`Delete protocol '${name}'?`)) return;
+    delete getProtocols()[name];
+    const names = getGenericProtocolNames();
+    state.selectedProtocol = names[0] || null;
+    markRecentProtocol(state.selectedProtocol);
+    setDirty(true);
+    renderRoute();
+  }
+
+  function mutateStepArray(action, btn) {
+    const scope = btn.dataset.scope;
+    const stepIdx = Number(btn.dataset.stepIdx);
+    const parentIdx = btn.dataset.parentIdx !== undefined ? Number(btn.dataset.parentIdx) : null;
+    const arr = selectedStepsByScope(scope, stepIdx, parentIdx);
+    if (!Array.isArray(arr)) return false;
+    if (action === 'step-delete') arr.splice(stepIdx, 1);
+    else if (action === 'step-move-up' && stepIdx > 0) [arr[stepIdx - 1], arr[stepIdx]] = [arr[stepIdx], arr[stepIdx - 1]];
+    else if (action === 'step-move-down' && stepIdx < arr.length - 1) [arr[stepIdx + 1], arr[stepIdx]] = [arr[stepIdx], arr[stepIdx + 1]];
+    else if (action === 'step-move-top' && stepIdx > 0) arr.unshift(arr.splice(stepIdx, 1)[0]);
+    else if (action === 'step-move-bottom' && stepIdx < arr.length - 1) arr.push(arr.splice(stepIdx, 1)[0]);
+    else if (action === 'step-duplicate') arr.splice(stepIdx + 1, 0, deepClone(arr[stepIdx]));
+    else if (action === 'step-add-below') {
+      const template = arr[stepIdx]?.confirmation ? makeDefaultConfirmationStep() : makeDefaultTreeStep('play_text');
+      arr.splice(stepIdx + 1, 0, template);
+    } else return false;
+    return true;
+  }
+
+  function handleClick(event) {
+    const btn = event.target.closest('[data-action]');
+    if (!btn) return;
+    const action = btn.dataset.action;
+    try {
+      if (action === 'select-protocol') {
+        const nextName = btn.dataset.name;
+        if (state.dirty && state.selectedProtocol && nextName !== state.selectedProtocol) {
+          const proceed = confirm('You have unsaved changes. Switch protocol anyway?');
+          if (!proceed) return;
+        }
+        state.selectedProtocol = nextName;
+        markRecentProtocol(nextName);
+        renderRoute();
+        return;
+      }
+      if (action === 'section-toggle') {
+        const key = btn.dataset.section;
+        state.ui.sectionsOpen[key] = !(state.ui.sectionsOpen[key] !== false);
+        renderRoute();
+        return;
+      }
+      if (action === 'toggle-special-panel') {
+        state.ui.specialCollapsed = !state.ui.specialCollapsed;
+        renderRoute();
+        return;
+      }
+      if (action === 'time-add') {
+        const protocol = selectedProtocolObj();
+        if (!protocol) return;
+        const triggers = ensureTriggers(protocol);
+        triggers.time ||= { from: '', to: '', day: [] };
+        setDirty(true);
+        renderRoute();
+        return;
+      }
+      if (action === 'time-remove') {
+        const protocol = selectedProtocolObj();
+        if (!protocol) return;
+        delete ensureTriggers(protocol).time;
+        setDirty(true);
+        renderRoute();
+        return;
+      }
+      if (action === 'permloc-add') {
+        const protocol = selectedProtocolObj();
+        if (!protocol) return;
+        ensureTriggers(protocol).permissible_locations ||= [];
+        setDirty(true);
+        renderRoute();
+        return;
+      }
+      if (action === 'permloc-remove') {
+        const protocol = selectedProtocolObj();
+        if (!protocol) return;
+        delete ensureTriggers(protocol).permissible_locations;
+        setDirty(true);
+        renderRoute();
+        return;
+      }
+      if (action === 'reload-bootstrap') {
+        bootstrap();
+        return;
+      }
+      if (action === 'validate-config') {
+        return;
+      }
+      if (action === 'save-config') {
+        saveCurrentConfig();
+        return;
+      }
+      if (action === 'duplicate-protocol') {
+        duplicateSelectedProtocol();
+        return;
+      }
+      if (action === 'add-protocol') {
+        addProtocol();
+        return;
+      }
+      if (action === 'delete-protocol') {
+        deleteSelectedProtocol();
+        return;
+      }
+
+      const protocol = selectedProtocolObj();
+      if (!protocol) return;
+      ensureGenericShapes(protocol);
+
+      if (action === 'event-add') {
+        ensureTriggers(protocol).event ||= [];
+        protocol.high_level.triggers.event.push(makeDefaultEventTrigger());
+        setDirty(true);
+        renderRoute();
+        return;
+      }
+      if (action === 'event-remove') {
+        const idx = Number(btn.dataset.idx);
+        protocol.high_level.triggers.event.splice(idx, 1);
+        setDirty(true);
+        renderRoute();
+        return;
+      }
+      if (action === 'step-add-tree') {
+        currentSteps(protocol).push(makeDefaultTreeStep('play_text'));
+        setDirty(true);
+        renderRoute();
+        return;
+      }
+      if (action === 'step-add-confirmation') {
+        currentSteps(protocol).push(makeDefaultConfirmationStep());
+        setDirty(true);
+        renderRoute();
+        return;
+      }
+      if (action === 'branch-step-add') {
+        const parentIdx = Number(btn.dataset.parentIdx);
+        const branch = btn.dataset.branch;
+        getBranchSteps(currentSteps(protocol)[parentIdx], branch).push(makeDefaultTreeStep('play_text'));
+        setDirty(true);
+        renderRoute();
+        return;
+      }
+      if (action === 'steps-expand-all' || action === 'steps-collapse-all') {
+        if (action === 'steps-expand-all') state.ui.stepCollapsed = {};
+        else {
+          const map = {};
+          currentSteps(protocol).forEach((_, idx) => { map[stepKey('top', idx)] = true; });
+          state.ui.stepCollapsed = map;
+        }
+        renderRoute();
+        return;
+      }
+      if (action === 'step-toggle-collapse') {
+        const scope = btn.dataset.scope;
+        const stepIdx = Number(btn.dataset.stepIdx);
+        const parentIdx = btn.dataset.parentIdx !== undefined ? Number(btn.dataset.parentIdx) : null;
+        setStepCollapsed(scope, stepIdx, !isStepCollapsed(scope, stepIdx, parentIdx), parentIdx);
+        renderRoute();
+        return;
+      }
+      if ([
+        'step-delete', 'step-move-up', 'step-move-down', 'step-move-top', 'step-move-bottom', 'step-duplicate', 'step-add-below'
+      ].includes(action)) {
+        if (mutateStepArray(action, btn)) {
+          setDirty(true);
+          renderRoute();
+        }
+        return;
+      }
+    } catch (err) {
+      setFlash('error', err.message);
+      console.error(err);
+    }
+  }
+
+  function handleInput(event) {
+    const target = event.target;
+    const action = target.dataset.action;
+    if (!action) return;
+
+    if (action === 'list-search') {
+      const selStart = target.selectionStart;
+      const selEnd = target.selectionEnd;
+      state.ui.listSearch = target.value;
+      renderRoute();
+      const next = els.routeView.querySelector('input[data-action="list-search"]');
+      if (next) {
+        next.focus();
+        if (selStart != null && selEnd != null) {
+          next.setSelectionRange(selStart, selEnd);
+        }
+      }
+      return;
+    }
+  }
+
+  function handleChange(event) {
+    const target = event.target;
+    const action = target.dataset.action;
+    if (!action) return;
+    const protocol = selectedProtocolObj();
+    try {
+      if (action === 'list-sort') {
+        state.ui.listSort = target.value;
+        renderRoute();
+        return;
+      }
+      if (action === 'list-filter') {
+        state.ui.filters[target.dataset.key] = target.checked;
+        renderRoute();
+        return;
+      }
+      if (action === 'protocol-rename') {
+        const oldName = state.selectedProtocol;
+        const newName = target.value.trim();
+        if (!oldName || !newName || oldName === newName) return;
+        if (getProtocols()[newName]) throw new Error(`Protocol '${newName}' already exists.`);
+        const val = getProtocols()[oldName];
+        delete getProtocols()[oldName];
+        getProtocols()[newName] = val;
+        state.selectedProtocol = newName;
+        markRecentProtocol(newName);
+        setDirty(true);
+        renderRoute();
+        return;
+      }
+      if (!protocol) return;
+      ensureGenericShapes(protocol);
+
+      if (action === 'time-enable') {
+        const triggers = ensureTriggers(protocol);
+        if (target.checked) triggers.time ||= { from: '', to: '', day: [] };
+        else delete triggers.time;
+        setDirty(true);
+        renderRoute();
+        return;
+      }
+      if (action === 'permloc-enable') {
+        const triggers = ensureTriggers(protocol);
+        if (target.checked) triggers.permissible_locations ||= [];
+        else delete triggers.permissible_locations;
+        setDirty(true);
+        renderRoute();
+        return;
+      }
+      if (action === 'permloc-toggle') {
+        const arr = ensureTriggers(protocol).permissible_locations ||= [];
+        const s = new Set(arr);
+        if (target.checked) s.add(target.dataset.location); else s.delete(target.dataset.location);
+        protocol.high_level.triggers.permissible_locations = [...s];
+        setDirty(true);
+        return;
+      }
+      if (action === 'time-day-toggle') {
+        const time = ensureTriggers(protocol).time ||= { from: '', to: '', day: [] };
+        const days = new Set(time.day || []);
+        if (target.checked) days.add(target.dataset.day); else days.delete(target.dataset.day);
+        time.day = [...days];
+        setDirty(true);
+        return;
+      }
+      if (action === 'priority') {
+        protocol.high_level.priority = Number(target.value || 0);
+        setDirty(true);
+        return;
+      }
+      if (action === 'reset-type') {
+        protocol.high_level.reset_pattern ||= {};
+        protocol.high_level.reset_pattern.type = target.value;
+        if (target.value !== 'periodic') {
+          delete protocol.high_level.reset_pattern.hours;
+          delete protocol.high_level.reset_pattern.minutes;
+        }
+        setDirty(true);
+        renderRoute();
+        return;
+      }
+      if (action === 'reset-periodic-hours' || action === 'reset-periodic-minutes') {
+        protocol.high_level.reset_pattern ||= { type: 'periodic' };
+        const key = action.endsWith('hours') ? 'hours' : 'minutes';
+        if (target.value === '') delete protocol.high_level.reset_pattern[key];
+        else protocol.high_level.reset_pattern[key] = Number(target.value);
+        setDirty(true);
+        return;
+      }
+      if (action === 'event-state') {
+        const idx = Number(target.dataset.idx);
+        const evt = (protocol.high_level.triggers.event || [])[idx];
+        evt.state = target.value;
+        normalizeScalarEvent(evt);
+        setDirty(true);
+        renderRoute();
+        return;
+      }
+      if (action === 'event-op') {
+        const idx = Number(target.dataset.idx);
+        protocol.high_level.triggers.event[idx].op = target.value;
+        setDirty(true);
+        return;
+      }
+      if (action === 'event-within-m') {
+        const idx = Number(target.dataset.idx);
+        protocol.high_level.triggers.event[idx].within_m = Number(target.value || 0);
+        setDirty(true);
+        return;
+      }
+      if (action === 'event-point-xy-csv') {
+        const idx = Number(target.dataset.idx);
+        const evt = protocol.high_level.triggers.event[idx];
+        const parts = String(target.value || '').split(',').map((s) => s.trim()).filter(Boolean);
+        if (parts.length === 2) {
+          const x = Number(parts[0]);
+          const y = Number(parts[1]);
+          if (!Number.isNaN(x) && !Number.isNaN(y)) evt.point_xy = [x, y];
+        }
+        setDirty(true);
+        return;
+      }
+      if (action === 'event-value') {
+        const idx = Number(target.dataset.idx);
+        const evt = protocol.high_level.triggers.event[idx];
+        const type = target.dataset.type;
+        if (type === 'bool') evt.value = target.value === 'true';
+        else if (type === 'number') evt.value = Number(target.value || 0);
+        else evt.value = target.value;
+        if (type !== 'number') delete evt.op;
+        setDirty(true);
+        return;
+      }
+      if (action === 'time-field') {
+        const time = ensureTriggers(protocol).time ||= { from: '', to: '', day: [] };
+        time[target.dataset.field] = target.value;
+        setDirty(true);
+        return;
+      }
+      if (action === 'step-tree-name') {
+        const arr = selectedStepsByScope(
+          target.dataset.scope,
+          Number(target.dataset.stepIdx),
+          target.dataset.parentIdx !== undefined ? Number(target.dataset.parentIdx) : null,
+        );
+        arr[Number(target.dataset.stepIdx)].tree_name = target.value;
+        normalizeTreeParamsForStep(arr[Number(target.dataset.stepIdx)]);
+        setDirty(true);
+        renderRoute();
+        return;
+      }
+      if (action === 'step-tree-param') {
+        const scope = target.dataset.scope;
+        const stepIdx = Number(target.dataset.stepIdx);
+        const parentIdx = target.dataset.parentIdx !== undefined ? Number(target.dataset.parentIdx) : null;
+        const arr = selectedStepsByScope(scope, stepIdx, parentIdx);
+        const step = arr[stepIdx];
+        step.tree_params ||= {};
+        const paramName = target.dataset.param;
+        const meta = metadataForTree(step.tree_name);
+        const spec = (meta.params || []).find((p) => p.name === paramName);
+        let value = spec?.kind === 'integer'
+          ? (target.value === '' ? '' : Number.parseInt(target.value, 10))
+          : parseMaybeNumber(target.value);
+        if (value === '' && !spec?.required) delete step.tree_params[paramName];
+        else step.tree_params[paramName] = value;
+        setDirty(true);
+        return;
+      }
+      if (action === 'step-wait-after') {
+        const scope = target.dataset.scope;
+        const stepIdx = Number(target.dataset.stepIdx);
+        const parentIdx = target.dataset.parentIdx !== undefined ? Number(target.dataset.parentIdx) : null;
+        const arr = selectedStepsByScope(scope, stepIdx, parentIdx);
+        if (target.value === '') delete arr[stepIdx].wait_after;
+        else arr[stepIdx].wait_after = parseMaybeNumber(target.value);
+        setDirty(true);
+        return;
+      }
+      if (action === 'confirm-question') {
+        currentSteps(protocol)[Number(target.dataset.stepIdx)].confirmation.question = target.value;
+        setDirty(true);
+        return;
+      }
+    } catch (err) {
+      setFlash('error', err.message);
+      console.error(err);
+    }
+  }
+
+  function attachEvents() {
+    document.addEventListener('click', (e) => {
+      const navBtn = e.target.closest('.nav-item');
+      if (navBtn) {
+        setRoute(navBtn.dataset.route);
+        return;
+      }
+      const sidebarToggle = e.target.closest('#sidebarToggle');
+      if (sidebarToggle) {
+        state.ui.sidebarCollapsed = !state.ui.sidebarCollapsed;
+        renderSidebarMode();
+        return;
+      }
+      handleClick(e);
+    });
+    document.addEventListener('keydown', (e) => {
+      const target = e.target.closest('[data-action="section-toggle"]');
+      if (!target) return;
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();
+      target.click();
+    });
+    document.addEventListener('change', handleChange);
+    document.addEventListener('input', handleInput);
+    window.addEventListener('beforeunload', (e) => {
+      if (!state.dirty) return;
+      e.preventDefault();
+      e.returnValue = '';
+    });
+  }
+
+  attachEvents();
+  renderNav();
+  renderSidebarMode();
+  renderFlash();
+  bootstrap();
+})();
