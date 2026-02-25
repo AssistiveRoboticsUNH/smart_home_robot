@@ -63,7 +63,11 @@ def build_blackboard_payload_tree(
     The payload itself is synthesized into the blackboard by `registry.py` using the
     current step key (e.g. `step_1`, `yes_2_step_1`).
     """
-    _ = tree_params  # params are validated in schema and materialized into blackboard already
+    extra_tree_kwargs = {}
+    if tree_params and "end_sleep" in tree_params:
+        # Payload values (text/audio_path/video_path) are still read from blackboard;
+        # only execution modifiers like end_sleep are passed through kwargs.
+        extra_tree_kwargs["end_sleep"] = tree_params["end_sleep"]
     if not protocol_name or not step_data_key:
         raise ValueError(
             f"[{node_name}] protocol_name and step_data_key are required for media trees"
@@ -76,6 +80,7 @@ def build_blackboard_payload_tree(
         executor=executor,
         protocol_name=protocol_name,
         data_key=step_data_key,
+        **extra_tree_kwargs,
     )
     return tree_obj.create_tree()
 

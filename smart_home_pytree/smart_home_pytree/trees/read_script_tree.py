@@ -6,6 +6,7 @@ import os
 import py_trees
 import rclpy
 
+from smart_home_pytree.behaviors.action_behaviors import wait
 from smart_home_pytree.behaviors.action_behaviors.read_script_aalp import ReadScript
 from smart_home_pytree.behaviors.set_protocol_bb import SetProtocolBB
 from smart_home_pytree.behaviors.check_protocol_bb import CheckProtocolBB
@@ -57,6 +58,7 @@ class ReadScriptTree(BaseTreeRunner):
                 f"Available keys: {list(protocol_info.keys())}"
             )
         self.text = protocol_info[data_key]
+        self.end_sleep = float(kwargs.get("end_sleep", 0) or 0)
 
         super().__init__(
             node_name=node_name,
@@ -117,13 +119,16 @@ class ReadScriptTree(BaseTreeRunner):
             name=f"{self.protocol_name}_read_script", memory=True
         )
 
-        root_sequence.add_children(
-            [
-                move_to_person,
-                read_script_reminder,
-                set_read_script_success,
-            ]
-        )
+        children = [move_to_person, read_script_reminder]
+        if self.end_sleep > 0:
+            children.append(
+                wait.Wait(
+                    name=f"{self.protocol_name}_{self.data_key}_end_sleep",
+                    duration_in_sec=self.end_sleep,
+                )
+            )
+        children.append(set_read_script_success)
+        root_sequence.add_children(children)
 
         selector.add_children([condition, root_sequence])
         return selector

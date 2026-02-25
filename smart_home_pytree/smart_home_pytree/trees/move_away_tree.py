@@ -7,7 +7,7 @@ Behavior:
 1. Read the robot state command from `position_state_key`
 2. Resolve target location (`home` or `away_location`)
 3. Move to the target location
-4. Optionally sleep (`end_sleep`) using a normal in-tree wait
+4. Optionally sleep (`end_sleep`) using a normal in-tree wait (before reset)
 5. Reset `state_key` to False in robot_interface.state
 """
 
@@ -16,8 +16,6 @@ import py_trees
 from smart_home_pytree.behaviors.action_behaviors import wait
 from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
 from smart_home_pytree.trees.move_to_tree import MoveToLocationTree
-from smart_home_pytree.utils import parse_duration
-
 
 class _UpdateRobotStateKey(py_trees.behaviour.Behaviour):
     """Set `robot_interface.state[key]` to a given value."""
@@ -41,7 +39,7 @@ class MoveAwayTree(BaseTreeRunner):
     - `away_location` (required)
     - `position_state_key` (required)
     - `state_key` (required)
-    - `end_sleep` (optional duration, default `0`)
+    - `end_sleep` (optional numeric seconds, default `0`)
     """
 
     def __init__(
@@ -63,7 +61,7 @@ class MoveAwayTree(BaseTreeRunner):
         self.position_state_key = self.kwargs["position_state_key"]
         self.state_key = self.kwargs["state_key"]
         self.home_location = "home"
-        self.end_sleep = parse_duration(self.kwargs.get("end_sleep", 0))
+        self.end_sleep = float(self.kwargs.get("end_sleep", 0) or 0)
 
     def create_tree(self) -> py_trees.behaviour.Behaviour:
         move_command = self.robot_interface.state.get(self.position_state_key, None)

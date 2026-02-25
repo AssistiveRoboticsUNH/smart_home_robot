@@ -141,6 +141,7 @@
         return param.name === 'num_attempts' ? 3 : 1;
       case 'location':
         return Object.keys(state.config?.locations || {})[0] || '';
+      case 'number':
       case 'duration':
       case 'number_or_duration':
         return 0;
@@ -721,12 +722,14 @@
         control = `<select ${common}>${locationNames.map((loc) => `<option value="${escapeAttr(loc)}" ${String(value ?? '') === loc ? 'selected' : ''}>${escapeHtml(loc)}</option>`).join('')}</select>`;
       } else if (param.kind === 'integer') {
         control = `<input type="number" ${common} value="${escapeAttr(value ?? '')}" />`;
+      } else if (param.kind === 'number') {
+        control = `<input type="number" step="any" ${common} value="${escapeAttr(value ?? '')}" />`;
       } else {
         control = `<input type="text" ${common} value="${escapeAttr(value ?? '')}" />`;
       }
       return `
         <div class="col-6">
-          <label>${escapeHtml(param.name)} ${requiredChip}</label>
+          <label title="${escapeAttr(param.type_hint || '')}">${escapeHtml(param.name)} ${requiredChip}</label>
           ${control}
           <div class="inline-note">${escapeHtml(param.type_hint || '')}</div>
         </div>`;
@@ -1589,9 +1592,14 @@
         const paramName = target.dataset.param;
         const meta = metadataForTree(step.tree_name);
         const spec = (meta.params || []).find((p) => p.name === paramName);
-        let value = spec?.kind === 'integer'
-          ? (target.value === '' ? '' : Number.parseInt(target.value, 10))
-          : parseMaybeNumber(target.value);
+        let value;
+        if (spec?.kind === 'integer') {
+          value = target.value === '' ? '' : Number.parseInt(target.value, 10);
+        } else if (spec?.kind === 'number') {
+          value = target.value === '' ? '' : Number.parseFloat(target.value);
+        } else {
+          value = parseMaybeNumber(target.value);
+        }
         if (value === '' && !spec?.required) delete step.tree_params[paramName];
         else step.tree_params[paramName] = value;
         setDirty(true);

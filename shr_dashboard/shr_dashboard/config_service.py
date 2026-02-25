@@ -109,6 +109,8 @@ def backup_and_save_config(ctx: ConfigContext, data: dict) -> dict:
 def _infer_param_kind(param_name: str, type_hint: str) -> str:
     hint = (type_hint or "").lower()
     name = (param_name or "").lower()
+    if name == "end_sleep":
+        return "number"
     if "int" in hint or name in {"num_attempts"}:
         return "integer"
     if "number" in hint:

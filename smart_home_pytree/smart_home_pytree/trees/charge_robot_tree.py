@@ -21,6 +21,7 @@ import py_trees
 import py_trees_ros
 import rclpy
 
+from smart_home_pytree.behaviors.action_behaviors import wait
 from smart_home_pytree.behaviors.check_robot_state_key import CheckRobotStateKey
 from smart_home_pytree.behaviors.logging_behavior import LoggingBehavior
 from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
@@ -63,6 +64,7 @@ class ChargeRobotTree(BaseTreeRunner):
             **kwargs,
         )
         self.num_attempts = self.kwargs.get("num_attempts", 3)
+        self.end_sleep = float(kwargs.get("end_sleep", 0) or 0)
 
     def create_tree(self) -> py_trees.behaviour.Behaviour:
         target_location = "home"
@@ -133,7 +135,20 @@ class ChargeRobotTree(BaseTreeRunner):
             [check_charging_charge_seq, charge_sequence_with_retry, log_message_fail]
         )
 
-        return charge_robot
+        if self.end_sleep <= 0:
+            return charge_robot
+
+        root = py_trees.composites.Sequence(name="ChargeRobotWithEndSleep", memory=True)
+        root.add_children(
+            [
+                charge_robot,
+                wait.Wait(
+                    name=f"{self.node_name}_end_sleep",
+                    duration_in_sec=self.end_sleep,
+                ),
+            ]
+        )
+        return root
 
     def required_actions(self):
         return required_actions_()

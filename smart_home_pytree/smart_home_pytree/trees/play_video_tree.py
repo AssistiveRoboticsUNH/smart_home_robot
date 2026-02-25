@@ -8,6 +8,7 @@ import py_trees_ros
 import rclpy
 
 from shr_msgs.action import PlayVideoRequest
+from smart_home_pytree.behaviors.action_behaviors import wait
 from smart_home_pytree.behaviors.set_protocol_bb import SetProtocolBB
 from smart_home_pytree.behaviors.check_protocol_bb import CheckProtocolBB
 
@@ -64,6 +65,7 @@ class PlayVideoTree(BaseTreeRunner):
                 f"Available keys: {list(protocol_info.keys())}"
             )
         self.video_path = protocol_info[data_key]
+        self.end_sleep = float(kwargs.get("end_sleep", 0) or 0)
 
         super().__init__(
             node_name=node_name,
@@ -129,13 +131,16 @@ class PlayVideoTree(BaseTreeRunner):
             name=f"{self.protocol_name}_play_video", memory=True
         )
 
-        root_sequence.add_children(
-            [
-                move_to_person,
-                play_video_reminder,
-                set_play_video_success,
-            ]
-        )
+        children = [move_to_person, play_video_reminder]
+        if self.end_sleep > 0:
+            children.append(
+                wait.Wait(
+                    name=f"{self.protocol_name}_{self.data_key}_end_sleep",
+                    duration_in_sec=self.end_sleep,
+                )
+            )
+        children.append(set_play_video_success)
+        root_sequence.add_children(children)
 
         selector.add_children([condition, root_sequence])
         return selector

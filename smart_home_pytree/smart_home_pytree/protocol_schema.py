@@ -58,14 +58,18 @@ RUN_TREE_SPECS = {
     "move_to_person_location": {
         "description": "Run the existing MoveToPersonLocationTree.",
         "required_params": {},
-        "optional_params": {},
+        "optional_params": {
+            "end_sleep": "number seconds (blocking sleep before step completion)",
+        },
     },
     "play_text": {
         "description": "Speak text using the existing person-facing ReadScriptTree.",
         "required_params": {
             "text": "str",
         },
-        "optional_params": {},
+        "optional_params": {
+            "end_sleep": "number seconds (blocking sleep before step completion)",
+        },
         "blackboard_value_param": "text",
     },
     "play_audio": {
@@ -73,7 +77,9 @@ RUN_TREE_SPECS = {
         "required_params": {
             "audio_path": "str (file path)",
         },
-        "optional_params": {},
+        "optional_params": {
+            "end_sleep": "number seconds (blocking sleep before step completion)",
+        },
         "blackboard_value_param": "audio_path",
     },
     "play_video": {
@@ -81,7 +87,9 @@ RUN_TREE_SPECS = {
         "required_params": {
             "video_path": "str (file path)",
         },
-        "optional_params": {},
+        "optional_params": {
+            "end_sleep": "number seconds (blocking sleep before step completion)",
+        },
         "blackboard_value_param": "video_path",
     },
     "move_to_location": {
@@ -89,19 +97,22 @@ RUN_TREE_SPECS = {
         "required_params": {
             "location": "str (must exist in top-level locations)",
         },
-        "optional_params": {},
+        "optional_params": {
+            "end_sleep": "number seconds (blocking sleep before step completion)",
+        },
     },
     "charge_robot": {
         "description": "Run the existing ChargeRobotTree.",
         "required_params": {},
         "optional_params": {
             "num_attempts": "int >= 1 (default: 3)",
+            "end_sleep": "number seconds (blocking sleep before step completion)",
         },
     },
     "move_away": {
         "description": (
             "Move to 'home' or configured away location based on position_state_key, "
-            "optionally perform a tree-local sleep, then reset a trigger state key to False."
+            "optionally perform a blocking sleep before resetting a trigger state key to False."
         ),
         "required_params": {
             "away_location": "str (must exist in top-level locations)",
@@ -109,7 +120,7 @@ RUN_TREE_SPECS = {
             "state_key": "str (robot state key to set False after execution)",
         },
         "optional_params": {
-            "end_sleep": "number|string duration (tree-local sleep after move, before reset)",
+            "end_sleep": "number seconds (blocking sleep after move, before reset state reset)",
         },
     },
 }
@@ -420,7 +431,7 @@ def _validate_tree_params(tree_name: str, tree_params: dict, path: str, location
             if value < 1:
                 raise ValueError(f"{key_path} must be >= 1")
         elif key == "end_sleep":
-            _validate_wait_after(value, key_path)
+            _validate_nonnegative_seconds_number(value, key_path)
 
 
 def _validate_reset_pattern(reset_pattern: Any, path: str) -> None:
@@ -475,6 +486,13 @@ def _validate_wait_after(value: Any, path: str) -> None:
     seconds = _parse_duration_for_validation(value, path)
     if seconds < 0:
         raise ValueError(f"{path} must resolve to >= 0 seconds")
+
+
+def _validate_nonnegative_seconds_number(value: Any, path: str) -> None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{path} must be a number of seconds (int/float)")
+    if value < 0:
+        raise ValueError(f"{path} must be >= 0 seconds")
 
 
 def _parse_hhmm(value: Any, path: str) -> datetime:
