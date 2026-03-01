@@ -158,8 +158,8 @@ class YieldWait(py_trees.behaviour.Behaviour):
             return py_trees.common.Status.SUCCESS
             
         bb = py_trees.blackboard.Blackboard()
-        wait_requests = bb.get("wait_requests")
-        request_key = "{self.class_name}.{self.protocol_name}"
+        wait_requests = bb.get("wait_requests") or {}
+        request_key = f"{self.class_name}.{self.protocol_name}"
 
         # Check if TriggerMonitor picked up the request (removed from dict)
         if request_key not in wait_requests:
