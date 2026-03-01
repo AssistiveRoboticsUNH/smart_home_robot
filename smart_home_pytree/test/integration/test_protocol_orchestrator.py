@@ -2,6 +2,7 @@
 
 import os
 import signal
+import tempfile
 import threading
 import time
 
@@ -56,12 +57,27 @@ def setup_function(function):
     blackboard = py_trees.blackboard.Blackboard()
     blackboard.storage.clear()
 
+    # Use a fresh temporary DB so persistent state from previous runs
+    # (or the production robot) does not interfere with the test.
+    _tmp_db = tempfile.NamedTemporaryFile(suffix=".db", prefix="tracker_test_", delete=False)
+    os.environ["PROTOCOL_TRACKER_DB"] = _tmp_db.name
+    _tmp_db.close()
+
     yaml_file_path = os.getenv("house_yaml_path", None)
     load_protocols_to_bb(yaml_file_path)
     print("\nsetup_function()")
 
 
 def teardown_function(function):
+    # Remove the temporary tracker DB created in setup
+    tmp_db = os.environ.pop("PROTOCOL_TRACKER_DB", None)
+    if tmp_db and os.path.exists(tmp_db):
+        os.unlink(tmp_db)
+        # WAL/SHM sidecars
+        for ext in ("-wal", "-shm"):
+            p = tmp_db + ext
+            if os.path.exists(p):
+                os.unlink(p)
     print("\nteardown_function()")
 
 

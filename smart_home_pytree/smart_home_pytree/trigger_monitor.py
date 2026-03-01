@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 import py_trees
 
 from smart_home_pytree.protocol_schema import load_house_config_yaml
+from smart_home_pytree.protocol_tracker import ProtocolTracker
 
 
 class TriggerMonitor:
@@ -76,6 +77,10 @@ class TriggerMonitor:
         # change orchestrator to become reactive
         self.satisfied_changed_event = wake_event
 
+        # --- PERSISTENT TRACKER ---
+        self.tracker = ProtocolTracker()
+        self._restore_state_from_db()
+
         # --- TIME SIMULATION LOGIC ---
         self.time_offset = None
         self.bb_logger.debug(f"[TriggerMonitor] test_time: {test_time}")
@@ -96,6 +101,102 @@ class TriggerMonitor:
             self.bb_logger.debug(
                 f"[TriggerMonitor] Time Simulation Active. Starts at {test_time} (Offset: {self.time_offset})"
             )
+
+    def _sync_external_state_changes(self):
+        """Detect protocols that were externally set to idle (e.g. from the webapp)
+        and update the in-memory state so TriggerMonitor re-evaluates them.
+
+        Called every iteration of the monitor loop.
+        """
+        all_states = self.tracker.get_all_states()
+        with self.lock:
+            for row in all_states:
+                full_name = row["protocol"]
+                db_state = row["state"]
+
+                # If DB says idle but we still have it blocked in memory → external edit
+                if db_state == "idle" and full_name in self.completed_protocols:
+                    self.bb_logger.info(
+                        f"[TriggerMonitor] External reset detected for {full_name} → removing from completed"
+                    )
+                    self.completed_protocols.discard(full_name)
+
+                    # Remove from periodic reset schedule if present
+                    self.protocols_to_reset = {
+                        entry for entry in self.protocols_to_reset if entry[0] != full_name
+                    }
+
+                    # Remove from pending waits if present
+                    self.pending_waits.pop(full_name, None)
+                    self.monitor_state_success.pop(full_name, None)
+
+                    # Reset blackboard _done flags so the behaviour tree can re-trigger
+                    sub_name = full_name.split(".", 1)[-1]
+                    self.reset_specific_protocol_dones(sub_name)
+
+    def _restore_state_from_db(self):
+        """Restore volatile tracking state from the persistent database on startup."""
+        # 1. Expire anything that became stale while robot was off
+        self.tracker.expire_stale_states()
+
+        # 2. Check if day changed while robot was down
+        stored_day = self._get_stored_last_day()
+        today = datetime.now().strftime("%Y-%m-%d")
+        if stored_day and stored_day != today:
+            self.bb_logger.debug(
+                f"[TriggerMonitor] Day changed while offline ({stored_day} → {today}). Resetting."
+            )
+            self.tracker.reset_all_to_idle()
+            self._set_stored_last_day(today)
+            # completed_protocols and protocols_to_reset stay empty
+            return
+
+        # 3. Restore cooldowns
+        for row in self.tracker.get_protocols_in_cooldown():
+            full_name = row["protocol"]
+            self.completed_protocols.add(full_name)
+
+            # Reconstruct the protocols_to_reset entry for periodic types
+            st = self.tracker.get_state(full_name)
+            if st and st["reset_type"] == "periodic" and st["eligible_at"]:
+                eligible = datetime.fromisoformat(st["eligible_at"])
+                remaining = (eligible - datetime.now()).total_seconds()
+                if remaining > 0:
+                    self.protocols_to_reset.add(
+                        (full_name, datetime.now(), remaining)
+                    )
+            self.bb_logger.debug(f"[TriggerMonitor] Restored cooldown: {full_name}")
+
+        # 4. Restore pending waits
+        for row in self.tracker.get_protocols_waiting():
+            full_name = row["protocol"]
+            resume_at = datetime.fromisoformat(row["resume_at"])
+            self.pending_waits[full_name] = resume_at
+            self.completed_protocols.add(full_name)
+            self.bb_logger.debug(f"[TriggerMonitor] Restored wait: {full_name} → {resume_at}")
+
+        self._set_stored_last_day(today)
+        self.bb_logger.info(
+            f"[TriggerMonitor] Restored state: {len(self.completed_protocols)} completed, "
+            f"{len(self.pending_waits)} waiting"
+        )
+
+    def _get_stored_last_day(self) -> str | None:
+        """Read last_day from a lightweight tracker_state helper row."""
+        with self.tracker._lock:
+            row = self.tracker._conn.execute(
+                "SELECT value FROM _tracker_meta WHERE key = 'last_day'"
+            ).fetchone()
+            return row["value"] if row else None
+
+    def _set_stored_last_day(self, day: str):
+        """Persist last_day so daily reset survives reboots."""
+        with self.tracker._lock:
+            self.tracker._conn.execute(
+                "INSERT OR REPLACE INTO _tracker_meta (key, value) VALUES ('last_day', ?)",
+                (day,),
+            )
+            self.tracker._conn.commit()
 
     # --- TIME HELPER ---
     def get_current_time_string(self):
@@ -134,6 +235,11 @@ class TriggerMonitor:
                 self.pending_waits.pop(full_name, None)
                 # self.completed_protocols.discard(full_name)
                 to_remove.append(full_name)
+
+                # Persist: success_on met → idle
+                self.tracker.upsert_state(
+                    full_name, state="idle", resume_at=None
+                )
 
         for name in to_remove:
             self.monitor_state_success.pop(name, None)
@@ -198,6 +304,11 @@ class TriggerMonitor:
             self.pending_waits[full_name] = resume_time
             self.completed_protocols.add(full_name)
 
+            # Persist wait state
+            self.tracker.upsert_state(
+                full_name, state="waiting", resume_at=resume_time
+            )
+
             # register success_on if present
             # only done once
             try:
@@ -236,6 +347,11 @@ class TriggerMonitor:
             del self.pending_waits[full_name]
             # can use remove but discard doest give errors
             self.completed_protocols.discard(full_name)
+
+            # Persist: wait done → back to idle
+            self.tracker.upsert_state(
+                full_name, state="idle", resume_at=None
+            )
             return True
 
         # check if protocol has key to check that it is done
@@ -544,14 +660,25 @@ class TriggerMonitor:
             # Check for daily reset
             today = datetime.now().strftime("%Y-%m-%d")
             if today != last_day:
+                # Send yesterday's summary to Discord before clearing
+                try:
+                    summary = self.tracker.get_daily_summary(last_day)
+                    self.bb_logger.notify_discord(f"[DailySummary]\n{summary}")
+                except Exception as e:
+                    self.bb_logger.warn(f"[TriggerMonitor] Failed to send daily summary: {e}")
+
                 self.bb_logger.debug("[TriggerMonitor] New day → resetting protocol done flags.")
                 self.reset_all_protocol_dones()
                 with self.lock:
                     self.completed_protocols.clear()
+                self.tracker.reset_all_to_idle()
+                self._set_stored_last_day(today)
                 last_day = today
 
             # resets periodic protocols in reset array
             self.check_and_reset_protocols()
+            # Detect external state edits (e.g. webapp set-idle)
+            self._sync_external_state_changes()
             self.recompute_satisfied()
             time.sleep(0.5)  # small delay to avoid busy loop
 
@@ -629,10 +756,20 @@ class TriggerMonitor:
                     f"[TriggerMonitor] Type INSTANT: Resetting flags for {sub} immediately."
                 )
                 self.reset_specific_protocol_dones(sub)
+                # Persist: instant goes straight back to idle
+                self.tracker.upsert_state(
+                    full_name,
+                    state="idle",
+                    reset_type="instant",
+                    last_completed=datetime.now(),
+                    last_status="completed",
+                    eligible_at=None,
+                )
                 return
 
             # --- CASE 2 & 3: Mark as Complete (Blocks re-triggering) ---
             self.completed_protocols.add(full_name)
+            now = datetime.now()
 
             # --- CASE 2: PERIODIC ---
             if pattern_type == "periodic":
@@ -641,6 +778,15 @@ class TriggerMonitor:
                     timestamp = datetime.now()
                     self.protocols_to_reset.add(
                         (full_name, timestamp, reset_seconds)
+                    )
+                    eligible_at = now + timedelta(seconds=reset_seconds)
+                    self.tracker.upsert_state(
+                        full_name,
+                        state="cooldown",
+                        reset_type="periodic",
+                        eligible_at=eligible_at,
+                        last_completed=now,
+                        last_status="completed",
                     )
                     self.bb_logger.debug(
                         f"[TriggerMonitor] Type PERIODIC: Scheduled reset for {full_name} in {reset_seconds}s"
@@ -652,6 +798,18 @@ class TriggerMonitor:
 
             # --- CASE 3: EOD (No Pattern / daily reset) ---
             elif pattern_type == "eod":
+                # eligible_at = midnight tonight
+                tomorrow = (now + timedelta(days=1)).replace(
+                    hour=0, minute=0, second=0, microsecond=0
+                )
+                self.tracker.upsert_state(
+                    full_name,
+                    state="cooldown",
+                    reset_type="eod",
+                    eligible_at=tomorrow,
+                    last_completed=now,
+                    last_status="completed",
+                )
                 self.bb_logger.debug(
                     f"[TriggerMonitor] Type EOD: {full_name} marked complete (until daily reset)."
                 )
@@ -685,6 +843,8 @@ class TriggerMonitor:
         for entry in to_remove:
             self.bb_logger.info(f"[TriggerMonitor] [reset] protocol to reset : {entry}")
             self.protocols_to_reset.remove(entry)
+            # Persist: cooldown expired → idle
+            self.tracker.reset_specific_to_idle(entry[0])
 
     def get_satisfied(self):
         """Get the current list of satisfied protocols in a thread-safe manner."""

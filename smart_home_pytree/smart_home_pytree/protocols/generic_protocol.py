@@ -33,6 +33,7 @@ import os
 
 import py_trees
 
+from smart_home_pytree.behaviors.action_behaviors.increment_step_progress import IncrementStepProgress
 from smart_home_pytree.behaviors.action_behaviors.yield_wait import YieldWait
 from smart_home_pytree.registry import load_locations_to_blackboard, load_protocols_to_bb
 from smart_home_pytree.trees.ask_question_tree import AskQuestionTree
@@ -211,6 +212,7 @@ class GenericProtocolTree(BaseTreeRunner):
         sequence_name: str,
         branch_prefix: str | None = None,
         allow_confirmation_branches: bool = True,
+        protocol_full_name: str | None = None,
     ) -> py_trees.behaviour.Behaviour:
         """
         Build a sequential subtree from a list of action steps.
@@ -251,6 +253,16 @@ class GenericProtocolTree(BaseTreeRunner):
                 step_subtree = self._build_action_step_subtree(idx, step, data_key=data_key)
 
             root.add_child(step_subtree)
+
+            # Track top-level step progress in the persistent tracker
+            if protocol_full_name and branch_prefix is None:
+                root.add_child(
+                    IncrementStepProgress(
+                        protocol_full_name=protocol_full_name,
+                        step_index=idx,
+                        name=f"{self.node_name}_progress_{idx}",
+                    )
+                )
 
             if idx >= total_steps:
                 continue
@@ -334,10 +346,14 @@ class GenericProtocolTree(BaseTreeRunner):
         Returns:
             A memory `Sequence` containing the synthesized action execution tree.
         """
+        # Resolve the full protocol name (e.g. "GenericProtocol.medicine_am")
+        # used by IncrementStepProgress for the tracker DB key.
+        protocol_full_name = f"GenericProtocol.{self.protocol_name}"
         return self._build_step_sequence(
             self.steps,
             sequence_name=f"{self.protocol_name}_GenericActionSequence",
             allow_confirmation_branches=True,
+            protocol_full_name=protocol_full_name,
         )
 
 
