@@ -12,10 +12,13 @@ Designed to run on the robot and be accessed over the local network.
 from __future__ import annotations
 
 import argparse
+import json
 import os
+import time as _time
+from datetime import datetime
 from pathlib import Path
 
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, Response, jsonify, request, send_from_directory
 from ament_index_python.packages import get_package_share_directory
 
 from .config_service import (
@@ -103,6 +106,153 @@ def create_app() -> Flask:
             return jsonify({"ok": False, "error": str(exc)}), 400
         except Exception as exc:
             return jsonify({"ok": False, "error": f"save failed: {exc}"}), 500
+
+    # ---- Protocol History & State API ----
+
+    def _get_tracker():
+        """Lazy-init a read-only ProtocolTracker instance for the web server."""
+        if not hasattr(app, "_protocol_tracker"):
+            from smart_home_pytree.protocol_tracker import ProtocolTracker
+            app._protocol_tracker = ProtocolTracker()
+        return app._protocol_tracker
+
+    @app.route("/api/protocol-history", methods=["GET"])
+    def api_protocol_history():
+        """Return protocol log entries with optional filters.
+
+        Query params:
+          date      – YYYY-MM-DD (default: today)
+          status    – completed | failed | preempted | yielded (optional)
+          protocol  – substring match on protocol name (optional)
+        """
+        try:
+            tracker = _get_tracker()
+            date_str = request.args.get("date", datetime.now().strftime("%Y-%m-%d"))
+            status_filter = request.args.get("status", "").strip().lower()
+            protocol_filter = request.args.get("protocol", "").strip().lower()
+            entries = tracker.get_compact_log_by_date(
+                date_str,
+                include_yielded=(status_filter == "yielded"),
+            )
+
+            # Apply optional filters
+
+            if status_filter:
+                entries = [e for e in entries if e.get("status", "").lower() == status_filter]
+            if protocol_filter:
+                entries = [e for e in entries if protocol_filter in e.get("protocol", "").lower()]
+
+            return jsonify({"ok": True, "date": date_str, "entries": entries, "count": len(entries)})
+        except Exception as exc:
+            return jsonify({"ok": False, "error": f"history failed: {exc}"}), 500
+
+    @app.route("/api/protocol-state", methods=["GET"])
+    def api_protocol_state():
+        """Return current state of all protocols."""
+        try:
+            tracker = _get_tracker()
+            states = tracker.get_all_states()
+            return jsonify({"ok": True, "states": states, "count": len(states)})
+        except Exception as exc:
+            return jsonify({"ok": False, "error": f"state failed: {exc}"}), 500
+
+    @app.route("/api/protocol-state/<path:protocol>", methods=["PATCH"])
+    def api_protocol_state_update(protocol: str):
+        """Update a single protocol's state from the dashboard.
+
+        Body JSON fields (all optional — only provided fields are applied):
+          state        – idle | cooldown | waiting
+          eligible_at  – ISO datetime string or null to clear
+          resume_at    – ISO datetime string or null to clear
+        """
+        body = request.get_json(force=True, silent=True) or {}
+        allowed_states = {"idle", "cooldown", "waiting"}
+        new_state = body.get("state")
+        if new_state and new_state not in allowed_states:
+            return jsonify(
+                {"ok": False, "error": f"Invalid state '{new_state}'. Allowed: {', '.join(sorted(allowed_states))}"}
+            ), 400
+
+        try:
+            tracker = _get_tracker()
+            existing = tracker.get_state(protocol)
+            if existing is None:
+                return jsonify({"ok": False, "error": f"Protocol '{protocol}' not found in state table"}), 404
+
+            kwargs: dict = {}
+            if new_state:
+                kwargs["state"] = new_state
+                # When switching to idle, clear timing fields and step progress
+                if new_state == "idle":
+                    kwargs["started_at"] = None
+                    kwargs["eligible_at"] = None
+                    kwargs["resume_at"] = None
+                    kwargs["total_steps"] = None
+                    kwargs["completed_step"] = 0
+                    kwargs["run_session_id"] = None
+            if "eligible_at" in body:
+                kwargs["eligible_at"] = body["eligible_at"]  # string or None
+            if "resume_at" in body:
+                kwargs["resume_at"] = body["resume_at"]
+
+            tracker.upsert_state(protocol, **kwargs)
+            updated = tracker.get_state(protocol)
+            return jsonify({"ok": True, "protocol": protocol, "state": updated})
+        except Exception as exc:
+            return jsonify({"ok": False, "error": f"update failed: {exc}"}), 500
+
+    @app.route("/api/protocol-events")
+    def api_protocol_events():
+        """SSE stream that pushes new data when protocol_state or protocol_log changes.
+
+        The client receives:
+          event: state   – when protocol_state.updated_at changes
+          event: log     – when a new protocol_log row appears for the requested date
+
+        Query params:
+          date – YYYY-MM-DD (default: today) – which day's log to watch
+        """
+        date_str = request.args.get("date", datetime.now().strftime("%Y-%m-%d"))
+
+        def stream():
+            tracker = _get_tracker()
+            last_state_ts = tracker.get_latest_update_time() or ""
+            last_log_id = tracker.get_latest_log_id(date_str)
+
+            while True:
+                _time.sleep(2)  # poll interval
+
+                try:
+                    new_state_ts = tracker.get_latest_update_time() or ""
+                    new_log_id = tracker.get_latest_log_id(date_str)
+
+                    if new_state_ts != last_state_ts:
+                        last_state_ts = new_state_ts
+                        states = tracker.get_all_states()
+                        payload = json.dumps({"states": states})
+                        yield f"event: state\ndata: {payload}\n\n"
+
+                    if new_log_id != last_log_id:
+                        last_log_id = new_log_id
+                        entries = tracker.get_compact_log_by_date(date_str)
+                        payload = json.dumps({"entries": entries, "date": date_str})
+                        yield f"event: log\ndata: {payload}\n\n"
+
+                except GeneratorExit:
+                    return
+                except Exception:
+                    # Connection likely closed; silently stop
+                    return
+
+        return Response(
+            stream(),
+            mimetype="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",  # Nginx: disable buffering
+                "Connection": "keep-alive",
+            },
+        )
 
     @app.errorhandler(404)
     def not_found(_exc):

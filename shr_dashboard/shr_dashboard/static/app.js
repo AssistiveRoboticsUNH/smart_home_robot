@@ -40,6 +40,15 @@
       stepCollapsed: {},
       recentProtocols: [],
     },
+    history: {
+      date: new Date().toISOString().slice(0, 10),
+      statusFilter: '',
+      protocolFilter: '',
+      entries: [],
+      states: [],
+      loading: false,
+      error: null,
+    },
   };
 
   const els = {
@@ -314,10 +323,20 @@
         subtitle: 'Edit GenericProtocol entries from the active house YAML',
       };
     }
+    if (route === 'protocol-history') {
+      return {
+        title: 'Protocol History',
+        subtitle: 'View today\u2019s protocol runs and live state',
+      };
+    }
     return { title: 'Home', subtitle: 'Blank landing page (dashboard modules will be added here)' };
   }
 
   function setRoute(route) {
+    // Disconnect SSE when leaving history page
+    if (state.route === 'protocol-history' && route !== 'protocol-history') {
+      disconnectSSE();
+    }
     state.route = route;
     const meta = routeMeta(route);
     els.pageTitle.textContent = meta.title;
@@ -354,6 +373,10 @@
     if (state.route === 'protocol-designer') {
       renderProtocolDesigner();
       restoreDesignerScroll();
+      return;
+    }
+    if (state.route === 'protocol-history') {
+      renderProtocolHistory();
       return;
     }
     els.routeView.innerHTML = `
@@ -1627,17 +1650,330 @@
     }
   }
 
+  // ======================================================================
+  // Protocol History page
+  // ======================================================================
+
+  let _historyEventSource = null;
+
+  function connectSSE() {
+    // Close any existing connection
+    disconnectSSE();
+
+    const h = state.history;
+    const url = `/api/protocol-events?date=${encodeURIComponent(h.date)}`;
+    _historyEventSource = new EventSource(url);
+
+    _historyEventSource.addEventListener('state', (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        h.states = data.states || [];
+        if (state.route === 'protocol-history') renderProtocolHistory();
+      } catch (_) { /* ignore parse errors */ }
+    });
+
+    _historyEventSource.addEventListener('log', (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        // Only update if the date matches what we're viewing
+        if (data.date === h.date) {
+          h.entries = data.entries || [];
+          if (state.route === 'protocol-history') renderProtocolHistory();
+        }
+      } catch (_) { /* ignore parse errors */ }
+    });
+
+    _historyEventSource.onerror = () => {
+      // EventSource auto-reconnects; nothing to do
+    };
+  }
+
+  function disconnectSSE() {
+    if (_historyEventSource) {
+      _historyEventSource.close();
+      _historyEventSource = null;
+    }
+  }
+
+  async function fetchHistory() {
+    const h = state.history;
+    h.loading = true;
+    h.error = null;
+    renderProtocolHistory();
+    try {
+      const params = new URLSearchParams({ date: h.date });
+      const [histRes, stateRes] = await Promise.all([
+        api(`/api/protocol-history?${params}`),
+        api('/api/protocol-state'),
+      ]);
+      h.entries = histRes.entries || [];
+      h.states = stateRes.states || [];
+    } catch (err) {
+      h.error = err.message;
+    } finally {
+      h.loading = false;
+      renderProtocolHistory();
+      // Start SSE after initial fetch
+      connectSSE();
+    }
+  }
+
+  function shortProtoName(full) {
+    if (!full) return '';
+    return full.includes('.') ? full.split('.').slice(1).join('.') : full;
+  }
+
+  function fmtTime(iso) {
+    if (!iso) return '-';
+    const t = iso.split('T')[1];
+    return t ? t.slice(0, 8) : iso;
+  }
+
+  function durationStr(start, end) {
+    if (!start || !end) return '-';
+    const ms = new Date(end) - new Date(start);
+    if (ms < 0) return '-';
+    const s = Math.round(ms / 1000);
+    if (s < 60) return `${s}s`;
+    const m = Math.floor(s / 60);
+    const rem = s % 60;
+    return `${m}m ${rem}s`;
+  }
+
+  function historyStatusBadge(status) {
+    const cls = status === 'completed' ? 'badge-ok'
+      : status === 'failed' ? 'badge-danger'
+      : status === 'preempted' ? 'badge-warn'
+      : status === 'yielded' ? 'badge-info'
+      : 'badge-muted';
+    return `<span class="hist-badge ${cls}">${escapeHtml(status)}</span>`;
+  }
+
+  function stateStateBadge(st) {
+    const cls = st === 'running' ? 'badge-primary'
+      : st === 'cooldown' ? 'badge-warn'
+      : st === 'waiting' ? 'badge-info'
+      : 'badge-muted';
+    return `<span class="hist-badge ${cls}">${escapeHtml(st)}</span>`;
+  }
+
+  function getFilteredHistoryEntries() {
+    let entries = state.history.entries;
+    const sf = state.history.statusFilter.toLowerCase();
+    const pf = state.history.protocolFilter.toLowerCase();
+    if (sf) entries = entries.filter(e => (e.status || '').toLowerCase() === sf);
+    if (pf) entries = entries.filter(e => (e.protocol || '').toLowerCase().includes(pf));
+    return entries;
+  }
+
+  function renderProtocolHistory() {
+    const h = state.history;
+
+    if (h.loading) {
+      els.routeView.innerHTML = '<div class="blank-card">Loading protocol history\u2026</div>';
+      return;
+    }
+
+    const filtered = getFilteredHistoryEntries().slice().reverse();
+
+    // Unique protocol names for filter dropdown
+    const uniqueProtos = [...new Set(h.entries.map(e => shortProtoName(e.protocol)))].sort();
+
+    // --- States card ---
+    const statesHtml = h.states.length ? h.states.map(s => {
+      const canEdit = s.state !== 'idle' && s.state !== 'running';
+      const actionCell = canEdit
+        ? `<button class="btn btn-sm btn-outline hist-action-btn" data-action="hist-set-idle" data-protocol="${escapeAttr(s.protocol)}" title="Reset to idle">Set Idle</button>`
+        : `<span class="muted">–</span>`;
+      const progressCell = (s.total_steps != null && s.total_steps > 0)
+        ? `<span class="hist-badge badge-primary">${s.completed_step || 0} / ${s.total_steps}</span>`
+        : '<span class="muted">–</span>';
+      return `
+      <tr>
+        <td class="hist-cell">${escapeHtml(shortProtoName(s.protocol))}</td>
+        <td class="hist-cell">${stateStateBadge(s.state)}</td>
+        <td class="hist-cell">${progressCell}</td>
+        <td class="hist-cell mono">${fmtTime(s.started_at)}</td>
+        <td class="hist-cell mono">${fmtTime(s.eligible_at)}</td>
+        <td class="hist-cell mono">${fmtTime(s.last_completed)}</td>
+        <td class="hist-cell">${s.last_status ? historyStatusBadge(s.last_status) : '<span class="muted">-</span>'}</td>
+        <td class="hist-cell hist-actions-cell">${actionCell}</td>
+      </tr>`;
+    }).join('')
+      : '<tr><td colspan="8" class="hist-cell muted">No protocol state tracked yet.</td></tr>';
+
+    // --- Log table ---
+    const logRows = filtered.length ? filtered.map(e => `
+      <tr>
+        <td class="hist-cell">${escapeHtml(shortProtoName(e.protocol))}</td>
+        <td class="hist-cell">${historyStatusBadge(e.status)}</td>
+        <td class="hist-cell mono">${fmtTime(e.start_time)}</td>
+        <td class="hist-cell mono">${fmtTime(e.end_time)}</td>
+        <td class="hist-cell mono">${durationStr(e.start_time, e.end_time)}</td>
+        <td class="hist-cell">${e.failure_reason ? escapeHtml(e.failure_reason) : '<span class="muted">-</span>'}</td>
+        <td class="hist-cell">${e.detail ? escapeHtml(e.detail) : '<span class="muted">-</span>'}</td>
+      </tr>`).join('')
+      : `<tr><td colspan="7" class="hist-cell muted">No protocol runs found${h.entries.length ? ' matching filters' : ' for this date'}.</td></tr>`;
+
+    const protoOptions = uniqueProtos.map(p =>
+      `<option value="${escapeAttr(p)}" ${p.toLowerCase() === h.protocolFilter.toLowerCase() ? 'selected' : ''}>${escapeHtml(p)}</option>`
+    ).join('');
+
+    els.routeView.innerHTML = `
+      <div class="hist-page">
+        <!-- Filters bar -->
+        <div class="hist-filters panel">
+          <div class="hist-filter-group">
+            <label class="hist-label" for="histDate">Date</label>
+            <input type="date" id="histDate" class="hist-input" value="${escapeAttr(h.date)}"
+                   data-action="hist-date" />
+          </div>
+          <div class="hist-filter-group">
+            <label class="hist-label" for="histStatus">Status</label>
+            <select id="histStatus" class="hist-input" data-action="hist-status">
+              <option value="">All</option>
+              <option value="completed" ${h.statusFilter === 'completed' ? 'selected' : ''}>Completed</option>
+              <option value="failed" ${h.statusFilter === 'failed' ? 'selected' : ''}>Failed</option>
+              <option value="preempted" ${h.statusFilter === 'preempted' ? 'selected' : ''}>Preempted</option>
+              <option value="yielded" ${h.statusFilter === 'yielded' ? 'selected' : ''}>Yielded</option>
+            </select>
+          </div>
+          <div class="hist-filter-group">
+            <label class="hist-label" for="histProtocol">Protocol</label>
+            <select id="histProtocol" class="hist-input" data-action="hist-protocol">
+              <option value="">All</option>
+              ${protoOptions}
+            </select>
+          </div>
+          <div class="hist-filter-group hist-filter-actions">
+            <button class="btn btn-sm" data-action="hist-refresh" title="Refresh">Refresh</button>
+            <button class="btn btn-sm btn-outline" data-action="hist-clear-filters" title="Clear filters">Clear</button>
+          </div>
+          <div class="hist-filter-count">
+            <span class="muted">${filtered.length} of ${h.entries.length} runs</span>
+          </div>
+        </div>
+
+        ${h.error ? `<div class="flash error">${escapeHtml(h.error)}</div>` : ''}
+
+        <!-- Live Protocol State -->
+        <div class="panel hist-section">
+          <h3 class="hist-section-title">Live Protocol State</h3>
+          <div class="hist-table-wrap">
+            <table class="hist-table">
+              <thead>
+                <tr>
+                  <th class="hist-th">Protocol</th>
+                  <th class="hist-th">State</th>
+                  <th class="hist-th">Progress</th>
+                  <th class="hist-th">Started</th>
+                  <th class="hist-th">Eligible At</th>
+                  <th class="hist-th">Last Completed</th>
+                  <th class="hist-th">Last Status</th>
+                  <th class="hist-th">Actions</th>
+                </tr>
+              </thead>
+              <tbody>${statesHtml}</tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Run History Log -->
+        <div class="panel hist-section">
+          <h3 class="hist-section-title">Run History &mdash; ${escapeHtml(h.date)}</h3>
+          <div class="hist-table-wrap">
+            <table class="hist-table">
+              <thead>
+                <tr>
+                  <th class="hist-th">Protocol</th>
+                  <th class="hist-th">Status</th>
+                  <th class="hist-th">Start</th>
+                  <th class="hist-th">End</th>
+                  <th class="hist-th">Duration</th>
+                  <th class="hist-th">Failure Reason</th>
+                  <th class="hist-th">Detail</th>
+                </tr>
+              </thead>
+              <tbody>${logRows}</tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  function handleHistoryAction(target) {
+    const action = target.dataset?.action;
+    if (!action) return false;
+
+    if (action === 'hist-date') {
+      state.history.date = target.value;
+      fetchHistory();
+      return true;
+    }
+    if (action === 'hist-status') {
+      state.history.statusFilter = target.value;
+      renderProtocolHistory();
+      return true;
+    }
+    if (action === 'hist-protocol') {
+      state.history.protocolFilter = target.value;
+      renderProtocolHistory();
+      return true;
+    }
+    if (action === 'hist-refresh') {
+      fetchHistory();
+      return true;
+    }
+    if (action === 'hist-clear-filters') {
+      state.history.statusFilter = '';
+      state.history.protocolFilter = '';
+      fetchHistory();
+      return true;
+    }
+    if (action === 'hist-set-idle') {
+      const protocol = target.dataset?.protocol;
+      if (protocol) setProtocolState(protocol, 'idle');
+      return true;
+    }
+    return false;
+  }
+
+  async function setProtocolState(protocol, newState) {
+    try {
+      await api(`/api/protocol-state/${encodeURIComponent(protocol)}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ state: newState }),
+      });
+      setFlash('ok', `${shortProtoName(protocol)} set to ${newState}`);
+      // Refresh states immediately
+      const stateRes = await api('/api/protocol-state');
+      state.history.states = stateRes.states || [];
+      renderProtocolHistory();
+    } catch (err) {
+      setFlash('error', `Failed to update: ${err.message}`);
+    }
+  }
+
   function attachEvents() {
     document.addEventListener('click', (e) => {
       const navBtn = e.target.closest('.nav-item');
       if (navBtn) {
-        setRoute(navBtn.dataset.route);
+        const route = navBtn.dataset.route;
+        setRoute(route);
+        if (route === 'protocol-history') fetchHistory();
         return;
       }
       const sidebarToggle = e.target.closest('#sidebarToggle');
       if (sidebarToggle) {
         state.ui.sidebarCollapsed = !state.ui.sidebarCollapsed;
         renderSidebarMode();
+        return;
+      }
+      // History button actions (exclude inputs/selects — those use change event)
+      const histBtn = e.target.closest('[data-action^="hist-"]');
+      if (histBtn && histBtn.tagName !== 'INPUT' && histBtn.tagName !== 'SELECT') {
+        handleHistoryAction(histBtn);
         return;
       }
       handleClick(e);
@@ -1649,7 +1985,10 @@
       e.preventDefault();
       target.click();
     });
-    document.addEventListener('change', handleChange);
+    document.addEventListener('change', (e) => {
+      if (handleHistoryAction(e.target)) return;
+      handleChange(e);
+    });
     document.addEventListener('input', handleInput);
     window.addEventListener('beforeunload', (e) => {
       if (!state.dirty) return;
