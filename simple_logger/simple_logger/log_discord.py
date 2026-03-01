@@ -201,14 +201,16 @@ class LogSubscriber(Node):
 
 
         if not self.notified_start:
-            await self.notifier.send_message(f'{td} >> **Robot Started**\n')
+            if self.notifier:
+                await self.notifier.send_message(f'{td} >> **Robot Started**\n')
             self.log_offline(f'\n{td} >> **Robot Started**\n')
             self.notified_start = True
 
         
         # --- Emergency: explicit dock failure phrase (case-insensitive) ---
         if self.dock_fail_phrase.lower() in data_l:
-            await self.emergency_notifier.send_message(f"🚨🚨🚨 **Emergency** 🚨🚨🚨 \n{ROBOT_NAME}: Failed to dock! Please check ASAP")
+            if self.emergency_notifier:
+                await self.emergency_notifier.send_message(f"🚨🚨🚨 **Emergency** 🚨🚨🚨 \n{ROBOT_NAME}: Failed to dock! Please check ASAP")
 
         # Watchdog triggers from raw stream (case-insensitive)
         if self.watch_trigger_phrase in data_l:
