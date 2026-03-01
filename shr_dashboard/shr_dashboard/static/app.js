@@ -1774,6 +1774,14 @@
     return t ? t.slice(0, 8) : iso;
   }
 
+  function fmtDate(entry) {
+    if (!entry) return '-';
+    if (entry.date) return entry.date;
+    const iso = entry.start_time || entry.end_time || '';
+    const d = iso.split('T')[0];
+    return d || '-';
+  }
+
   function durationStr(start, end) {
     if (!start || !end) return '-';
     const ms = new Date(end) - new Date(start);
@@ -1876,18 +1884,20 @@
       : '<tr><td colspan="8" class="hist-cell muted">No protocol state tracked yet.</td></tr>';
 
     // --- Log table ---
+    const showDateColumn = h.mode !== 'single';
     const emptyScope = h.mode === 'single' ? 'for this date' : (h.mode === 'range' ? 'for this date range' : 'for all dates');
     const logRows = pageInfo.pageEntries.length ? pageInfo.pageEntries.map(e => `
       <tr>
         <td class="hist-cell">${escapeHtml(shortProtoName(e.protocol))}</td>
         <td class="hist-cell">${historyStatusBadge(e.status)}</td>
+        ${showDateColumn ? `<td class="hist-cell mono">${escapeHtml(fmtDate(e))}</td>` : ''}
         <td class="hist-cell mono">${fmtTime(e.start_time)}</td>
         <td class="hist-cell mono">${fmtTime(e.end_time)}</td>
         <td class="hist-cell mono">${durationStr(e.start_time, e.end_time)}</td>
         <td class="hist-cell">${e.failure_reason ? escapeHtml(e.failure_reason) : '<span class="muted">-</span>'}</td>
         <td class="hist-cell">${e.detail ? escapeHtml(e.detail) : '<span class="muted">-</span>'}</td>
       </tr>`).join('')
-      : `<tr><td colspan="7" class="hist-cell muted">No protocol runs found${h.entries.length ? ' matching filters' : ` ${emptyScope}` }.</td></tr>`;
+      : `<tr><td colspan="${showDateColumn ? 8 : 7}" class="hist-cell muted">No protocol runs found${h.entries.length ? ' matching filters' : ` ${emptyScope}` }.</td></tr>`;
 
     const protoOptions = uniqueProtos.map(p =>
       `<option value="${escapeAttr(p)}" ${p.toLowerCase() === h.protocolFilter.toLowerCase() ? 'selected' : ''}>${escapeHtml(p)}</option>`
@@ -1933,7 +1943,6 @@
               <option value="completed" ${h.statusFilter === 'completed' ? 'selected' : ''}>Completed</option>
               <option value="failed" ${h.statusFilter === 'failed' ? 'selected' : ''}>Failed</option>
               <option value="preempted" ${h.statusFilter === 'preempted' ? 'selected' : ''}>Preempted</option>
-              <option value="yielded" ${h.statusFilter === 'yielded' ? 'selected' : ''}>Yielded</option>
             </select>
           </div>
           <div class="hist-filter-group">
@@ -1985,6 +1994,7 @@
                 <tr>
                   <th class="hist-th">Protocol</th>
                   <th class="hist-th">Status</th>
+                  ${showDateColumn ? '<th class="hist-th">Date</th>' : ''}
                   <th class="hist-th">Start</th>
                   <th class="hist-th">End</th>
                   <th class="hist-th">Duration</th>
