@@ -170,6 +170,27 @@ class ProtocolTracker:
             ).fetchall()
             return [dict(r) for r in rows]
 
+    def get_log_by_date_range(self, date_from: str, date_to: str) -> list[dict]:
+        """Return all log rows where date is in [date_from, date_to]."""
+        with self._lock:
+            rows = self._conn.execute(
+                """
+                SELECT * FROM protocol_log
+                WHERE date BETWEEN ? AND ?
+                ORDER BY start_time
+                """,
+                (date_from, date_to),
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def get_all_logs(self) -> list[dict]:
+        """Return all log rows ordered by start time."""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM protocol_log ORDER BY start_time"
+            ).fetchall()
+            return [dict(r) for r in rows]
+
     def get_log_by_protocol(self, protocol: str, limit: int = 50) -> list[dict]:
         """Return recent log rows for a specific protocol."""
         with self._lock:
@@ -179,20 +200,13 @@ class ProtocolTracker:
             ).fetchall()
             return [dict(r) for r in rows]
 
-    def get_compact_log_by_date(
+    def _compact_entries(
         self,
-        date_str: str | None = None,
+        entries: list[dict],
         *,
         include_yielded: bool = False,
     ) -> list[dict]:
-        """Return one canonical row per run session for a date.
-
-        For sessions with multiple internal attempts (e.g. yielded + resumed),
-        this picks a terminal row in priority order:
-        completed / failed / preempted.
-        If no terminal row exists, optionally returns yielded rows.
-        """
-        entries = self.get_log_by_date(date_str)
+        """Compact raw log rows to one canonical row per run session."""
         if not entries:
             return []
 
@@ -217,6 +231,42 @@ class ProtocolTracker:
 
         compact.sort(key=lambda r: r.get("start_time") or "")
         return compact
+
+    def get_compact_log_by_date(
+        self,
+        date_str: str | None = None,
+        *,
+        include_yielded: bool = False,
+    ) -> list[dict]:
+        """Return one canonical row per run session for a date."""
+        return self._compact_entries(
+            self.get_log_by_date(date_str),
+            include_yielded=include_yielded,
+        )
+
+    def get_compact_log_by_date_range(
+        self,
+        date_from: str,
+        date_to: str,
+        *,
+        include_yielded: bool = False,
+    ) -> list[dict]:
+        """Return one canonical row per run session for a date range."""
+        return self._compact_entries(
+            self.get_log_by_date_range(date_from, date_to),
+            include_yielded=include_yielded,
+        )
+
+    def get_compact_log_all(
+        self,
+        *,
+        include_yielded: bool = False,
+    ) -> list[dict]:
+        """Return one canonical row per run session across all dates."""
+        return self._compact_entries(
+            self.get_all_logs(),
+            include_yielded=include_yielded,
+        )
 
     def get_daily_summary(self, date_str: str | None = None) -> str:
         """Return a human-readable summary of today's completions for Discord."""

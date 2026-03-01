@@ -41,7 +41,12 @@
       recentProtocols: [],
     },
     history: {
+      mode: 'single', // single | range | all
       date: new Date().toISOString().slice(0, 10),
+      dateFrom: new Date(Date.now() - 6 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+      dateTo: new Date().toISOString().slice(0, 10),
+      page: 1,
+      pageSize: 20,
       statusFilter: '',
       protocolFilter: '',
       entries: [],
@@ -1657,15 +1662,19 @@
   let _historyEventSource = null;
 
   function connectSSE() {
+    const h = state.history;
+    // SSE is only meaningful for single-day view
+    if (h.mode !== 'single' || !h.date) return;
+
     // Close any existing connection
     disconnectSSE();
 
-    const h = state.history;
     const url = `/api/protocol-events?date=${encodeURIComponent(h.date)}`;
     _historyEventSource = new EventSource(url);
 
     _historyEventSource.addEventListener('state', (e) => {
       try {
+        if (h.mode !== 'single') return;
         const data = JSON.parse(e.data);
         h.states = data.states || [];
         if (state.route === 'protocol-history') renderProtocolHistory();
@@ -1674,10 +1683,12 @@
 
     _historyEventSource.addEventListener('log', (e) => {
       try {
+        if (h.mode !== 'single') return;
         const data = JSON.parse(e.data);
         // Only update if the date matches what we're viewing
         if (data.date === h.date) {
           h.entries = data.entries || [];
+          h.page = 1;
           if (state.route === 'protocol-history') renderProtocolHistory();
         }
       } catch (_) { /* ignore parse errors */ }
@@ -1701,20 +1712,54 @@
     h.error = null;
     renderProtocolHistory();
     try {
-      const params = new URLSearchParams({ date: h.date });
-      const [histRes, stateRes] = await Promise.all([
+      const params = new URLSearchParams();
+      // All-dates mode should expose full run history, not compacted sessions.
+      params.set('view', h.mode === 'all' ? 'all_runs' : 'compact');
+      if (h.mode === 'single') {
+        params.set('date', h.date);
+      } else if (h.mode === 'range') {
+        params.set('date_from', h.dateFrom);
+        params.set('date_to', h.dateTo);
+      } else if (h.mode === 'all') {
+        params.set('all', 'true');
+      }
+
+      // Fetch history and state independently so history filtering still works
+      // even if protocol-state endpoint fails.
+      const [histRes, stateRes] = await Promise.allSettled([
         api(`/api/protocol-history?${params}`),
         api('/api/protocol-state'),
       ]);
-      h.entries = histRes.entries || [];
-      h.states = stateRes.states || [];
-    } catch (err) {
-      h.error = err.message;
+
+      if (histRes.status === 'fulfilled') {
+        const data = histRes.value;
+        h.entries = data.entries || [];
+        h.page = 1;
+
+        // Keep local controls aligned with normalized backend query.
+        const q = data.query || {};
+        if (q.mode === 'single' && q.date) h.date = q.date;
+        if (q.mode === 'range') {
+          if (q.date_from) h.dateFrom = q.date_from;
+          if (q.date_to) h.dateTo = q.date_to;
+        }
+      } else {
+        // Avoid stale history rows when a new query fails.
+        h.entries = [];
+        h.error = histRes.reason?.message || 'Failed to load protocol history.';
+      }
+
+      if (stateRes.status === 'fulfilled') {
+        h.states = stateRes.value.states || [];
+      } else if (!h.error) {
+        h.error = stateRes.reason?.message || 'Failed to load protocol state.';
+      }
     } finally {
       h.loading = false;
       renderProtocolHistory();
-      // Start SSE after initial fetch
-      connectSSE();
+      // Keep SSE only for single-day mode.
+      if (h.mode === 'single') connectSSE();
+      else disconnectSSE();
     }
   }
 
@@ -1766,6 +1811,33 @@
     return entries;
   }
 
+  function getHistoryPage(entries) {
+    const h = state.history;
+    const pageSize = h.pageSize || 20;
+    const total = entries.length;
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    const page = Math.min(Math.max(1, h.page || 1), totalPages);
+    h.page = page;
+    const start = (page - 1) * pageSize;
+    const pageEntries = entries.slice(start, start + pageSize);
+    return {
+      pageEntries,
+      page,
+      pageSize,
+      total,
+      totalPages,
+      hasPrev: page > 1,
+      hasNext: page < totalPages,
+    };
+  }
+
+  function historyRangeLabel() {
+    const h = state.history;
+    if (h.mode === 'all') return 'All Dates';
+    if (h.mode === 'range') return `${h.dateFrom} to ${h.dateTo}`;
+    return h.date;
+  }
+
   function renderProtocolHistory() {
     const h = state.history;
 
@@ -1775,6 +1847,7 @@
     }
 
     const filtered = getFilteredHistoryEntries().slice().reverse();
+    const pageInfo = getHistoryPage(filtered);
 
     // Unique protocol names for filter dropdown
     const uniqueProtos = [...new Set(h.entries.map(e => shortProtoName(e.protocol)))].sort();
@@ -1803,7 +1876,8 @@
       : '<tr><td colspan="8" class="hist-cell muted">No protocol state tracked yet.</td></tr>';
 
     // --- Log table ---
-    const logRows = filtered.length ? filtered.map(e => `
+    const emptyScope = h.mode === 'single' ? 'for this date' : (h.mode === 'range' ? 'for this date range' : 'for all dates');
+    const logRows = pageInfo.pageEntries.length ? pageInfo.pageEntries.map(e => `
       <tr>
         <td class="hist-cell">${escapeHtml(shortProtoName(e.protocol))}</td>
         <td class="hist-cell">${historyStatusBadge(e.status)}</td>
@@ -1813,21 +1887,45 @@
         <td class="hist-cell">${e.failure_reason ? escapeHtml(e.failure_reason) : '<span class="muted">-</span>'}</td>
         <td class="hist-cell">${e.detail ? escapeHtml(e.detail) : '<span class="muted">-</span>'}</td>
       </tr>`).join('')
-      : `<tr><td colspan="7" class="hist-cell muted">No protocol runs found${h.entries.length ? ' matching filters' : ' for this date'}.</td></tr>`;
+      : `<tr><td colspan="7" class="hist-cell muted">No protocol runs found${h.entries.length ? ' matching filters' : ` ${emptyScope}` }.</td></tr>`;
 
     const protoOptions = uniqueProtos.map(p =>
       `<option value="${escapeAttr(p)}" ${p.toLowerCase() === h.protocolFilter.toLowerCase() ? 'selected' : ''}>${escapeHtml(p)}</option>`
     ).join('');
 
+    const modeFields = `
+      <div class="hist-filter-group">
+        <label class="hist-label" for="histMode">Range</label>
+        <select id="histMode" class="hist-input" data-action="hist-mode">
+          <option value="single" ${h.mode === 'single' ? 'selected' : ''}>Single Day</option>
+          <option value="range" ${h.mode === 'range' ? 'selected' : ''}>Date Range</option>
+          <option value="all" ${h.mode === 'all' ? 'selected' : ''}>All</option>
+        </select>
+      </div>
+      ${h.mode === 'single' ? `
+      <div class="hist-filter-group">
+        <label class="hist-label" for="histDate">Date</label>
+        <input type="date" id="histDate" class="hist-input" value="${escapeAttr(h.date)}"
+               data-action="hist-date" />
+      </div>` : ''}
+      ${h.mode === 'range' ? `
+      <div class="hist-filter-group">
+        <label class="hist-label" for="histDateFrom">From</label>
+        <input type="date" id="histDateFrom" class="hist-input" value="${escapeAttr(h.dateFrom)}"
+               data-action="hist-date-from" />
+      </div>
+      <div class="hist-filter-group">
+        <label class="hist-label" for="histDateTo">To</label>
+        <input type="date" id="histDateTo" class="hist-input" value="${escapeAttr(h.dateTo)}"
+               data-action="hist-date-to" />
+      </div>` : ''}
+    `;
+
     els.routeView.innerHTML = `
       <div class="hist-page">
         <!-- Filters bar -->
         <div class="hist-filters panel">
-          <div class="hist-filter-group">
-            <label class="hist-label" for="histDate">Date</label>
-            <input type="date" id="histDate" class="hist-input" value="${escapeAttr(h.date)}"
-                   data-action="hist-date" />
-          </div>
+          ${modeFields}
           <div class="hist-filter-group">
             <label class="hist-label" for="histStatus">Status</label>
             <select id="histStatus" class="hist-input" data-action="hist-status">
@@ -1880,7 +1978,7 @@
 
         <!-- Run History Log -->
         <div class="panel hist-section">
-          <h3 class="hist-section-title">Run History &mdash; ${escapeHtml(h.date)}</h3>
+          <h3 class="hist-section-title">Run History &mdash; ${escapeHtml(historyRangeLabel())}</h3>
           <div class="hist-table-wrap">
             <table class="hist-table">
               <thead>
@@ -1897,6 +1995,12 @@
               <tbody>${logRows}</tbody>
             </table>
           </div>
+          ${filtered.length > (h.pageSize || 20) ? `
+          <div class="hist-pager">
+            <button class="btn btn-sm btn-outline" data-action="hist-prev-page" ${pageInfo.hasPrev ? '' : 'disabled'} title="Previous page">&lsaquo; Prev</button>
+            <span class="hist-pager-label">Page ${pageInfo.page} of ${pageInfo.totalPages}</span>
+            <button class="btn btn-sm btn-outline" data-action="hist-next-page" ${pageInfo.hasNext ? '' : 'disabled'} title="Next page">Next &rsaquo;</button>
+          </div>` : ''}
         </div>
       </div>
     `;
@@ -1906,29 +2010,73 @@
     const action = target.dataset?.action;
     if (!action) return false;
 
+    if (action === 'hist-mode') {
+      state.history.mode = target.value;
+      if (state.history.mode !== 'single') disconnectSSE();
+      state.history.page = 1;
+      // Mode switch should reset local filters to avoid confusing hidden rows.
+      state.history.statusFilter = '';
+      state.history.protocolFilter = '';
+      if (state.history.mode === 'single' && !state.history.date) {
+        state.history.date = new Date().toISOString().slice(0, 10);
+      }
+      if (state.history.mode === 'range') {
+        if (!state.history.dateFrom) state.history.dateFrom = state.history.date || new Date().toISOString().slice(0, 10);
+        if (!state.history.dateTo) state.history.dateTo = state.history.date || new Date().toISOString().slice(0, 10);
+      }
+      fetchHistory();
+      return true;
+    }
     if (action === 'hist-date') {
       state.history.date = target.value;
+      state.history.page = 1;
       fetchHistory();
+      return true;
+    }
+    if (action === 'hist-date-from') {
+      state.history.dateFrom = target.value;
+      state.history.page = 1;
+      if (state.history.dateFrom && state.history.dateTo) fetchHistory();
+      return true;
+    }
+    if (action === 'hist-date-to') {
+      state.history.dateTo = target.value;
+      state.history.page = 1;
+      if (state.history.dateFrom && state.history.dateTo) fetchHistory();
       return true;
     }
     if (action === 'hist-status') {
       state.history.statusFilter = target.value;
+      state.history.page = 1;
       renderProtocolHistory();
       return true;
     }
     if (action === 'hist-protocol') {
       state.history.protocolFilter = target.value;
+      state.history.page = 1;
       renderProtocolHistory();
       return true;
     }
     if (action === 'hist-refresh') {
+      state.history.page = 1;
       fetchHistory();
       return true;
     }
     if (action === 'hist-clear-filters') {
       state.history.statusFilter = '';
       state.history.protocolFilter = '';
+      state.history.page = 1;
       fetchHistory();
+      return true;
+    }
+    if (action === 'hist-prev-page') {
+      state.history.page = Math.max(1, (state.history.page || 1) - 1);
+      renderProtocolHistory();
+      return true;
+    }
+    if (action === 'hist-next-page') {
+      state.history.page = (state.history.page || 1) + 1;
+      renderProtocolHistory();
       return true;
     }
     if (action === 'hist-set-idle') {

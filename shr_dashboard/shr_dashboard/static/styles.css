@@ -944,6 +944,19 @@ textarea { min-height: 180px; resize: vertical; }
   padding: 3px 10px;
 }
 
+.hist-pager {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.hist-pager-label {
+  font-size: 12px;
+  color: var(--muted-2);
+}
+
 /* --- History responsive --- */
 @media (max-width: 760px) {
   .hist-filters {

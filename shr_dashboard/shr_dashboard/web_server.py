@@ -116,24 +116,80 @@ def create_app() -> Flask:
             app._protocol_tracker = ProtocolTracker()
         return app._protocol_tracker
 
+    def _parse_ymd(value: str, field_name: str) -> str:
+        """Validate YYYY-MM-DD and return normalized value."""
+        try:
+            parsed = datetime.strptime(value, "%Y-%m-%d")
+            return parsed.strftime("%Y-%m-%d")
+        except ValueError as exc:
+            raise ValueError(f"Invalid {field_name} '{value}'. Expected YYYY-MM-DD.") from exc
+
     @app.route("/api/protocol-history", methods=["GET"])
     def api_protocol_history():
         """Return protocol log entries with optional filters.
 
         Query params:
-          date      – YYYY-MM-DD (default: today)
+          date      – YYYY-MM-DD (single-day mode; default: today)
+          date_from – YYYY-MM-DD (range mode; requires date_to)
+          date_to   – YYYY-MM-DD (range mode; requires date_from)
+          all       – true/1/yes to return all dates
           status    – completed | failed | preempted | yielded (optional)
           protocol  – substring match on protocol name (optional)
         """
+        tracker = _get_tracker()
+        status_filter = request.args.get("status", "").strip().lower()
+        protocol_filter = request.args.get("protocol", "").strip().lower()
+        include_yielded = status_filter == "yielded"
+        view_mode = request.args.get("view", "compact").strip().lower() or "compact"
+        if view_mode not in {"compact", "all_runs"}:
+            return jsonify({"ok": False, "error": f"Invalid view '{view_mode}'. Use compact or all_runs."}), 400
+        today = datetime.now().strftime("%Y-%m-%d")
+        all_flag = request.args.get("all", "").strip().lower() in {"1", "true", "yes"}
+        date_from_raw = request.args.get("date_from", "").strip()
+        date_to_raw = request.args.get("date_to", "").strip()
+
+        if all_flag and (date_from_raw or date_to_raw):
+            return jsonify({"ok": False, "error": "Use either all=true or date_from/date_to, not both."}), 400
+
         try:
-            tracker = _get_tracker()
-            date_str = request.args.get("date", datetime.now().strftime("%Y-%m-%d"))
-            status_filter = request.args.get("status", "").strip().lower()
-            protocol_filter = request.args.get("protocol", "").strip().lower()
-            entries = tracker.get_compact_log_by_date(
-                date_str,
-                include_yielded=(status_filter == "yielded"),
-            )
+            mode = "single"
+            date_str = request.args.get("date", today).strip() or today
+            date_from = None
+            date_to = None
+
+            if all_flag:
+                mode = "all"
+                if view_mode == "all_runs":
+                    entries = tracker.get_all_logs()
+                else:
+                    entries = tracker.get_compact_log_all(include_yielded=include_yielded)
+            elif date_from_raw or date_to_raw:
+                if not date_from_raw or not date_to_raw:
+                    return jsonify(
+                        {"ok": False, "error": "Both date_from and date_to are required for range mode."}
+                    ), 400
+                mode = "range"
+                date_from = _parse_ymd(date_from_raw, "date_from")
+                date_to = _parse_ymd(date_to_raw, "date_to")
+                if date_from > date_to:
+                    return jsonify({"ok": False, "error": "date_from cannot be after date_to."}), 400
+                if view_mode == "all_runs":
+                    entries = tracker.get_log_by_date_range(date_from, date_to)
+                else:
+                    entries = tracker.get_compact_log_by_date_range(
+                        date_from,
+                        date_to,
+                        include_yielded=include_yielded,
+                    )
+            else:
+                date_str = _parse_ymd(date_str, "date")
+                if view_mode == "all_runs":
+                    entries = tracker.get_log_by_date(date_str)
+                else:
+                    entries = tracker.get_compact_log_by_date(
+                        date_str,
+                        include_yielded=include_yielded,
+                    )
 
             # Apply optional filters
 
@@ -142,7 +198,17 @@ def create_app() -> Flask:
             if protocol_filter:
                 entries = [e for e in entries if protocol_filter in e.get("protocol", "").lower()]
 
-            return jsonify({"ok": True, "date": date_str, "entries": entries, "count": len(entries)})
+            query = {
+                "mode": mode,
+                "date": date_str if mode == "single" else None,
+                "date_from": date_from if mode == "range" else None,
+                "date_to": date_to if mode == "range" else None,
+                "all": mode == "all",
+                "view": view_mode,
+            }
+            return jsonify({"ok": True, "query": query, "entries": entries, "count": len(entries)})
+        except ValueError as exc:
+            return jsonify({"ok": False, "error": str(exc)}), 400
         except Exception as exc:
             return jsonify({"ok": False, "error": f"history failed: {exc}"}), 500
 
