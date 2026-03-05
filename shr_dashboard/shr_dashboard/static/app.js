@@ -54,6 +54,13 @@
       loading: false,
       error: null,
     },
+    home: {
+      robotState: null,
+      protocolStates: [],
+      summary: null,
+      pollTimer: null,
+      error: null,
+    },
   };
 
   const els = {
@@ -338,10 +345,14 @@
         subtitle: 'View today\u2019s protocol runs and live state',
       };
     }
-    return { title: 'Home', subtitle: 'Blank landing page (dashboard modules will be added here)' };
+    return { title: 'Home', subtitle: 'Live robot status overview' };
   }
 
   function setRoute(route) {
+    // Stop home polling when leaving home page
+    if (state.route === 'home' && route !== 'home') {
+      stopHomePoll();
+    }
     // Disconnect SSE when leaving history page
     if (state.route === 'protocol-history' && route !== 'protocol-history') {
       disconnectSSE();
@@ -352,6 +363,10 @@
     els.pageSubtitle.textContent = meta.subtitle;
     renderNav();
     renderRoute();
+    // Start home polling when entering home page
+    if (route === 'home') {
+      startHomePoll();
+    }
   }
 
   function captureDesignerScroll() {
@@ -388,14 +403,7 @@
       renderProtocolHistory();
       return;
     }
-    els.routeView.innerHTML = `
-      <div class="blank-card blank-card-dark">
-        <div>
-          <div style="font-size:20px; font-weight:600; text-align:center;">SHR Dashboard</div>
-          <div class="muted" style="margin-top:6px; text-align:center;">Home page is intentionally blank for now.</div>
-        </div>
-      </div>
-    `;
+    renderHomeDashboard();
   }
 
   function triggerSummary(protocol) {
@@ -1068,6 +1076,8 @@
       state.loading = false;
       updateStatusChip();
       renderRoute();
+      // Start home polling if we booted on the home route
+      if (state.route === 'home') startHomePoll();
     }
   }
 
@@ -1657,6 +1667,204 @@
       setFlash('error', err.message);
       console.error(err);
     }
+  }
+
+  // ======================================================================
+  // Home Dashboard
+  // ======================================================================
+
+  function startHomePoll() {
+    stopHomePoll();
+    pollHomeData(); // immediate first fetch
+    state.home.pollTimer = setInterval(pollHomeData, 2000);
+  }
+
+  function stopHomePoll() {
+    if (state.home.pollTimer) {
+      clearInterval(state.home.pollTimer);
+      state.home.pollTimer = null;
+    }
+  }
+
+  async function pollHomeData() {
+    try {
+      const [rsRes, psRes, sumRes] = await Promise.all([
+        fetch('/api/robot-state').then((r) => r.json()).catch(() => null),
+        fetch('/api/protocol-state').then((r) => r.json()).catch(() => null),
+        fetch('/api/protocol-summary').then((r) => r.json()).catch(() => null),
+      ]);
+      state.home.robotState = rsRes?.ok ? rsRes.state : null;
+      state.home.protocolStates = psRes?.ok ? (psRes.states || []) : [];
+      state.home.summary = sumRes?.ok ? sumRes : null;
+      state.home.error = null;
+    } catch (err) {
+      state.home.error = String(err);
+    }
+    if (state.route === 'home') renderHomeDashboard();
+  }
+
+  function renderHomeDashboard() {
+    const rs = state.home.robotState;
+    const ps = state.home.protocolStates;
+    const sum = state.home.summary;
+
+    els.routeView.innerHTML = `
+      <div class="home-grid">
+        ${renderPowerCard(rs)}
+        ${renderRobotStatusCard(rs)}
+        ${renderProtocolActivityCard(ps)}
+        ${renderTodaySummaryCard(sum)}
+        ${renderSensorEventsCard(rs)}
+      </div>
+    `;
+  }
+
+  function renderPowerCard(rs) {
+    const pct = rs?.battery_percent;
+    const hasPct = pct != null;
+    const pctNum = hasPct ? Number(pct) : 0;
+    const deg = hasPct ? Math.round((pctNum / 100) * 360) : 0;
+    const color = pctNum > 50 ? 'var(--ok)' : pctNum > 20 ? 'var(--warn)' : 'var(--danger)';
+    const charging = rs?.charging;
+    const v36 = rs?.voltage_36v;
+    const v12 = rs?.voltage_12v;
+
+    return `
+      <div class="dash-card">
+        <div class="dash-card-header"><h3>Power & Battery</h3><span class="dash-card-icon">⚡</span></div>
+        <div class="battery-gauge-wrap">
+          <div class="battery-gauge" style="--gauge-deg:${deg}deg; --gauge-color:${color}">
+            <span class="battery-gauge-value">${hasPct ? pctNum : '—'}<small>${hasPct ? '%' : ''}</small></span>
+          </div>
+          <div class="battery-gauge-label">Battery</div>
+          ${charging != null ? `<span class="charging-chip ${charging ? 'on' : 'off'}">${charging ? '⚡ Charging' : 'Not Charging'}</span>` : ''}
+        </div>
+        <div class="voltage-grid">
+          <div class="voltage-item">
+            <div class="volt-label">36 V Bus</div>
+            <div class="volt-value">${v36 != null ? Number(v36).toFixed(2) : '—'}</div>
+          </div>
+          <div class="voltage-item">
+            <div class="volt-label">12 V Bus</div>
+            <div class="volt-value">${v12 != null ? Number(v12).toFixed(2) : '—'}</div>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  function renderRobotStatusCard(rs) {
+    const kv = [
+      ['Robot Location', rs?.robot_location],
+      ['Person Location', rs?.person_location],
+      ['Position Mode', rs?.position],
+    ];
+    const tilt = rs?.over_tilt === true;
+    const xy = rs?.robot_location_xy;
+    const xyStr = Array.isArray(xy) && xy.length === 2 ? `(${Number(xy[0]).toFixed(2)}, ${Number(xy[1]).toFixed(2)})` : null;
+
+    return `
+      <div class="dash-card">
+        <div class="dash-card-header"><h3>Robot Status</h3><span class="dash-card-icon">🤖</span></div>
+        ${tilt ? '<div class="alert-banner danger">⚠ Over-Tilt Alert! Robot may have tipped.</div>' : ''}
+        <div class="status-kv">
+          ${kv.map(([label, val]) => `
+            <div class="status-kv-row">
+              <span class="status-kv-label">${escapeHtml(label)}</span>
+              <span class="status-kv-value">${val != null ? escapeHtml(val) : '<span class="muted">—</span>'}</span>
+            </div>`).join('')}
+          ${xyStr ? `
+            <div class="status-kv-row">
+              <span class="status-kv-label">Coordinates</span>
+              <span class="status-kv-value" style="font-family:monospace">${escapeHtml(xyStr)}</span>
+            </div>` : ''}
+        </div>
+      </div>`;
+  }
+
+  function renderProtocolActivityCard(ps) {
+    const counts = { running: 0, idle: 0, cooldown: 0, waiting: 0 };
+    for (const p of ps) {
+      const s = (p.state || '').toLowerCase();
+      if (s in counts) counts[s]++;
+    }
+    const running = ps.filter((p) => (p.state || '').toLowerCase() === 'running');
+
+    let tableHtml = '';
+    if (running.length) {
+      const rows = running.map((p) => {
+        const done = p.completed_step || 0;
+        const total = p.total_steps || 1;
+        const pct = Math.min(100, Math.round((done / total) * 100));
+        const startTime = p.started_at ? new Date(p.started_at).toLocaleTimeString() : '—';
+        return `
+          <tr>
+            <td>${escapeHtml(p.protocol)}</td>
+            <td><div class="mini-progress"><div class="mini-progress-bar" style="width:${pct}%"></div></div></td>
+            <td>${done}/${total}</td>
+            <td>${startTime}</td>
+          </tr>`;
+      }).join('');
+      tableHtml = `
+        <table class="running-table">
+          <thead><tr><th>Protocol</th><th>Progress</th><th>Step</th><th>Started</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>`;
+    } else {
+      tableHtml = '<div class="dash-no-data">No protocols currently running</div>';
+    }
+
+    return `
+      <div class="dash-card">
+        <div class="dash-card-header"><h3>Protocol Activity</h3><span class="dash-card-icon">▶</span></div>
+        <div class="proto-counts">
+          <div class="proto-count-tile running"><div class="count-num">${counts.running}</div><div class="count-label">Running</div></div>
+          <div class="proto-count-tile idle"><div class="count-num">${counts.idle}</div><div class="count-label">Idle</div></div>
+          <div class="proto-count-tile cooldown"><div class="count-num">${counts.cooldown}</div><div class="count-label">Cooldown</div></div>
+          <div class="proto-count-tile waiting"><div class="count-num">${counts.waiting}</div><div class="count-label">Waiting</div></div>
+        </div>
+        ${tableHtml}
+      </div>`;
+  }
+
+  function renderTodaySummaryCard(sum) {
+    const completed = sum?.completed ?? '—';
+    const failed = sum?.failed ?? '—';
+    const preempted = sum?.preempted ?? '—';
+    const total = sum?.total ?? '—';
+    const dateLabel = sum?.date ? sum.date : 'Today';
+
+    return `
+      <div class="dash-card">
+        <div class="dash-card-header"><h3>Today's Runs</h3><span class="dash-card-icon">📊</span></div>
+        <div class="summary-counts">
+          <div class="summary-tile completed"><div class="sum-num">${completed}</div><div class="sum-label">Completed</div></div>
+          <div class="summary-tile failed"><div class="sum-num">${failed}</div><div class="sum-label">Failed</div></div>
+          <div class="summary-tile preempted"><div class="sum-num">${preempted}</div><div class="sum-label">Preempted</div></div>
+          <div class="summary-tile total"><div class="sum-num">${total}</div><div class="sum-label">Total</div></div>
+        </div>
+        <div class="dash-no-data" style="font-size:11px; margin-top:-4px">${escapeHtml(dateLabel)}</div>
+      </div>`;
+  }
+
+  function renderSensorEventsCard(rs) {
+    const sensors = [
+      ['Coffee', rs?.coffee],
+      ['Bathroom', rs?.bathroom_sensor],
+      ['Start Exercise', rs?.start_exercise],
+      ['Stop Exercise', rs?.stop_exercise],
+    ];
+
+    return `
+      <div class="dash-card">
+        <div class="dash-card-header"><h3>Sensor Events</h3><span class="dash-card-icon">📡</span></div>
+        <div class="sensor-grid">
+          ${sensors.map(([label, val]) => `
+            <div class="sensor-dot-row">
+              <span class="sensor-dot ${val === true ? 'active' : ''}"></span>
+              <span class="sensor-dot-label">${escapeHtml(label)}</span>
+            </div>`).join('')}
+        </div>
+      </div>`;
   }
 
   // ======================================================================

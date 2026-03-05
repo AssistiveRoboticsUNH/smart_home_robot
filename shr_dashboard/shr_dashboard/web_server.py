@@ -236,6 +236,31 @@ def create_app() -> Flask:
         except Exception as exc:
             return jsonify({"ok": False, "error": f"state failed: {exc}"}), 500
 
+    @app.route("/api/protocol-summary", methods=["GET"])
+    def api_protocol_summary():
+        """Return lightweight counts of today's protocol runs by status.
+
+        Query params:
+          date – YYYY-MM-DD (default: today)
+        """
+        today = datetime.now().strftime("%Y-%m-%d")
+        date_str = request.args.get("date", today).strip() or today
+        try:
+            date_str = _parse_ymd(date_str, "date")
+            tracker = _get_tracker()
+            entries = tracker.get_compact_log_by_date(date_str, include_yielded=False)
+            counts = {"completed": 0, "failed": 0, "preempted": 0}
+            for e in entries:
+                s = e.get("status", "").lower()
+                if s in counts:
+                    counts[s] += 1
+            counts["total"] = len(entries)
+            return jsonify({"ok": True, "date": date_str, **counts})
+        except ValueError as exc:
+            return jsonify({"ok": False, "error": str(exc)}), 400
+        except Exception as exc:
+            return jsonify({"ok": False, "error": f"summary failed: {exc}"}), 500
+
     @app.route("/api/protocol-state/<path:protocol>", methods=["PATCH"])
     def api_protocol_state_update(protocol: str):
         """Update a single protocol's state from the dashboard.

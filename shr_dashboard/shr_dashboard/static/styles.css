@@ -971,3 +971,333 @@ textarea { min-height: 180px; resize: vertical; }
     width: 100%;
   }
 }
+
+/* ========== Home Dashboard (Dark Theme) ========== */
+
+.home-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+  gap: 18px;
+  padding: 4px;
+}
+
+.dash-card {
+  background: linear-gradient(135deg, rgba(15, 23, 42, 0.85) 0%, rgba(30, 41, 59, 0.80) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  padding: 18px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  color: #e2e8f0;
+}
+
+.dash-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+.dash-card-header h3 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: #f1f5f9;
+}
+.dash-card-header .dash-card-icon {
+  font-size: 18px;
+  opacity: 0.6;
+}
+
+/* --- Battery radial gauge --- */
+.battery-gauge-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+.battery-gauge {
+  position: relative;
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+}
+.battery-gauge::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  background: conic-gradient(
+    var(--gauge-color, var(--primary-2)) 0deg,
+    var(--gauge-color, var(--primary-2)) var(--gauge-deg, 0deg),
+    rgba(255, 255, 255, 0.08) var(--gauge-deg, 0deg),
+    rgba(255, 255, 255, 0.08) 360deg
+  );
+  mask: radial-gradient(farthest-side, transparent calc(100% - 14px), #000 calc(100% - 13px));
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 14px), #000 calc(100% - 13px));
+}
+.battery-gauge-value {
+  position: relative;
+  z-index: 1;
+  font-size: 28px;
+  font-weight: 700;
+  line-height: 1;
+  color: #f1f5f9;
+}
+.battery-gauge-value small {
+  font-size: 14px;
+  font-weight: 500;
+  color: #94a3b8;
+}
+.battery-gauge-label {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+/* --- Charging chip --- */
+.charging-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+.charging-chip.on {
+  background: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
+}
+.charging-chip.off {
+  background: rgba(255, 255, 255, 0.06);
+  color: #94a3b8;
+}
+
+/* --- Voltage readouts --- */
+.voltage-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.voltage-item {
+  text-align: center;
+  padding: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+.voltage-item .volt-label {
+  font-size: 11px;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.voltage-item .volt-value {
+  font-size: 20px;
+  font-weight: 700;
+  margin-top: 2px;
+  color: #e2e8f0;
+}
+
+/* --- Status KV rows --- */
+.status-kv {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.status-kv-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.status-kv-row:last-child { border-bottom: none; }
+.status-kv-label {
+  font-size: 13px;
+  color: #94a3b8;
+}
+.status-kv-value {
+  font-size: 13px;
+  font-weight: 600;
+  color: #e2e8f0;
+}
+
+/* --- Alert banner --- */
+.alert-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.alert-banner.danger {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+.alert-banner.ok {
+  background: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
+  border: 1px solid rgba(34, 197, 94, 0.25);
+}
+
+/* --- Protocol activity count badges --- */
+.proto-counts {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+.proto-count-tile {
+  text-align: center;
+  padding: 10px 4px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+.proto-count-tile .count-num {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1;
+}
+.proto-count-tile .count-label {
+  font-size: 10px;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin-top: 4px;
+}
+.proto-count-tile.running { background: rgba(34, 197, 94, 0.12); border-color: rgba(34, 197, 94, 0.2); }
+.proto-count-tile.running .count-num { color: #4ade80; }
+.proto-count-tile.idle .count-num { color: #94a3b8; }
+.proto-count-tile.cooldown { background: rgba(59, 130, 246, 0.12); border-color: rgba(59, 130, 246, 0.2); }
+.proto-count-tile.cooldown .count-num { color: #60a5fa; }
+.proto-count-tile.waiting { background: rgba(245, 158, 11, 0.12); border-color: rgba(245, 158, 11, 0.2); }
+.proto-count-tile.waiting .count-num { color: #fbbf24; }
+
+/* --- Running protocols mini table --- */
+.running-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  color: #e2e8f0;
+}
+.running-table th {
+  text-align: left;
+  padding: 4px 6px;
+  font-weight: 600;
+  color: #94a3b8;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+.running-table td {
+  padding: 5px 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.running-table tr:last-child td { border-bottom: none; }
+
+.mini-progress {
+  width: 100%;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.mini-progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, var(--primary), var(--primary-2));
+  border-radius: 3px;
+  transition: width 0.4s ease;
+}
+
+/* --- Summary count tiles --- */
+.summary-counts {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+.summary-tile {
+  text-align: center;
+  padding: 12px 4px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+.summary-tile .sum-num {
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1;
+}
+.summary-tile .sum-label {
+  font-size: 10px;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin-top: 4px;
+}
+.summary-tile.completed { background: rgba(34, 197, 94, 0.12); border-color: rgba(34, 197, 94, 0.2); }
+.summary-tile.completed .sum-num { color: #4ade80; }
+.summary-tile.failed { background: rgba(239, 68, 68, 0.12); border-color: rgba(239, 68, 68, 0.2); }
+.summary-tile.failed .sum-num { color: #f87171; }
+.summary-tile.preempted { background: rgba(245, 158, 11, 0.12); border-color: rgba(245, 158, 11, 0.2); }
+.summary-tile.preempted .sum-num { color: #fbbf24; }
+.summary-tile.total { background: rgba(255, 255, 255, 0.05); }
+.summary-tile.total .sum-num { color: #e2e8f0; }
+
+/* --- Sensor event dots --- */
+.sensor-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.sensor-dot-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+.sensor-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.15);
+}
+.sensor-dot.active {
+  background: #22c55e;
+  box-shadow: 0 0 8px rgba(34, 197, 94, 0.6);
+}
+.sensor-dot-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #cbd5e1;
+}
+
+/* --- No data placeholder --- */
+.dash-no-data {
+  font-size: 13px;
+  color: #94a3b8;
+  text-align: center;
+  padding: 12px 0;
+}
+
+/* --- Home responsive --- */
+@media (max-width: 760px) {
+  .home-grid {
+    grid-template-columns: 1fr;
+  }
+  .proto-counts,
+  .summary-counts {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
