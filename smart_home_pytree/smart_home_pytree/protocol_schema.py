@@ -38,7 +38,7 @@ ALLOWED_ACTION_BLOCK_KEYS = {"steps"}
 
 ALLOWED_TREE_STEP_KEYS = {"tree_name", "tree_params", "next_step_after"}
 ALLOWED_CONFIRMATION_STEP_KEYS = {"confirmation", "next_step_after"}
-ALLOWED_CONFIRMATION_BLOCK_KEYS = {"question", "on_yes", "on_no"}
+ALLOWED_CONFIRMATION_BLOCK_KEYS = {"question", "on_yes", "on_no", "execution_location"}
 ALLOWED_RESET_TYPES = {"eod", "instant", "periodic", "default"}
 ALLOWED_DAY_NAMES = {
     "monday",
@@ -68,6 +68,7 @@ RUN_TREE_SPECS = {
             "text": "str",
         },
         "optional_params": {
+            "execution_location": "str ('current', 'person', or landmark name)",
             "end_sleep": "number seconds (blocking sleep before step completion)",
         },
         "blackboard_value_param": "text",
@@ -78,6 +79,7 @@ RUN_TREE_SPECS = {
             "audio_path": "str (file path)",
         },
         "optional_params": {
+            "execution_location": "str ('current', 'person', or landmark name)",
             "end_sleep": "number seconds (blocking sleep before step completion)",
         },
         "blackboard_value_param": "audio_path",
@@ -88,6 +90,7 @@ RUN_TREE_SPECS = {
             "video_path": "str (file path)",
         },
         "optional_params": {
+            "execution_location": "str ('current', 'person', or landmark name)",
             "end_sleep": "number seconds (blocking sleep before step completion)",
         },
         "blackboard_value_param": "video_path",
@@ -253,6 +256,12 @@ def _validate_confirmation_step(confirmation: Any, path: str, locations: dict) -
     _reject_unknown_keys(confirmation, ALLOWED_CONFIRMATION_BLOCK_KEYS, path)
 
     _ensure_non_empty_string(confirmation.get("question"), f"{path}.question")
+    if "execution_location" in confirmation:
+        _validate_execution_location(
+            confirmation.get("execution_location"),
+            f"{path}.execution_location",
+            locations=locations,
+        )
 
     for branch_name in ("on_yes", "on_no"):
         branch_steps = confirmation.get(branch_name)
@@ -432,6 +441,21 @@ def _validate_tree_params(tree_name: str, tree_params: dict, path: str, location
                 raise ValueError(f"{key_path} must be >= 1")
         elif key == "end_sleep":
             _validate_nonnegative_seconds_number(value, key_path)
+        elif key == "execution_location":
+            _validate_execution_location(value, key_path, locations=locations)
+
+
+def _validate_execution_location(value: Any, path: str, locations: dict | None) -> None:
+    _ensure_non_empty_string(value, path)
+    raw = str(value).strip()
+    lowered = raw.lower()
+    if lowered in {"current", "person"}:
+        return
+    if locations is not None and raw not in locations:
+        raise ValueError(
+            f"{path}='{value}' is invalid. Expected 'current', 'person', or a landmark "
+            f"defined in top-level locations."
+        )
 
 
 def _validate_reset_pattern(reset_pattern: Any, path: str) -> None:

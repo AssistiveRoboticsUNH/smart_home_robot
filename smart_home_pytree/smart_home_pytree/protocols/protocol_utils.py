@@ -68,6 +68,8 @@ def build_blackboard_payload_tree(
         # Payload values (text/audio_path/video_path) are still read from blackboard;
         # only execution modifiers like end_sleep are passed through kwargs.
         extra_tree_kwargs["end_sleep"] = tree_params["end_sleep"]
+    if tree_params and "execution_location" in tree_params:
+        extra_tree_kwargs["execution_location"] = tree_params["execution_location"]
     if not protocol_name or not step_data_key:
         raise ValueError(
             f"[{node_name}] protocol_name and step_data_key are required for media trees"

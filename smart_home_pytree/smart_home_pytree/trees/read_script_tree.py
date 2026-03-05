@@ -12,7 +12,9 @@ from smart_home_pytree.behaviors.set_protocol_bb import SetProtocolBB
 from smart_home_pytree.behaviors.check_protocol_bb import CheckProtocolBB
 from smart_home_pytree.registry import load_protocols_to_bb, load_locations_to_blackboard
 from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
-from smart_home_pytree.trees.move_to_person_location import MoveToPersonLocationTree
+from smart_home_pytree.trees.execution_location_selector import (
+    build_execution_location_subtree,
+)
 from smart_home_pytree.utils import str2bool
 
 
@@ -59,6 +61,7 @@ class ReadScriptTree(BaseTreeRunner):
             )
         self.text = protocol_info[data_key]
         self.end_sleep = float(kwargs.get("end_sleep", 0) or 0)
+        self.execution_location = kwargs.get("execution_location", "current")
 
         super().__init__(
             node_name=node_name,
@@ -89,13 +92,13 @@ class ReadScriptTree(BaseTreeRunner):
             expected_value=True,
         )
             
-        move_to_person_tree = MoveToPersonLocationTree(
-            node_name=f"{self.protocol_name}_move_to_person",
+        move_to_execution_location = build_execution_location_subtree(
+            execution_location=self.execution_location,
+            node_name=f"{self.protocol_name}_{self.data_key}",
             robot_interface=self.robot_interface,
             debug=self.debug,
             executor=self.executor,
         )
-        move_to_person = move_to_person_tree.create_tree()
 
         # Custom behaviors
         read_script_reminder = ReadScript(
@@ -119,7 +122,7 @@ class ReadScriptTree(BaseTreeRunner):
             name=f"{self.protocol_name}_read_script", memory=True
         )
 
-        children = [move_to_person, read_script_reminder]
+        children = [move_to_execution_location, read_script_reminder]
         if self.end_sleep > 0:
             children.append(
                 wait.Wait(

@@ -133,13 +133,16 @@ class GenericProtocolTree(BaseTreeRunner):
         branch_name, step_idx_str = branch_prefix.split("_", 1)
         return branch_name, int(step_idx_str)
 
-    def _build_ask_confirmation_tree(self, confirm_data_key: str):
+    def _build_ask_confirmation_tree(
+        self, confirm_data_key: str, execution_location: str = "current"
+    ):
         """Create the AskQuestionTree subtree for a synthesized confirmation key."""
         return AskQuestionTree(
             node_name=f"{self.node_name}_{confirm_data_key}",
             robot_interface=self.robot_interface,
             protocol_name=self.protocol_name,
             data_key=confirm_data_key,
+            execution_location=execution_location,
             debug=self.debug,
             executor=self.executor,
         ).create_tree()
@@ -292,7 +295,10 @@ class GenericProtocolTree(BaseTreeRunner):
         """
         confirmation = step.get("confirmation") or {}
         confirm_key = self._confirm_key(idx)
-        ask_tree = self._build_ask_confirmation_tree(confirm_key)
+        execution_location = confirmation.get("execution_location", "current")
+        ask_tree = self._build_ask_confirmation_tree(
+            confirm_key, execution_location=execution_location
+        )
 
         yes_steps = confirmation.get("on_yes") or []
         no_steps = confirmation.get("on_no") or []
