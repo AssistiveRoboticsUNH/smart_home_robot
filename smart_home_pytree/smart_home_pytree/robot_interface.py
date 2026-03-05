@@ -1,11 +1,14 @@
+import json
+import os
 import threading
+from pathlib import Path
 
 import rclpy
 from geometry_msgs.msg import PoseWithCovarianceStamped
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
-from std_msgs.msg import Bool, Int32, String
+from std_msgs.msg import Bool, Float32, Int32, String
 
 
 ROBOT_STATE_SPECS = {
@@ -57,6 +60,22 @@ ROBOT_STATE_SPECS = {
         "ui_kind": "xy_proximity",
         "description": "Robot XY coordinates from AMCL in format (x, y).",
     },
+    "battery_percent": {
+        "kind": "int",
+        "description": "Battery state-of-charge percentage (0-100) from pimu.",
+    },
+    "voltage_36v": {
+        "kind": "float",
+        "description": "36V bus voltage from pimu.",
+    },
+    "voltage_12v": {
+        "kind": "float",
+        "description": "12V bus voltage from pimu.",
+    },
+    "over_tilt": {
+        "kind": "bool",
+        "description": "Robot tilt alert from pimu.",
+    },
 }
 
 
@@ -87,6 +106,18 @@ class RobotState:
     def keys(self):
         """Return a list of all available keys in the state."""
         return list(self._data.keys())
+
+    def snapshot(self) -> dict:
+        """Return a JSON-safe copy of the full state dict."""
+        out = {}
+        for k, v in self._data.items():
+            if isinstance(v, (str, int, float, bool)) or v is None:
+                out[k] = v
+            elif isinstance(v, (tuple, list)):
+                out[k] = list(v)
+            else:
+                out[k] = str(v)
+        return out
 
     # Debug / Introspection
     def __str__(self):
@@ -179,6 +210,20 @@ class RobotInterface(Node):
 
         self.create_subscription(String, "sim_time", self.sim_time_callback, 10)
 
+        # Pimu telemetry (published by pimu_monitor)
+        self.create_subscription(
+            Int32, "battery_percent", self.battery_percent_callback, self.qos_profile
+        )
+        self.create_subscription(
+            Float32, "voltage_36v", self.voltage_36v_callback, self.qos_profile
+        )
+        self.create_subscription(
+            Float32, "voltage_12v", self.voltage_12v_callback, self.qos_profile
+        )
+        self.create_subscription(
+            Bool, "over_tilt", self.over_tilt_callback, self.qos_profile
+        )
+
         self._initialized = True
         self.get_logger().info(
             "RobotInterface initialized and spinning in background thread."
@@ -191,10 +236,24 @@ class RobotInterface(Node):
         self.state.update("person_location", "living_room")
         # self.state.update("person_location", "bedroom")
 
+        # Periodically dump state to a shared JSON file for the dashboard
+        self._state_file = Path(os.getenv("SHR_STATE_FILE", "/tmp/shr_robot_state.json"))
+        self._state_dump_timer = self.create_timer(2.0, self._dump_state_to_file)
+
     def speak(self, text:str):
         msg = String()
         msg.data = text
         self.pub_speak.publish(msg)
+
+    def _dump_state_to_file(self):
+        """Write a JSON snapshot of RobotState to disk for the dashboard."""
+        try:
+            snapshot = self.state.snapshot()
+            tmp = self._state_file.with_suffix(".tmp")
+            tmp.write_text(json.dumps(snapshot, default=str))
+            tmp.replace(self._state_file)  # atomic on Linux
+        except Exception:
+            pass  # non-critical — don't spam logs
         
     def amcl_callback(self, msg):
         x = msg.pose.pose.position.x
@@ -256,6 +315,21 @@ class RobotInterface(Node):
         self.get_logger().debug(f"Simulated time: {msg.data}")
         # Example: msg.data = "10:30"
         self.state["sim_time"] = msg.data
+
+    # --- Pimu telemetry callbacks ---
+    def battery_percent_callback(self, msg: Int32):
+        self.get_logger().debug(f"Battery percent: {msg.data}")
+        self.state.update("battery_percent", msg.data)
+
+    def voltage_36v_callback(self, msg: Float32):
+        self.state.update("voltage_36v", round(float(msg.data), 2))
+
+    def voltage_12v_callback(self, msg: Float32):
+        self.state.update("voltage_12v", round(float(msg.data), 2))
+
+    def over_tilt_callback(self, msg: Bool):
+        self.get_logger().debug(f"Over tilt: {msg.data}")
+        self.state.update("over_tilt", msg.data)
 
 
 # ros2 topic pub /sim_time std_msgs/msg/String "{data: '10:30'}"

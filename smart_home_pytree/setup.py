@@ -41,6 +41,7 @@ setup(
             "play_video_locally = robot_actions.play_video_locally:main",
             "homeseer_sensor = smart_sensors.homeseer_sensor:main",
             "charge_monitor = smart_sensors.charge_monitor:main",
+            "pimu_monitor = smart_sensors.pimu_monitor:main",
             "mock_dock_undock = robot_actions.mock_dock_undock:main",
             "protocol_orchestrator = smart_home_pytree.protocol_orchestrator:main",
             

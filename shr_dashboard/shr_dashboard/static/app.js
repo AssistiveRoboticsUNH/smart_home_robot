@@ -125,7 +125,11 @@
 
   function eventKindForState(stateKey, fallbackValue) {
     const spec = robotStateSpec(stateKey);
-    if (spec?.kind) return spec.kind;
+    if (spec?.kind) {
+      const k = spec.kind;
+      if (k === 'int' || k === 'float' || k === 'number') return 'number';
+      return k;
+    }
     return guessValueType(fallbackValue);
   }
 

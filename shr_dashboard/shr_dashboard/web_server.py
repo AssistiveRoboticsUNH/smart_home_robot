@@ -59,6 +59,20 @@ def create_app() -> Flask:
     def health():
         return {"ok": True}
 
+    # ---- Robot State API (reads JSON file written by robot_interface) ----
+    _state_file = Path(os.getenv("SHR_STATE_FILE", "/tmp/shr_robot_state.json"))
+
+    @app.route("/api/robot-state", methods=["GET"])
+    def api_robot_state():
+        """Return the latest robot state snapshot (written by robot_interface every 2s)."""
+        try:
+            if not _state_file.exists():
+                return jsonify({"ok": False, "error": "State file not available yet."}), 503
+            data = json.loads(_state_file.read_text())
+            return jsonify({"ok": True, "state": data})
+        except Exception as exc:
+            return jsonify({"ok": False, "error": f"robot-state failed: {exc}"}), 500
+
     @app.route("/favicon.ico")
     def favicon():
         return ("", 204)
