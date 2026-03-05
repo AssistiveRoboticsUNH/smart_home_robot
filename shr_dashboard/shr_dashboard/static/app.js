@@ -1737,7 +1737,10 @@
             <span class="battery-gauge-value">${hasPct ? pctNum : '—'}<small>${hasPct ? '%' : ''}</small></span>
           </div>
           <div class="battery-gauge-label">Battery</div>
-          ${charging != null ? `<span class="charging-chip ${charging ? 'on' : 'off'}">${charging ? '⚡ Charging' : 'Not Charging'}</span>` : ''}
+        </div>
+        <div class="charging-bar ${charging === true ? 'on' : charging === false ? 'off' : 'unknown'}">
+          <span class="charging-dot"></span>
+          ${charging === true ? '⚡ Charging' : charging === false ? 'On Battery' : 'Status Unknown'}
         </div>
         <div class="voltage-grid">
           <div class="voltage-item">
