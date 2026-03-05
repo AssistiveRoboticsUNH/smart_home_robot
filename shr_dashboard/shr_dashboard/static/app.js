@@ -150,6 +150,10 @@
     return locs;
   }
 
+  function executionLocationOptions() {
+    return ['current', 'person', ...Object.keys(state.config?.locations || {})];
+  }
+
   function guessValueType(value) {
     if (typeof value === 'boolean') return 'bool';
     if (typeof value === 'number') return 'number';
@@ -162,6 +166,8 @@
 
   function makeDefaultParamValue(param) {
     switch (param.kind) {
+      case 'execution_location':
+        return 'current';
       case 'integer':
         return param.name === 'num_attempts' ? 3 : 1;
       case 'location':
@@ -187,6 +193,9 @@
       if (tree_params.position_state_key === '') tree_params.position_state_key = 'position';
       if (tree_params.state_key === '') tree_params.state_key = 'move_away';
     }
+    if ((meta.params || []).some((p) => p.name === 'execution_location')) {
+      tree_params.execution_location = tree_params.execution_location || 'current';
+    }
     return { tree_name: treeName, tree_params };
   }
 
@@ -194,6 +203,7 @@
     return {
       confirmation: {
         question: 'Do you want me to continue?',
+        execution_location: 'current',
         on_yes: [makeDefaultTreeStep('play_text')],
         on_no: [makeDefaultTreeStep('play_text')],
       },
@@ -760,6 +770,10 @@
       let control;
       if (param.kind === 'location') {
         control = `<select ${common}>${locationNames.map((loc) => `<option value="${escapeAttr(loc)}" ${String(value ?? '') === loc ? 'selected' : ''}>${escapeHtml(loc)}</option>`).join('')}</select>`;
+      } else if (param.kind === 'execution_location') {
+        const options = executionLocationOptions();
+        const selected = String(value ?? 'current');
+        control = `<select ${common}>${options.map((opt) => `<option value="${escapeAttr(opt)}" ${selected === opt ? 'selected' : ''}>${escapeHtml(opt)}</option>`).join('')}</select>`;
       } else if (param.kind === 'integer') {
         control = `<input type="number" ${common} value="${escapeAttr(value ?? '')}" />`;
       } else if (param.kind === 'number') {
@@ -875,6 +889,8 @@
 
   function renderConfirmationStep(step, idx) {
     const confirmation = step.confirmation || { question: '', on_yes: [], on_no: [] };
+    const execLocation = String(confirmation.execution_location || 'current');
+    const execOptions = executionLocationOptions();
     const collapsed = isStepCollapsed('top', idx, null);
     return `
       <div class="step-card ${collapsed ? 'collapsed' : ''}">
@@ -896,9 +912,15 @@
         </div>
         ${collapsed ? '' : `
         <div class="row">
-          <div class="col-12">
+          <div class="col-8">
             <label>Question</label>
             <input type="text" data-action="confirm-question" data-step-idx="${idx}" value="${escapeAttr(confirmation.question || '')}" />
+          </div>
+          <div class="col-4">
+            <label>execution_location</label>
+            <select data-action="confirm-execution-location" data-step-idx="${idx}">
+              ${execOptions.map((opt) => `<option value="${escapeAttr(opt)}" ${execLocation === opt ? 'selected' : ''}>${escapeHtml(opt)}</option>`).join('')}
+            </select>
           </div>
           <div class="col-6">
             <label title="Scheduler pause before the next step (other protocols may run)">next_step_after (after confirmation branch)</label>
@@ -1112,6 +1134,9 @@
       if (nextParams.state_key === '' || nextParams.state_key == null) {
         nextParams.state_key = 'move_away';
       }
+    }
+    if ((meta.params || []).some((p) => p.name === 'execution_location')) {
+      if (!nextParams.execution_location) nextParams.execution_location = 'current';
     }
     step.tree_params = nextParams;
   }
@@ -1639,6 +1664,8 @@
           value = target.value === '' ? '' : Number.parseInt(target.value, 10);
         } else if (spec?.kind === 'number') {
           value = target.value === '' ? '' : Number.parseFloat(target.value);
+        } else if (spec?.kind === 'execution_location') {
+          value = target.value || 'current';
         } else {
           value = parseMaybeNumber(target.value);
         }
@@ -1660,6 +1687,12 @@
       }
       if (action === 'confirm-question') {
         currentSteps(protocol)[Number(target.dataset.stepIdx)].confirmation.question = target.value;
+        setDirty(true);
+        return;
+      }
+      if (action === 'confirm-execution-location') {
+        const confirmation = currentSteps(protocol)[Number(target.dataset.stepIdx)].confirmation;
+        confirmation.execution_location = target.value || 'current';
         setDirty(true);
         return;
       }
