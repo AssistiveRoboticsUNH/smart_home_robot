@@ -11,7 +11,7 @@ import py_trees_ros.trees
 import rclpy
 from py_trees import display
 
-from smart_home_pytree.registry import load_locations_to_blackboard
+
 from smart_home_pytree.robot_interface import RobotInterface
 from smart_home_pytree.utils import BlackboardLogger
 
@@ -303,7 +303,11 @@ class BaseTreeRunner:
         if not self.nodes_cleanup_done:
             self.nodes_cleanup()
 
-        if self.mode == TreeRunMode.STANDALONE and self.rclpy_initialized_here:
+        if (
+            self.mode == TreeRunMode.STANDALONE
+            and self.rclpy_initialized_here
+            and rclpy.ok()
+        ):
             if self.debug:
                 print("[BaseTreeRunner] rclpy shutdown")
             rclpy.shutdown()

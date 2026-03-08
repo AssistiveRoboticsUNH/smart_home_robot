@@ -9,6 +9,7 @@ from datetime import datetime
 import py_trees
 import rclpy
 from rclpy.executors import MultiThreadedExecutor
+from rclpy.signals import SignalHandlerOptions
 
 from smart_home_pytree.human_interface import HumanInterface
 from smart_home_pytree.registry import load_protocols_to_bb, load_locations_to_blackboard
@@ -42,7 +43,10 @@ class ProtocolOrchestrator:
 
         if not rclpy.ok():
             try:
-                rclpy.init(args=None)
+                rclpy.init(
+                    args=None,
+                    signal_handler_options=SignalHandlerOptions.NO,
+                )
                 self.rclpy_initialized_here = True
                 print(
                     " self.rclpy_initialized_here should be true: ",
@@ -485,6 +489,9 @@ def main():
         orch.orchestrator_loop()
     except KeyboardInterrupt:
         print("[Main] KeyboardInterrupt received.")
+        orch.bb_logger.info("KeyboardInterrupt received. Triggering shutdown...")
+        orch.stop_flag = True
+        orch.orchestrator_wakeup.set()
     finally:
         orch.shutdown()
 
@@ -496,6 +503,9 @@ if __name__ == "__main__":
 # ros2 topic pub /display_rx std_msgs/msg/String "data: 'exercise_requested'"
 # ros2 topic pub /display_rx std_msgs/msg/String "data: 'exercise_stop'"
 
-
+# ros2 run smart_home_pytree protocol_orchestrator --  --test_time 10:30 --env_yaml_file_name house_yaml_path
 # ros2 run smart_home_pytree protocol_orchestrator -- --debug --test_time 10:30 --env_yaml_file_name house_yaml_path
 # ros2 run rqt_console rqt_console
+
+
+

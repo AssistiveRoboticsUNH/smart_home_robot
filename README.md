@@ -88,6 +88,7 @@ It is already included in `.gitignore` to prevent accidental commits.
 ## Running in Simulation
 note you will need the turtlebot package installed
 
+
 Run the launch script
 ```
 ros2 launch smart_home_pytree sim_robot.launch.py

@@ -5,12 +5,11 @@ import py_trees
 
 from smart_home_pytree.behaviors.action_behaviors.yield_wait import YieldWait
 from smart_home_pytree.behaviors.check_protocol_bb import CheckProtocolBB
-from smart_home_pytree.registry import load_protocols_to_bb
+from smart_home_pytree.registry import load_protocols_to_bb, load_locations_to_blackboard
 from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
 from smart_home_pytree.protocols.protocol_utils import make_reminder_tree
 from smart_home_pytree.trees.wait_tree import WaitTree
 from smart_home_pytree.utils import parse_duration, str2bool
-
 
 class XReminderProtocolTree(BaseTreeRunner):
     """
@@ -187,49 +186,30 @@ def main(args=None):
 
     blackboard = py_trees.blackboard.Blackboard()
 
-    # test loading and removing from blackboard
-    # load_protocol_info_from_bb(yaml_path, protocol_name)
-
-    # print("\n Blackboard updated:")
-    # print(f"  first_text: {blackboard.get('first_text')}")
-    # print(f"  second_text: {blackboard.get('second_text')}")
-
-    # remove_protocol_info_from_bb(yaml_path, protocol_name)
-    # try:
-    #     print("\n Blackboard updated:")
-    #     print(f"  first_text: {blackboard.get('first_text')}")
-    #     print(f"  second_text: {blackboard.get('second_text')}")
-    # except:
-    #     print("not in blackboard")
-    # finish loading and removing from blackboard
-
-    # done in base class
-    # load_locations_to_blackboard(yaml_file_path)
-
+    load_locations_to_blackboard(yaml_file_path)
     load_protocols_to_bb(yaml_file_path)
+    tree_runner = None
+    try:
+        tree_runner = XReminderProtocolTree(
+            node_name="x_reminder_protocol_tree",
+            protocol_name=protocol_name,
+        )
+        tree_runner.setup()
 
-    tree_runner = XReminderProtocolTree(
-        node_name="x_reminder_protocol_tree",
-        protocol_name=protocol_name,
-    )
-    tree_runner.setup()
-
-    print("run_continuous", args.run_continuous)
-    if args.run_continuous:
-        tree_runner.run_continuous()
-    else:
-        tree_runner.run_until_done()
-    # try:
-
-    # finally:
-    for key, value in blackboard.storage.items():
-        print(f"{key} : {value}")
-
-        # tree_runner.cleanup()
-
+        print("run_continuous", args.run_continuous)
+        if args.run_continuous:
+            tree_runner.run_continuous()
+        else:
+            tree_runner.run_until_done()
+    except KeyboardInterrupt:
+        if tree_runner:
+            tree_runner.stop_tree()
+        print("KeyboardInterrupt: tree stopped.")
+   
 
 if __name__ == "__main__":
     main()
 
 
 # python3 two_reminder_protocol.py --protocol_name medicine_am
+
