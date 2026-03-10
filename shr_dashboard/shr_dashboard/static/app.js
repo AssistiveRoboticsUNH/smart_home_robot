@@ -31,6 +31,7 @@
         triggers: true,
         reset: true,
         actions: true,
+        other_params: false,
         yaml: false,
       },
       scroll: {
@@ -152,6 +153,10 @@
 
   function executionLocationOptions() {
     return ['current', 'person', ...Object.keys(state.config?.locations || {})];
+  }
+
+  function personInitOptions() {
+    return ['', ...Object.keys(state.config?.locations || {})];
   }
 
   function guessValueType(value) {
@@ -1010,6 +1015,24 @@
       </div>`;
   }
 
+  function renderOtherParametersSection() {
+    const value = state.config?.person_init ?? '';
+    const options = personInitOptions();
+    return `
+      <div class="form-grid">
+        <div class="field">
+          <label>person_init</label>
+          <select data-action="person-init">
+            ${options.map((opt) => {
+              const label = opt === '' ? 'None' : opt;
+              return `<option value="${escapeAttr(opt)}" ${value === opt ? 'selected' : ''}>${escapeHtml(label)}</option>`;
+            }).join('')}
+          </select>
+          <div class="inline-note">Optional initial person landmark loaded into robot state at startup. Select None to disable.</div>
+        </div>
+      </div>`;
+  }
+
   function renderEditorPanel() {
     const protocol = selectedProtocolObj();
     if (!protocol) {
@@ -1042,7 +1065,9 @@
 
         ${renderCollapsibleSection('reset', '4. Scheduling & Reset', 'Priority and reset pattern determine how often the protocol can run.', renderResetSection(protocol))}
 
-        ${renderCollapsibleSection('yaml', '5. YAML Preview', 'Preview updates after save validation.', `
+        ${renderCollapsibleSection('other_params', '5. Other Parameters', 'Global house-yaml parameters that affect runtime behavior outside individual protocol definitions.', renderOtherParametersSection())}
+
+        ${renderCollapsibleSection('yaml', '6. YAML Preview', 'Preview updates after save validation.', `
           <pre class="code-preview">${escapeHtml(state.yamlPreview || '')}</pre>
         `)}
       </div>`;
@@ -1526,6 +1551,11 @@
         markRecentProtocol(newName);
         setDirty(true);
         renderRoute();
+        return;
+      }
+      if (action === 'person-init') {
+        state.config.person_init = target.value || null;
+        setDirty(true);
         return;
       }
       if (!protocol) return;

@@ -12,14 +12,19 @@ Designed to run on the robot and be accessed over the local network.
 from __future__ import annotations
 
 import argparse
+import threading
 import json
 import os
 import time as _time
 from datetime import datetime
 from pathlib import Path
 
+import rclpy
+from rclpy.executors import MultiThreadedExecutor
 from flask import Flask, Response, jsonify, request, send_from_directory
 from ament_index_python.packages import get_package_share_directory
+
+from smart_home_pytree.robot_interface import RobotInterface
 
 from .config_service import (
     DashboardConfigError,
@@ -47,9 +52,65 @@ def _resolve_static_dir() -> Path:
     return Path(__file__).parent / "static"
 
 
+def _start_robot_state_client(app: Flask) -> None:
+    """Attach a live RobotInterface to the dashboard process."""
+    app._robot_interface = None
+    app._robot_executor = None
+    app._robot_spin_thread = None
+    app._rclpy_initialized_here = False
+    app._robot_state_error = None
+
+    try:
+        if not rclpy.ok():
+            rclpy.init(args=None)
+            app._rclpy_initialized_here = True
+
+        robot_interface = RobotInterface()
+        executor = MultiThreadedExecutor(num_threads=2)
+        executor.add_node(robot_interface)
+
+        spin_thread = threading.Thread(target=executor.spin, daemon=True)
+        spin_thread.start()
+
+        app._robot_interface = robot_interface
+        app._robot_executor = executor
+        app._robot_spin_thread = spin_thread
+    except Exception as exc:
+        app._robot_state_error = str(exc)
+
+
+def _stop_robot_state_client(app: Flask) -> None:
+    """Stop the dashboard-owned RobotInterface if it was created here."""
+    executor = getattr(app, "_robot_executor", None)
+    robot_interface = getattr(app, "_robot_interface", None)
+    spin_thread = getattr(app, "_robot_spin_thread", None)
+
+    if executor is not None:
+        try:
+            executor.shutdown()
+        except Exception:
+            pass
+
+    if robot_interface is not None:
+        try:
+            robot_interface.destroy_node()
+        except Exception:
+            pass
+
+    if spin_thread is not None and spin_thread.is_alive():
+        spin_thread.join(timeout=2)
+
+    if getattr(app, "_rclpy_initialized_here", False) and rclpy.ok():
+        try:
+            rclpy.shutdown()
+        except Exception:
+            pass
+
+
 def create_app() -> Flask:
     static_dir = _resolve_static_dir()
     app = Flask(__name__, static_folder=str(static_dir), static_url_path="/static")
+    _start_robot_state_client(app)
 
     @app.route("/")
     def index():
@@ -59,16 +120,15 @@ def create_app() -> Flask:
     def health():
         return {"ok": True}
 
-    # ---- Robot State API (reads JSON file written by robot_interface) ----
-    _state_file = Path(os.getenv("SHR_STATE_FILE", "/tmp/shr_robot_state.json"))
-
     @app.route("/api/robot-state", methods=["GET"])
     def api_robot_state():
-        """Return the latest robot state snapshot (written by robot_interface every 2s)."""
+        """Return the latest live robot state snapshot from RobotInterface."""
         try:
-            if not _state_file.exists():
-                return jsonify({"ok": False, "error": "State file not available yet."}), 503
-            data = json.loads(_state_file.read_text())
+            if getattr(app, "_robot_state_error", None):
+                return jsonify({"ok": False, "error": app._robot_state_error}), 503
+            if getattr(app, "_robot_interface", None) is None:
+                return jsonify({"ok": False, "error": "Robot state interface not available yet."}), 503
+            data = app._robot_interface.state.snapshot()
             return jsonify({"ok": True, "state": data})
         except Exception as exc:
             return jsonify({"ok": False, "error": f"robot-state failed: {exc}"}), 500
@@ -377,7 +437,10 @@ def main(args=None):
     parsed = parser.parse_args(args=args)
 
     app = create_app()
-    app.run(host=parsed.host, port=parsed.port, debug=parsed.debug, use_reloader=False)
+    try:
+        app.run(host=parsed.host, port=parsed.port, debug=parsed.debug, use_reloader=False)
+    finally:
+        _stop_robot_state_client(app)
 
 
 if __name__ == "__main__":

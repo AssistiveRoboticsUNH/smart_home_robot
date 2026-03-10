@@ -8,6 +8,7 @@
   <license>TODO: License declaration</license>
 
   <depend>smart_home_pytree</depend>
+  <exec_depend>rclpy</exec_depend>
   <exec_depend>python3-flask</exec_depend>
   <exec_depend>python3-yaml</exec_depend>
 
