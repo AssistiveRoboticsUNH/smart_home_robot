@@ -5,6 +5,33 @@ import yaml
 from typing import Dict, List, Optional
 from pathlib import Path
 
+
+def _find_mtp_exercise_videos_path() -> Optional[Path]:
+    """
+    Find the Exercise_Videos directory on any connected MTP device.
+    Scans GVFS mounts under /run/user/<uid>/gvfs/mtp:host=*/ for Exercise_Videos.
+    """
+    gvfs_base = Path(f"/run/user/{os.getuid()}/gvfs")
+    if not gvfs_base.exists():
+        return None
+    for mtp_dir in gvfs_base.glob("mtp:host=*"):
+        if not mtp_dir.is_dir():
+            continue
+        # Prefer standard Android layout: Internal storage -> Download -> Exercise_Videos
+        for suffix in (
+            "Internal storage/Download/Exercise_Videos",
+        ):
+            candidate = mtp_dir / suffix
+            print(f"Checking for Exercise_Videos at {candidate}")
+            if candidate.exists():
+                print(f"Found Exercise_Videos at {candidate}")
+                return candidate
+        # Fallback: search recursively for any Exercise_Videos dir
+        for sub in mtp_dir.rglob("Exercise_Videos"):
+            if sub.is_dir():
+                return sub
+    return None
+
 import py_trees
 import py_trees_ros
 import rclpy
@@ -18,6 +45,7 @@ from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
 from smart_home_pytree.trees.move_to_person_location import MoveToPersonLocationTree
 from smart_home_pytree.utils import str2bool
 
+## todo change to bb loger self.logger
 # --- Helper Behaviors ---
 class CheckRobotStateKey_(py_trees.behaviour.Behaviour):
     """
@@ -158,18 +186,17 @@ class ExerciseRandomProtocolTree(BaseTreeRunner):
         return difficulty
 
     def build_video_pool_tablet(self, root_dir: str) -> List[Dict]:
-        # 1. Standard Tablet path file ..
+        # 1. Standard tablet path (fallback when tablet not mounted via USB)
         tablet_base_path = root_dir.replace("file://", "")
-        
-        ##  todo make this work fro any tablet
-        # 2. USB path (The path the Laptop needs to scan the files)
-        usb_base_path = "/run/user/1000/gvfs/mtp:host=SAMSUNG_SAMSUNG_Android_R52X10DHJDW/Internal storage/Download/Exercise_Videos"
 
-        # Decide which one to use for scanning
-        scan_root = Path(usb_base_path) if Path(usb_base_path).exists() else Path(tablet_base_path)
+        # 2. Dynamically find USB/MTP mount path (laptop scans via GVFS when tablet is connected)
+        usb_base_path = _find_mtp_exercise_videos_path()
+
+        # Decide which one to use for scanning: prefer USB if available
+        scan_root = Path(usb_base_path) if usb_base_path else Path(tablet_base_path)
 
         if not scan_root.exists():
-            raise FileNotFoundError(f"Could not find video directory at {scan_root}, MAKE SURE TABLET IS CONNECTED TO MACHINE USB MODE NOT CHARGING ONLY ")
+            raise FileNotFoundError(f"Could not find video directory at {scan_root}, MAKE SURE TABLET IS CONNECTED TO MACHINE USB MODE NOT CHARGING ONLY, Set Default USB configuration in Developer options to transfer data")
 
         video_pool = []
         for video_path in scan_root.rglob("*.mp4"):
@@ -237,7 +264,7 @@ class ExerciseRandomProtocolTree(BaseTreeRunner):
 
         if not candidates:
             # Fallback: if no candidates match, return random or raise error
-            self.bb_logger.warning(f"No videos found for difficulty {difficulty_filter}")
+            self.bb_logger.warn(f"No videos found for difficulty {difficulty_filter}")
             return []
 
         return random.sample(candidates, min(total_num, len(candidates)))
@@ -505,7 +532,7 @@ def main(args=None):
     protocol_name = args.protocol_name
     print("protocol_name: ", protocol_name)
 
-    yaml_file_path = os.getenv("house_yaml_path_test", None)
+    yaml_file_path = os.getenv("house_yaml_path", None)
     load_locations_to_blackboard(yaml_file_path, debug=False)
     load_protocols_to_bb(yaml_file_path, debug=True)
 
