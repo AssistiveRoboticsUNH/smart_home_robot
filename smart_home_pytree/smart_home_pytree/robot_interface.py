@@ -1,7 +1,5 @@
-import json
 import os
 import threading
-from pathlib import Path
 
 import rclpy
 from geometry_msgs.msg import PoseWithCovarianceStamped
@@ -9,6 +7,11 @@ from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
 from std_msgs.msg import Bool, Float32, Int32, String
+
+from smart_home_pytree.protocol_schema import load_house_config_yaml
+
+
+_PERSON_INIT_UNSET = object()
 
 
 ROBOT_STATE_SPECS = {
@@ -79,6 +82,25 @@ ROBOT_STATE_SPECS = {
 }
 
 
+def resolve_person_init_from_yaml_path(yaml_path: str | None) -> str | None:
+    """Read optional person_init from house yaml."""
+    if not yaml_path or not os.path.isfile(yaml_path):
+        return None
+
+    data = load_house_config_yaml(yaml_path)
+    value = data.get("person_init")
+    if value is None:
+        return None
+
+    text = str(value).strip()
+    return text or None
+
+
+def resolve_person_init(yaml_path_key: str = "house_yaml_path") -> str | None:
+    """Resolve person_init using the configured house-yaml environment variable."""
+    return resolve_person_init_from_yaml_path(os.getenv(yaml_path_key))
+
+
 class RobotState:
     """Thread-safe singleton state container."""
 
@@ -139,19 +161,24 @@ class RobotInterface(Node):
     _instance = None
     _lock = threading.Lock()
 
-    def __new__(cls):
+    def __new__(cls, *args, **kwargs):
         if cls._instance is None:
             with cls._lock:
                 if cls._instance is None:
                     cls._instance = super().__new__(cls)
         return cls._instance
 
-    def __init__(self):
+    def __init__(self, *, person_init=_PERSON_INIT_UNSET, yaml_path_key="house_yaml_path"):
         if getattr(self, "_initialized", False):
             return
 
         super().__init__("robot_interface")
         self.state = RobotState()
+        self.person_init = (
+            resolve_person_init(yaml_path_key=yaml_path_key)
+            if person_init is _PERSON_INIT_UNSET
+            else person_init
+        )
         self.qos_profile = QoSProfile(
             reliability=ReliabilityPolicy.RELIABLE,
             history=HistoryPolicy.KEEP_LAST,
@@ -228,32 +255,16 @@ class RobotInterface(Node):
         self.get_logger().info(
             "RobotInterface initialized and spinning in background thread."
         )
-        # self.state.update('robot_location_xy', None)
-
-        self.get_logger().warn(
-            "person_location initialset to living_room. SHOULD BE ONLY USED FOR TESTING"
-        )
-        self.state.update("person_location", "living_room")
-        # self.state.update("person_location", "bedroom")
-
-        # Periodically dump state to a shared JSON file for the dashboard
-        self._state_file = Path(os.getenv("SHR_STATE_FILE", "/tmp/shr_robot_state.json"))
-        self._state_dump_timer = self.create_timer(2.0, self._dump_state_to_file)
+        if self.person_init:
+            self.get_logger().warn(
+                f"person_location initialized from house yaml: {self.person_init}"
+            )
+            self.state.update("person_location", self.person_init)
 
     def speak(self, text:str):
         msg = String()
         msg.data = text
         self.pub_speak.publish(msg)
-
-    def _dump_state_to_file(self):
-        """Write a JSON snapshot of RobotState to disk for the dashboard."""
-        try:
-            snapshot = self.state.snapshot()
-            tmp = self._state_file.with_suffix(".tmp")
-            tmp.write_text(json.dumps(snapshot, default=str))
-            tmp.replace(self._state_file)  # atomic on Linux
-        except Exception:
-            pass  # non-critical — don't spam logs
         
     def amcl_callback(self, msg):
         x = msg.pose.pose.position.x
@@ -336,7 +347,7 @@ class RobotInterface(Node):
 
 
 def main():
-    """for standalone testing ONLY"""
+    """Standalone RobotInterface spin helper for direct execution."""
     rclpy.init()
 
     robot_interface = RobotInterface()

@@ -90,7 +90,9 @@ class ProtocolOrchestrator:
         self.required_state_keys = ["charging"]
         self.last_satisfied = None
 
-        self.robot_interface = robot_interface or RobotInterface()
+        self.robot_interface = robot_interface or RobotInterface(
+            yaml_path_key=yaml_path_key or "house_yaml_path",
+        )
         
         # Setup logger
         blackboard = py_trees.blackboard.Blackboard()

@@ -19,8 +19,7 @@ import yaml
 
 ALLOWED_TOP_LEVEL_KEYS = {
     "locations",
-    "person_location_state",
-    "robot_location_state",
+    "person_init",
     "protocols",
 }
 
@@ -142,6 +141,7 @@ def validate_house_config(data: dict) -> None:
 
     locations = data.get("locations")
     _validate_locations(locations)
+    _validate_person_init(data.get("person_init"), "person_init", locations)
 
     protocols = data.get("protocols")
     _ensure_type(protocols, dict, "protocols")
@@ -159,6 +159,16 @@ def _validate_locations(locations: Any) -> None:
     for loc_name, loc in locations.items():
         _ensure_non_empty_string(loc_name, f"locations[{loc_name!r}] key")
         _ensure_type(loc, dict, f"locations.{loc_name}")
+
+
+def _validate_person_init(value: Any, path: str, locations: dict) -> None:
+    if value is None:
+        return
+    _ensure_non_empty_string(value, path)
+    if value not in locations:
+        raise ValueError(
+            f"{path}='{value}' is invalid. Expected null or a landmark defined in top-level locations."
+        )
 
 
 def _validate_protocol(protocol_name: str, protocol_data: Any, locations: dict) -> None:
