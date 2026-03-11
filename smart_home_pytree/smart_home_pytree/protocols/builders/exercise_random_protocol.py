@@ -12,7 +12,7 @@ import rclpy
 from shr_msgs.action import PlayVideoRequest
 from smart_home_pytree.behaviors.action_behaviors.read_script_aalp import ReadScript
 from smart_home_pytree.behaviors.action_behaviors.wait import Wait
-from smart_home_pytree.registry import load_protocols_to_bb, load_locations_to_blackboard
+from smart_home_pytree.protocols.registry import load_protocols_to_bb, load_locations_to_blackboard
 from smart_home_pytree.trees.ask_question_tree import AskQuestionTree
 from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
 from smart_home_pytree.trees.move_to_person_location import MoveToPersonLocationTree

@@ -8,7 +8,7 @@ from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
 from std_msgs.msg import Bool, Float32, Int32, String
 
-from smart_home_pytree.protocol_schema import load_house_config_yaml
+from smart_home_pytree.protocols.loader import load_house_config_yaml
 
 
 _PERSON_INIT_UNSET = object()

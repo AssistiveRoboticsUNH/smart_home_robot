@@ -8,7 +8,7 @@ Helper script to avoid repeating code for differnt protocols
 import py_trees
 from smart_home_pytree.behaviors.check_protocol_bb import CheckProtocolBB
 from smart_home_pytree.behaviors.set_protocol_bb import SetProtocolBB
-from smart_home_pytree.protocol_schema import RUN_TREE_SPECS
+from smart_home_pytree.protocols.schema import RUN_TREE_SPECS
 from smart_home_pytree.trees.charge_robot_tree import ChargeRobotTree
 from smart_home_pytree.trees.move_away_tree import MoveAwayTree
 from smart_home_pytree.trees.play_audio_tree import PlayAudioTree

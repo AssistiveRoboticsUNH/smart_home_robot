@@ -1,55 +1,30 @@
-"""
-General utility functions for the Smart Home Robot project.
+"""Shared cross-cutting helpers for Smart Home PyTree."""
 
-This module contains helper functions for parsing configuration values,
-converting data types, and handling common string operations used across
-multiple robot behaviors and orchestrators.
-"""
+from __future__ import annotations
 
+import logging
+import os
+import pprint
 from typing import Union
+
+import yaml
+from rclpy.logging import LoggingSeverity
+
+logger = logging.getLogger(__name__)
 
 
 def str2bool(value: Union[str, int, bool]) -> bool:
-    """
-    Convert a string, integer, or boolean input into a boolean value.
-
-    This function is case-insensitive and recognizes common truthy strings.
-
-    Args:
-        value (Union[str, int, bool]): The input value to convert.
-            Accepts 'true', '1', 't', 'yes' (case-insensitive) as True.
-
-    Returns:
-        bool: True if the input matches a truthy value, False otherwise.
-    """
+    """Convert common truthy string/int values into a boolean."""
     return str(value).lower() in ("true", "1", "t", "yes")
 
 
 def parse_duration(value: Union[str, int, float]) -> int:
-    """
-    Parse a duration input into an integer representing seconds.
-
-    Handles integers, simple strings, and mathematical string expressions
-    often found in configuration files (e.g., multiplication).
-
-    Args:
-        value (Union[str, int, float]): The duration value to parse.
-            - Integers/Floats: Returned as int.
-            - Strings: Can be a number ("50") or an expression ("2*60").
-
-    Returns:
-        int: The parsed duration in seconds. Returns 0 if parsing fails.
-    """
-    # 1. Handle direct numbers (int or float)
+    """Parse numeric or simple math-string durations into whole seconds."""
     if isinstance(value, (int, float)):
         return int(value)
 
-    # 2. Handle strings
     if isinstance(value, str):
-        # Remove whitespace for cleaner processing
         clean_value = value.strip()
-
-        # Case A: Mathematical expression (currently supports multiplication)
         if "*" in clean_value:
             parts = clean_value.split("*")
             try:
@@ -61,108 +36,82 @@ def parse_duration(value: Union[str, int, float]) -> int:
                 logger.error("Could not parse math string in duration: '%s'", value)
                 return 0
 
-        # Case B: Simple number string
         try:
-            return int(float(clean_value))  # float cast handles "50.5" -> 50
+            return int(float(clean_value))
         except ValueError:
             logger.warning(
                 "Invalid duration string provided: '%s'. Defaulting to 0.", value
             )
             return 0
 
-    # 3. Handle unexpected types (lists, dicts, None)
     logger.debug("Unexpected type passed to parse_duration: %s", type(value))
     return 0
 
 
-# --- Setup logging logic ---
-import pprint
-import py_trees
-from rclpy.node import Node
-from rclpy.logging import LoggingSeverity
+def get_env(name: str, default: str | None = None) -> str | None:
+    return os.getenv(name, default)
+
+
+
+def get_house_yaml_path(env_key: str | None = None) -> str | None:
+    if env_key:
+        return os.getenv(env_key)
+    return os.getenv("house_yaml_path") or os.getenv("HOUSE_YAML_PATH")
+
+
+
+def load_yaml_file(yaml_path: str) -> dict:
+    with open(yaml_path, "r", encoding="utf-8") as file:
+        return yaml.safe_load(file) or {}
+
 
 class BlackboardLogger:
-    """
-    A unified logger that sits on the Blackboard.
-    It automatically detects if a ROS node is available.
-    """
-    def __init__(self, node=None, debug_mode=False):
-        """
-        Initialize the BlackboardLogger.
+    """Logger wrapper stored on the py_trees blackboard."""
 
-        Args:
-            node (rclpy.node.Node, optional):
-                ROS 2 node used to access the rclpy logger. If None,
-                the logger operates in non-ROS mode and prints to stdout.
-            debug_mode (bool):
-                sets logger level to debug.
-        """
+    def __init__(self, node=None, debug_mode: bool = False):
         self.node = node
         self.debug_mode = debug_mode
-        
-        # Configure ROS logger if node exists
+        self._logger = None
+
         if self.node:
             self._logger = self.node.get_logger()
-            if self.debug_mode:
-                self._logger.set_level(LoggingSeverity.DEBUG)
-            else:
-                self._logger.set_level(LoggingSeverity.INFO)
-        else:
-            self._logger = None
-        
-        self._logger.info(str("BlackboardLogger initialized"))
+            self._logger.set_level(
+                LoggingSeverity.DEBUG if self.debug_mode else LoggingSeverity.INFO
+            )
+
+        self.info("BlackboardLogger initialized")
 
     def info(self, message):
-        """
-        Log an informational message.
-        """
         if self._logger:
             self._logger.info(str(message))
         else:
             print(f"[INFO] {message}")
 
     def warn(self, message):
-        """
-        Log a warning message.
-        """
         if self._logger:
             self._logger.warn(str(message))
         else:
             print(f"[WARN] {message}")
 
     def error(self, message):
-        """
-        Log an error message.
-        """
         if self._logger:
             self._logger.error(str(message))
         else:
             print(f"[ERROR] {message}")
 
     def debug(self, message):
-        """
-        Log a debug message.
-        """
         if self._logger:
             self._logger.debug(str(message))
-        else:
-            # Manual filtering for non-ROS mode
-            if self.debug_mode:
-                if isinstance(message, (dict, list)):
-                    print("[DEBUG] Complex Data:")
-                    pprint.pprint(message)
-                else:
-                    print(f"[DEBUG] {message}")
+            return
+        if self.debug_mode:
+            if isinstance(message, (dict, list)):
+                print("[DEBUG] Complex Data:")
+                pprint.pprint(message)
+            else:
+                print(f"[DEBUG] {message}")
 
-    def notify_discord(self, message, severity="INFO"):
-        """
-        Sends a log to a Discord channel via the logging backend.
-
-        The keyword 'weblog=' is required so the Discord log scraper
-        can detect and forward the message.
-        """        
-        key_word = "weblog="
-        full_message = f"{key_word} {message}"
+    def notify_discord(self, message, severity: str = "INFO"):
+        full_message = f"weblog= {message}"
         severity = severity.upper()
 
         if severity == "WARN":
@@ -172,21 +121,4 @@ class BlackboardLogger:
         elif severity == "DEBUG":
             self.debug(full_message)
         else:
-            # Default to INFO
             self.info(full_message)
-
-        
-    # TODO: later to show on Tablet
-    # def notify_client(self, message, severity="INFO"):
-
-    #     """
-    #     Sends a cleaned-up message to the client dashboard.
-    #     Logs to ROS backend simultaneously.
-    #     """
-    #     # 1. Log to developer backend
-    #     self.bb.logger.info(f"[CLIENT NOTIFY] {message}")
-        
-    #     # 2. Publish to /display_rx (your existing topic for the screen)
-    #     msg = String()
-    #     msg.data = f"{severity}: {message}"
-    #     self.pub_client_display.publish(msg)

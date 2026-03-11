@@ -32,9 +32,9 @@ import rclpy
 from rclpy.executors import MultiThreadedExecutor
 
 from smart_home_pytree.human_interface import HumanInterface
-from smart_home_pytree.registry import load_protocols_to_bb, load_locations_to_blackboard
+from smart_home_pytree.protocols.registry import load_protocols_to_bb, load_locations_to_blackboard
 from smart_home_pytree.robot_interface import RobotInterface
-from smart_home_pytree.trigger_monitor import TriggerMonitor
+from smart_home_pytree.triggers.engine import TriggerMonitor
 from smart_home_pytree.utils import BlackboardLogger
 
 
@@ -407,13 +407,13 @@ class ProtocolOrchestrator:
         #  Dynamically import module & class
         try:
             module = importlib.import_module(
-                f"smart_home_pytree.protocols.{snake_case_class_name}"
+                f"smart_home_pytree.protocols.builders.{snake_case_class_name}"
             )
             # gets the class from the file in module
             tree_class = getattr(module, f"{tree_class_name}Tree")
         except Exception as e:
             self.bb_logger.notify_discord(
-                f"[Orchestrator] Failed to load tree '{tree_class_name}Tree' from module smart_home_pytree.trees.{snake_case_class_name} : {e}"
+                f"[Orchestrator] Failed to load tree '{tree_class_name}Tree' from module smart_home_pytree.protocols.builders.{snake_case_class_name} : {e}"
             )
             return
 

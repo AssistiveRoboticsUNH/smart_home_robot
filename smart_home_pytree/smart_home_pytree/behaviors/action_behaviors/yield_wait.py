@@ -10,7 +10,7 @@ import time
 import py_trees
 
 from smart_home_pytree.behaviors.set_protocol_bb import SetProtocolBB
-from smart_home_pytree.registry import load_protocols_to_bb
+from smart_home_pytree.protocols.registry import load_protocols_to_bb
 from smart_home_pytree.utils import parse_duration
 
 

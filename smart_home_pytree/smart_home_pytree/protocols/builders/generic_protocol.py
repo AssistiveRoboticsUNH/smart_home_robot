@@ -35,10 +35,10 @@ import py_trees
 
 from smart_home_pytree.behaviors.action_behaviors.increment_step_progress import IncrementStepProgress
 from smart_home_pytree.behaviors.action_behaviors.yield_wait import YieldWait
-from smart_home_pytree.registry import load_locations_to_blackboard, load_protocols_to_bb
+from smart_home_pytree.protocols.registry import load_locations_to_blackboard, load_protocols_to_bb
 from smart_home_pytree.trees.ask_question_tree import AskQuestionTree
 from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
-from smart_home_pytree.protocols.protocol_utils import (
+from smart_home_pytree.protocols.builders.shared_builder_utils import (
     make_run_tree_action,
 )
 from smart_home_pytree.utils import parse_duration, str2bool

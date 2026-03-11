@@ -3,7 +3,8 @@ import os
 
 import py_trees
 
-from smart_home_pytree.protocol_schema import RUN_TREE_SPECS, load_house_config_yaml
+from smart_home_pytree.protocols.loader import load_house_config_yaml
+from smart_home_pytree.protocols.schema import RUN_TREE_SPECS
 
 
 def update_protocol_config(protocol_name: str, key_to_update: str, new_value: str, debug: bool = False) -> bool:

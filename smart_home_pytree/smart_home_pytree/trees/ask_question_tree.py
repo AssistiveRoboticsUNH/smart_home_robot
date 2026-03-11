@@ -13,7 +13,7 @@ from smart_home_pytree.behaviors.action_behaviors.ask_question import (
 )
 from smart_home_pytree.behaviors.check_protocol_bb import CheckProtocolBB
 from smart_home_pytree.behaviors.set_protocol_bb import SetProtocolBB
-from smart_home_pytree.registry import load_locations_to_blackboard, load_protocols_to_bb
+from smart_home_pytree.protocols.registry import load_locations_to_blackboard, load_protocols_to_bb
 from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
 from smart_home_pytree.trees.execution_location_selector import (
     build_execution_location_subtree,

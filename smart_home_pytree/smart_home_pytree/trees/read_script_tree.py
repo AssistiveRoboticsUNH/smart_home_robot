@@ -10,7 +10,7 @@ from smart_home_pytree.behaviors.action_behaviors import wait
 from smart_home_pytree.behaviors.action_behaviors.read_script_aalp import ReadScript
 from smart_home_pytree.behaviors.set_protocol_bb import SetProtocolBB
 from smart_home_pytree.behaviors.check_protocol_bb import CheckProtocolBB
-from smart_home_pytree.registry import load_protocols_to_bb, load_locations_to_blackboard
+from smart_home_pytree.protocols.registry import load_protocols_to_bb, load_locations_to_blackboard
 from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
 from smart_home_pytree.trees.execution_location_selector import (
     build_execution_location_subtree,
