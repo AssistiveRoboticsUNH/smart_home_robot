@@ -29,7 +29,7 @@ setup(
     install_requires=["setuptools"],
     zip_safe=True,
     maintainer="olagh",
-    maintainer_email="olaghattas@hotmail.com",
+    maintainer_email="olaghattas@hotmail.com, akashmoniruzzaman@gmail.com",
     description="TODO: Package description",
     license="TODO: License declaration",
     tests_require=["pytest"],
@@ -44,6 +44,7 @@ setup(
             "pimu_monitor = smart_sensors.pimu_monitor:main",
             "mock_dock_undock = robot_actions.mock_dock_undock:main",
             "protocol_orchestrator = smart_home_pytree.protocol_orchestrator:main",
+            "render_protocol_tree = smart_home_pytree.render_protocol_tree:main",
             
         ],
     },
