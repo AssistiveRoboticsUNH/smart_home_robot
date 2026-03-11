@@ -5,7 +5,7 @@ Web dashboard package for SHR (robot-hosted, LAN-accessible).
 ## Current scope (v1)
 - Blank Home page shell
 - Protocol Designer page for editing `GenericProtocol` entries in the active house YAML
-- Schema validation using `smart_home_pytree.protocol_schema`
+- Schema validation using `smart_home_pytree.protocols.schema`
 - Atomic save with timestamped backup (`*.bak.YYYYMMDD_HHMMSS`)
 
 ## Run (development)

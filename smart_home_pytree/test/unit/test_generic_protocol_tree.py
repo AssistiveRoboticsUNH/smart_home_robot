@@ -3,8 +3,8 @@
 import py_trees
 import pytest
 
-import smart_home_pytree.protocols.generic_protocol as generic_protocol_mod
-from smart_home_pytree.protocols.generic_protocol import GenericProtocolTree
+import smart_home_pytree.protocols.builders.generic_protocol as generic_protocol_mod
+from smart_home_pytree.protocols.builders.generic_protocol import GenericProtocolTree
 
 
 class _DummyAskQuestionTree:

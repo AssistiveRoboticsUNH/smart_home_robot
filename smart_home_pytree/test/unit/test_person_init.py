@@ -2,7 +2,7 @@ import textwrap
 
 import pytest
 
-from smart_home_pytree.protocol_schema import validate_house_config
+from smart_home_pytree.protocols.schema import validate_house_config
 from smart_home_pytree.robot_interface import resolve_person_init_from_yaml_path
 
 

@@ -1,257 +1,375 @@
-# Smart Home Pytree
+# smart_home_pytree
 
+`smart_home_pytree` is the behavior-tree runtime for the Smart Home Robot system.
+It owns protocol execution, trigger evaluation, robot state integration, blackboard-backed configuration loading, and the reusable behavior-tree building blocks used by the orchestrator.
 
-## Overview
+This package is the core runtime package. A new developer should read this README first before touching protocol logic, tree composition, or orchestration.
 
-### `Directory Structure`
+## What This Package Does
 
-```
-smart_home_pytree
-├── config
-│   ├── house_info.yaml
-│   └── Readme.md
-├── doc
-│   ├── charge_robot_tree.png
-│   ├── moveto_tree.png
-│   └── move_to_with_gaurd.webm
-├── launch
-│   ├── launch_action.launch.py
-│   └── launch_move_tree.launch.py
-├── package.xml
-├── README.md
-├── resource
-│   └── smart_home_pytree
-├── robot_actions
-│   ├── docking.py
-│   ├── generic_action_server.py
-│   ├── __init__.py
-│   └── undocking.py
-├── setup.cfg
-├── setup.py
-└── smart_home_pytree
-    ├── behaviors
-    │   ├── action_behaviors
-    │   ├── check_robot_state_key.py
-    │   ├── get_person_location.py
-    │   ├── logging_behavior.py
-    │   ├── move_to_behavior.py
-    │   └── robot_person_same_location.py
-    ├── __init__.py
-    ├── registry.py
-    ├── robot_interface.py
-    └── trees
-        ├── base_tree_runner.py
-        ├── charge_robot_tree.py
-        ├── guarded_move_to_person_location.py
-        ├── move_to_person_location.py
-        ├── move_to_tree.py
-        ├── Readme.md
-        └── two_reminder_protocol.py
+At a high level, the package does four jobs:
+
+1. Load house configuration and protocol definitions from YAML.
+2. Build reusable py_trees subtrees and protocol trees.
+3. Monitor robot state and triggers to decide what protocol should run.
+4. Run protocol trees through the orchestrator and persist protocol history/state.
+
+## Mental Model
+
+The package is easiest to understand with this dependency flow:
+
+```text
+house_info.yaml
+    -> protocols.schema / protocols.loader / protocols.registry
+    -> py_trees blackboard
+    -> trees (subtrees for unit actions)
+    -> protocols.builders (full protocol trees)
+    -> protocol_orchestrator
+    -> protocol_tracker / dashboard history
 ```
 
-### `Config directory: `
-This should contain a yaml file (`config/house_info.yaml`). This file should contain data required for the different protocols.  
-It will vary for each home but should include:
-- (a) Locations (`x`, `y`, `quat`) of different landmarks in the environment.  
-- (b) Protocol names and their corresponding identifiers (e.g., `medicine_am`) along with information needed for the protocols.
+And inside the BT code itself:
 
----
+```text
+behaviors/  -> leaf nodes
+trees/      -> reusable subtrees for one unit action
+protocols/  -> full protocol tree builders and config loading
+triggers/   -> high-level trigger evaluation and scheduling
+```
 
-### `robot_actions directory: `
-contains the action servers needed for the robot:
+## Current Package Structure
 
-#### `generic_action_server.py`
-Defines the base class for action servers.  
-It raises an error if the derived class does not implement `execute_callback`.  
+```text
+smart_home_pytree/
+├── config/                 # house/protocol YAML files and Nav2 config
+├── launch/                 # real robot / sim / action-server bringup
+├── robot_actions/          # ROS action server executables used by trees
+├── smart_sensors/          # sensor/bridge ROS nodes used by runtime
+├── test/                   # unit, integration, mock helpers
+└── smart_home_pytree/
+    ├── behaviors/          # py_trees leaf nodes only
+    ├── trees/              # reusable subtrees for one unit action
+    ├── protocols/
+    │   ├── builders/       # full protocol tree builders
+    │   ├── loader.py       # load validated house YAML
+    │   ├── normalizer.py   # config normalization before validation/use
+    │   ├── registry.py     # publish locations/protocols into blackboard
+    │   ├── schema.py       # house/protocol schema validation
+    │   └── models.py       # typed config models for protocol concepts
+    ├── triggers/
+    │   ├── engine.py       # TriggerMonitor runtime entry point
+    │   ├── evaluator.py    # pure trigger evaluation helpers
+    │   ├── scheduler.py    # time/reset helpers
+    │   ├── persistence.py  # trigger state restore/sync helpers
+    │   └── models.py       # typed trigger state models
+    ├── protocol_orchestrator.py
+    ├── protocol_tracker.py
+    ├── robot_interface.py
+    ├── render_protocol_tree.py
+    └── utils.py
+```
 
-Currently available action servers:
-mock docking:
-mock undocking: 
+## Key Runtime Modules
 
-TODO:
-undocking: actually send undock
-docking: actually dock the robot
-question answer
+### `robot_interface.py`
+ROS-facing runtime state adapter.
 
+Responsibilities:
+- subscribe to robot/environment topics
+- maintain the in-memory robot state model
+- expose robot state to trees and orchestrator
+- resolve YAML-driven initialization such as `person_init`
 
----
-### `smart_home_pytree directory: `
+This is the main entry point when tree code needs live robot state.
 
-This directory contains two main folders: **`trees`** and **`behaviors`**.
+### `protocols/schema.py`
+Validation layer for house YAML.
 
-**General Files:**
-- **`robot_interface.py`** – A singleton class that runs in its own thread when initialized. It includes data about the robot and environment that it gets from the topics.
-- **`registry.py`** – Reads data from the YAML file and registers it into the blackboard.
+Responsibilities:
+- validate top-level house config
+- validate locations
+- validate protocol structure
+- validate GenericProtocol step definitions
+- validate confirmation branches and trigger rules
 
----
-#### `smart_home_pytree/trees: `
+Canonical import:
+```python
+from smart_home_pytree.protocols.schema import validate_house_config, RUN_TREE_SPECS
+```
 
-Contains the trees listed in available trees section in addition to the base class:
+### `protocols/loader.py`
+Validated YAML loading entry point.
 
-#### `base_tree_runner.py`
-Defines the base class for all behavior trees.  
-It raises an error if the derived class does not implement `create_tree()`.  
+Responsibilities:
+- read YAML
+- normalize config
+- validate config
+- return safe runtime data structure
 
-**Main functions:**
-- **`create_tree()`** – Must be implemented in derived classes.  
-- **`setup()`** – Calls `create_tree()` and runs the tree in an executor thread.  
-- **`run_until_done()`** – Runs the tree until it finishes with either `SUCCESS` or `FAILURE`.  
-- **`run_continuous()`** – Runs the tree continuously until the user stops it.  
-- **`cleanup()`** – Ensures a clean shutdown of all nodes, executors, and subprocesses.
-- **`stop()`** – Stops the tree.
+Canonical import:
+```python
+from smart_home_pytree.protocols.loader import load_house_config_yaml
+```
 
-**Helper functions:**
-- **`required_actions()`** – Should be overridden in the derived class.  
-- **`required_topics()`** – Should be overridden in the derived class.  
-- **`describe_requirements()`** – Lists the requirements specified in `required_actions` and `required_topics`.
+### `protocols/registry.py`
+Blackboard population layer.
 
-## Available Trees
-These trees can be combined to build higher-level protocols.  
-All of them inherit from `base_tree_runner.py`.
+Responsibilities:
+- load locations onto the py_trees blackboard
+- load protocol data onto the blackboard
+- synthesize helper keys used by GenericProtocol trees
+- update protocol config values already loaded on the blackboard
 
-### 1. `move_to_tree`
-Receives a location to move to and checks if the location is initialized in the blackboard. Before initiating movement, the tree checks whether the robot is currently charging.  
-If it is, the robot will undock before moving.
+Canonical import:
+```python
+from smart_home_pytree.protocols.registry import (
+    load_locations_to_blackboard,
+    load_protocols_to_bb,
+)
+```
 
----
+### `protocols/builders/generic_protocol.py`
+Dynamic protocol builder for `GenericProtocol`.
 
-### 2. `charge_robot_tree`
-Responsible for managing the robot charging process.  
-Takes the number of retries (`num_attempts`) as input.  
+Responsibilities:
+- read validated protocol step definitions from blackboard
+- build final protocol trees from action steps
+- handle confirmation branching and wait/yield flow
+- compose reusable subtrees from `trees/`
 
-**Behavior:**
-- If the robot is already charging, it exits.
-- Otherwise, it moves the robot to the home position, docks, and checks if charging was successful.  
-- Retries up to `num_attempts` times, logging failures if they occur.
+This is the main builder most developers will touch.
 
----
+### `triggers/engine.py`
+High-level trigger runtime.
 
-### 3. `move_to_person_location`
-Retrieves the person’s location and moves the robot there.  
-When the robot reaches the target, it verifies if the robot and person are at the same location.  
-If not, it retries up to `num_attempts` times.
+Responsibilities:
+- evaluate time/event/location trigger conditions
+- monitor waiting/yielded protocols
+- handle reset patterns and cooldown behavior
+- expose currently satisfied protocols to the orchestrator
+- restore and sync persisted trigger-related state
 
----
+Canonical import:
+```python
+from smart_home_pytree.triggers.engine import TriggerMonitor
+```
 
-### 4. `guarded_move_to_person_location`
-An extension of `move_to_person_location`.  
-If the person’s location changes while the robot is moving, the tree halts movement and redirects to the new location.
+### `protocol_orchestrator.py`
+Top-level runtime coordinator.
 
----
+Responsibilities:
+- initialize robot interface, trigger monitor, and human interface
+- decide what protocol to run next
+- start, stop, and preempt protocol trees
+- persist run results and session-level outcomes
 
-### 5. `two_reminder_protocol`
-Implements the two-reminder protocol.  
-Sequence:
-1. Go to the person’s location and read the first reminder.  
-2. Return to the docking station and wait.  
-3. Go to the person’s location again to deliver the second reminder.
+If the system is "running protocols automatically", this is the entry point doing that work.
 
-Includes:
-- **`load_protocol_info_from_bb()`** – Loads protocol-specific information from the blackboard.
+### `protocol_tracker.py`
+SQLite-backed protocol state and run-history storage.
 
-## Running a Tree
+Responsibilities:
+- store live protocol state
+- store run history and session outcomes
+- support dashboard/history queries
+- restore state needed after restart
 
-Navigate to the `smart_home_pytree/trees` folder.  
-Each script includes a help function that lists the available options.
+## BT Layers
 
-**Example:**
+### `behaviors/`
+Leaf py_trees nodes only.
 
+These should:
+- do one thing
+- return a py_trees status
+- avoid owning larger composition logic
+
+Examples:
+- move action clients
+- blackboard checks
+- state checks
+- media/question action leaves
+
+### `trees/`
+Reusable subtrees for one unit action.
+
+These should:
+- compose a few leaf behaviors into one meaningful action block
+- be reusable by multiple protocols
+- not decide full protocol behavior
+
+Examples:
+- move to location
+- move to person
+- ask question
+- read text
+- play audio/video
+- charge robot
+
+### `protocols/builders/`
+Full protocol tree builders.
+
+These should:
+- build complete protocol-level trees
+- use subtrees from `trees/`
+- interpret protocol definitions, not raw ROS topics
+
+## Configuration Model
+
+The active configuration is usually provided through:
+- `house_yaml_path`
+- or `HOUSE_YAML_PATH`
+
+The house YAML is expected to contain at least:
+- `locations`
+- `protocols`
+- optional `person_init`
+
+### `locations`
+Named landmarks used by movement and trigger logic.
+
+### `protocols`
+Protocol definitions. The main supported styles today are:
+- `GenericProtocol`
+- `ExerciseProtocol`
+- `ExerciseRandomProtocol`
+
+### `person_init`
+Optional startup initialization for `person_location`.
+- `null`: do not initialize
+- landmark name: initialize `person_location` to that landmark
+
+## Preferred Imports
+
+Use these canonical import paths:
+
+```python
+from smart_home_pytree.protocols.schema import ...
+from smart_home_pytree.protocols.loader import ...
+from smart_home_pytree.protocols.registry import ...
+from smart_home_pytree.protocols.builders.generic_protocol import GenericProtocolTree
+from smart_home_pytree.triggers.engine import TriggerMonitor
+```
+
+## Main Launch / Run Paths
+
+### Real robot support services
 ```bash
-python3 two_reminder_protocol.py --help
+ros2 launch smart_home_pytree real_robot.launch.py
 ```
 
-**Output:**
+This starts the support services used on the real robot bringup side, such as:
+- pimu monitor
+- display node
+- video player action server
+- human interaction node
+- discord logger
 
-```
-usage: two_reminder_protocol.py [-h] [--run_continuous RUN_CONTINUOUS]
-                                [--num_attempts NUM_ATTEMPTS]
-                                [--protocol_name PROTOCOL_NAME]
-
-Two Reminder Protocol Tree
-
-Handles the Two Reminder Protocol:
-1. Retries up to num_attempts times if needed.
-
-options:
-  -h, --help            Show this help message and exit.
-  --run_continuous RUN_CONTINUOUS
-                        Run tree continuously (default: False)
-  --num_attempts NUM_ATTEMPTS
-                        Retry attempts (default: 3)
-  --protocol_name PROTOCOL_NAME
-                        Name of the protocol to run (e.g., medicine_am)
+### Simulation support services
+```bash
+ros2 launch smart_home_pytree sim_robot.launch.py
 ```
 
-> **Note:** The required action servers and topics must be running before executing any tree.
+This brings up the simulation-side support stack, including Nav2 sim, display/video helpers, human interaction, sim charging bridge, and logger.
 
-for testing you can use a simple GUI for testing topics is available in:  
-`test/gui_for_testing.py`  
+### Protocol orchestrator
+```bash
+ros2 run smart_home_pytree protocol_orchestrator
+```
 
-### For Fast Debugging
-You can use the test_actions.py. the script creates action servers that give yes after some time. you can adjust the time in the script too. to run that use command in the ws directory: python3 src/smart_home_pytree/test/mock/mock_run_actions.py 
-This runs the followign three action servers docking, undocking and navigate_to_pose
+Useful flags:
+```bash
+ros2 run smart_home_pytree protocol_orchestrator --debug --test_time 10:30 --env_yaml_file_name house_yaml_path
+```
 
-for the topics use the gui_for_testing.py mentioned above.
+### Render a protocol tree
+```bash
+export house_yaml_path=/path/to/house_info.yaml
+ros2 run smart_home_pytree render_protocol_tree --protocol_name medicine_am
+```
 
-## Saving Protocol Info into BlackBoard
+## Developer Workflows
 
-Each protocol is uniquely identified by its name. When loaded, its configuration is stored on the Blackboard, using the protocol’s name as the key and its associated data (from the YAML) as the value.
+### 1. Add a new unit action
+Usually touch:
+- `behaviors/` for a new leaf if needed
+- `trees/` for the reusable subtree
+- `protocols/schema.py` if new GenericProtocol params are needed
+- `protocols/builders/shared_builder_utils.py` if the action should be available in GenericProtocol
 
-Accessing Protocol Data
-1. Get a Blackboard instance:
-```blackboard = py_trees.blackboard.Blackboard()```
+### 2. Add a new GenericProtocol step type
+Usually touch:
+- `protocols/schema.py` to declare/validate the tree name and params
+- `protocols/builders/shared_builder_utils.py` to map the step type to a subtree builder
+- a subtree in `trees/` if one does not already exist
 
-2. Retrieve your protocol’s data:
-Set protocol_name to the unique name defined in your YAML (e.g., medicine_am):
+### 3. Change trigger behavior
+Usually touch:
+- `triggers/evaluator.py` for trigger semantics
+- `triggers/scheduler.py` for time/reset behavior
+- `triggers/engine.py` only if runtime coordination needs to change
 
-  ```protocol_info = blackboard.get(protocol_name)```
+### 4. Add a new trigger event key
+Use this when you want YAML triggers such as `high_level.triggers.event` to depend on a new robot state field.
 
-3. Use the stored values:
+Usually touch:
+- `robot_interface.py` to subscribe to the source topic and update `RobotState` with the new key
+- `triggers/evaluator.py` only if the new key needs special comparison logic beyond the existing `state`/`value`/`op` checks
+- `protocols/schema.py` only if the event shape itself changes; a new state key alone does not require schema edits
+- one or more protocol YAML entries in `config/*.yaml` to use the new key under `high_level.triggers.event`
+- tests covering both robot-state ingestion and trigger satisfaction
 
-For example, if your YAML defines:
+Recommended implementation order:
+1. Add the new state key to `RobotInterface` update flow.
+2. Confirm the value appears in `robot_interface.state`.
+3. Add or update a protocol trigger using that key.
+4. Add tests in `test/unit/` for trigger evaluation.
+5. Run a focused orchestrator or trigger-monitor smoke test if the key is safety-critical.
 
-medicine_am:
-  low_level:
-    first_text: "please take your morning medicine"
-    second_text: "This is the second reminder to take your morning medicine"
-    wait_time_between_reminders: 5
+### 5. Change protocol loading or blackboard shape
+Usually touch:
+- `protocols/loader.py`
+- `protocols/normalizer.py`
+- `protocols/registry.py`
 
-You can access any field like this:
-```text = protocol_info["first_text"]```
+## Tests
 
-## run at olson:
+The package has both unit and integration tests under `test/`.
 
-#######
-RUN THE PROTOCOLS:
+Run targeted unit tests during development:
+```bash
+pytest -q smart_home_pytree/test/unit/test_execution_location_schema.py
+pytest -q smart_home_pytree/test/unit/test_generic_protocol_tree.py
+pytest -q smart_home_pytree/test/unit/test_person_init.py
+```
 
-python3 test_move_away.py ## this is responsible to publish true to the move_away and the position to go to
-ros2 run shr_human_interaction human_interaction_node ## responsible for publishing user output
-ros2 run rmw_zenoh_cpp rmw_zenohd
+Run a focused subset before merging protocol/runtime changes:
+```bash
+pytest -q \
+  smart_home_pytree/test/unit/test_execution_location_schema.py \
+  smart_home_pytree/test/unit/test_person_init.py \
+  smart_home_pytree/test/unit/test_generic_protocol_tree.py \
+  smart_home_pytree/test/unit/test_execution_location_selector.py \
+  smart_home_pytree/test/unit/test_media_execution_location.py
+```
 
-'''' launch navigation '''' look for the command on the robot for that
+## Common Gotchas
 
-ros2 launch smart_home_pytree real_robot.launch.py  ## for play_video action server and simple logger
-python3 gui_for_testing.py ## need to change charging to true and false manually and person location. robot location is used from amcl
-python3 mock/mock_run_actions_no_nav.py ## mock dock and undock becuase the action server are not ready yet
- 
-then run protocl_orchestrator with python3 protocol_orchestrator.py
-can change the test time, or remove it to use the actual time
-orch = ProtocolOrchestrator(test_time="15:30")
+- `behaviors/` and `trees/` are not the same layer. Do not move subtree logic into behaviors.
+- Generic protocol builders live under `protocols/builders/`.
+- Schema, loader, and registry code live under `protocols/`.
+- The orchestrator dynamically imports protocol builders from `smart_home_pytree.protocols.builders`.
+- Blackboard keys are synthesized by `protocols/registry.py`; if a tree depends on a key, verify the registry is producing it.
 
-#######
+## Suggested Reading Order For New Developers
 
+1. This README
+2. `config/Readme.md`
+3. `smart_home_pytree/protocol_orchestrator.py`
+4. `smart_home_pytree/triggers/engine.py`
+5. `smart_home_pytree/protocols/schema.py`
+6. `smart_home_pytree/protocols/registry.py`
+7. `smart_home_pytree/protocols/builders/generic_protocol.py`
+8. one subtree in `trees/` and one leaf in `behaviors/`
 
-## Video of Running the Tree
-
-[running_move_to_tree.webm](https://github.com/user-attachments/assets/70da4dc0-a3cc-47f9-82a3-99c17cc8f576)
-
-## For Testing
-
-Refer to the README.md file in the test folder
-
-## Relevant Documentation
-
-For more details, see:
-[py_trees_ros documentation](https://py-trees-ros.readthedocs.io/en/devel/)
-[py_trees documentation](https://py-trees.readthedocs.io/en/devel/)
-[py_trees_ros_tutorials documentation](https://py-trees-ros-tutorials.readthedocs.io/en/devel/)
+That sequence gives the fastest path to understanding the package end-to-end.

@@ -14,7 +14,7 @@ import rclpy
 from nav2_msgs.action import NavigateToPose
 from rclpy.executors import MultiThreadedExecutor
 from smart_home_pytree.protocol_orchestrator import ProtocolOrchestrator
-from smart_home_pytree.registry import load_protocols_to_bb
+from smart_home_pytree.protocols.registry import load_protocols_to_bb
 from smart_home_pytree.robot_interface import RobotInterface
 
 from shr_msgs.action import DockingRequest

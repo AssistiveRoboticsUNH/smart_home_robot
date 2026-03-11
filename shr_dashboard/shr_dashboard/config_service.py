@@ -18,7 +18,7 @@ from typing import Any
 
 import yaml
 
-from smart_home_pytree.protocol_schema import RUN_TREE_SPECS, validate_house_config
+from smart_home_pytree.protocols.schema import RUN_TREE_SPECS, validate_house_config
 from smart_home_pytree.robot_interface import ROBOT_STATE_SPECS
 
 _LOCK = threading.RLock()
