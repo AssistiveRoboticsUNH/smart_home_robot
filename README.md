@@ -115,12 +115,6 @@ Start the orchestrator:
 ros2 run smart_home_pytree protocol_orchestrator [--test_time "15:30"] [--debug]
 ```
 
-With optional flags:
-
-```bash
-ros2 run smart_home_pytree protocol_orchestrator 
-```
-
 Run a single GenericProtocol directly:
 
 ```bash
@@ -166,6 +160,20 @@ Then run the orchestrator in another terminal:
 ros2 run smart_home_pytree protocol_orchestrator --test_time "15:30" --debug
 ```
 
+## Set Up Display Tablet App
+
+Install the application from:
+
+```text
+https://github.com/AssistiveRoboticsUNH/Hello_Face
+```
+
+Steps:
+- Connect the tablet to your laptop and copy `Hello_Face.apk` from the apk folder to the tablet `Download` folder.
+- Open the `Download` folder on the tablet and tap the apk file to install it.
+- Set the Robot IP and Help Number:
+  Swipe from left -> Settings -> enter values -> Save.
+
 ## Packages
 
 - `smart_home_pytree`: protocol runtime, tree builders, triggers, persistence
@@ -185,3 +193,9 @@ That includes:
 - sqlite databases
 - logs
 - `.env`
+
+## Linting
+
+```bash
+autopep8 --in-place --recursive --aggressive smart_home_pytree/
+```
