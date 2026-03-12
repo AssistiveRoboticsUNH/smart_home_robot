@@ -158,7 +158,13 @@ def _validate_locations(locations: Any) -> None:
         raise ValueError("locations must be a non-empty mapping")
     for loc_name, loc in locations.items():
         _ensure_non_empty_string(loc_name, f"locations[{loc_name!r}] key")
-        _ensure_type(loc, dict, f"locations.{loc_name}")
+        path = f"locations.{loc_name}"
+        _ensure_type(loc, dict, path)
+        _reject_unknown_keys(loc, {"x", "y", "yaw"}, path)
+        for field in ("x", "y", "yaw"):
+            if field not in loc:
+                raise ValueError(f"{path}.{field} is required")
+            _ensure_numeric_not_bool(loc.get(field), f"{path}.{field}")
 
 
 def _validate_person_init(value: Any, path: str, locations: dict) -> None:
@@ -567,6 +573,11 @@ def _ensure_type(value: Any, expected_type: type, path: str) -> None:
         raise ValueError(
             f"{path} must be {expected_type.__name__}, got {type(value).__name__}"
         )
+
+
+def _ensure_numeric_not_bool(value: Any, path: str) -> None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f"{path} must be numeric")
 
 
 def _ensure_non_empty_string(value: Any, path: str) -> None:
