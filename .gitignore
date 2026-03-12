@@ -68,6 +68,7 @@ venv.bak/
 *.ipynb
 
 *.env
+.env
 
 .flake8
 
