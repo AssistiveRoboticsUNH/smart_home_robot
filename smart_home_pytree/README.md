@@ -143,7 +143,7 @@ ros2 run smart_home_pytree protocol_orchestrator
 Render a tree using the active user config:
 
 ```bash
-python3 smart_home_pytree/smart_home_pytree/render_protocol_tree.py \
+ros2 run smart_home_pytree render_protocol_tree \
   --protocol_name medicine_am \
   --output_dir /tmp
 ```

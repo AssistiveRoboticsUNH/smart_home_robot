@@ -126,7 +126,7 @@ python3 smart_home_pytree/smart_home_pytree/protocols/generic_protocol.py --prot
 Render a GenericProtocol tree png image:
 
 ```bash
-python3 smart_home_pytree/smart_home_pytree/render_protocol_tree.py --protocol_name medicine_am [--output_dir /tmp]
+ros2 run smart_home_pytree render_protocol_tree --protocol_name medicine_am --output_dir /tmp
 ```
 
 
