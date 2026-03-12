@@ -157,8 +157,8 @@ def main(args=None):
     parser.add_argument(
         "--data_key",
         type=str,
-        default="reminder_1",
-        help="name of the key in the protocol that needs to run (ex: medicine_am)",
+        default="step_0",
+        help="blackboard step key to run (for example: step_0)",
     )
 
     args, _ = parser.parse_known_args()
