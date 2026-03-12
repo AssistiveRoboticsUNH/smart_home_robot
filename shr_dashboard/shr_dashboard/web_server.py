@@ -174,12 +174,41 @@ def create_app() -> Flask:
         try:
             ctx = resolve_house_yaml_path(body.get("yaml_path"))
             save_info = backup_and_save_config(ctx, data)
+            tracker = _get_tracker()
+            tracker.request_config_reload(str(ctx.yaml_path))
+            if getattr(app, "_robot_interface", None) is not None:
+                app._robot_interface.reload_house_config()
             payload = build_dashboard_payload(ctx)
-            return jsonify({"ok": True, "save": save_info, **payload})
+            return jsonify(
+                {
+                    "ok": True,
+                    "save": save_info,
+                    "reload": tracker.get_config_reload_status(),
+                    **payload,
+                }
+            )
         except DashboardConfigError as exc:
             return jsonify({"ok": False, "error": str(exc)}), 400
         except Exception as exc:
             return jsonify({"ok": False, "error": f"save failed: {exc}"}), 500
+
+    @app.route("/api/dashboard/reload-status", methods=["GET"])
+    def api_reload_status():
+        """Return the latest runtime config-reload handshake state."""
+        try:
+            tracker = _get_tracker()
+            rows = tracker.get_all_states()
+            all_quiescent = all((row.get("state") or "idle") in {"idle", "cooldown"} for row in rows)
+            return jsonify(
+                {
+                    "ok": True,
+                    "reload": tracker.get_config_reload_status(),
+                    "all_idle": all_quiescent,
+                    "all_quiescent": all_quiescent,
+                }
+            )
+        except Exception as exc:
+            return jsonify({"ok": False, "error": f"reload-status failed: {exc}"}), 500
 
     # ---- Protocol History & State API ----
 

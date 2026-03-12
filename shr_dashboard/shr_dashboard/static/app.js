@@ -9,6 +9,9 @@
     yamlPreview: '',
     selectedProtocol: null,
     flash: null,
+    reload: {
+      pollTimer: null,
+    },
     dirty: false,
     validation: {
       status: 'idle', // idle | ok | error
@@ -96,11 +99,51 @@
   function renderFlash() {
     if (!state.flash) {
       els.flashBar.className = 'flash hidden';
-      els.flashBar.textContent = '';
+      els.flashBar.innerHTML = '';
       return;
     }
     els.flashBar.className = `flash ${state.flash.type}`;
-    els.flashBar.textContent = state.flash.message;
+    els.flashBar.innerHTML = `
+      <div class="flash-message">${escapeHtml(state.flash.message)}</div>
+      <button class="flash-close" type="button" data-action="flash-close" aria-label="Close notification" title="Close">×</button>
+    `;
+  }
+
+  function stopReloadPoll() {
+    if (state.reload.pollTimer) {
+      window.clearTimeout(state.reload.pollTimer);
+      state.reload.pollTimer = null;
+    }
+  }
+
+  async function pollReloadStatus() {
+    try {
+      const data = await api('/api/dashboard/reload-status');
+      const reload = data.reload || {};
+      if (reload.state === 'applied') {
+        stopReloadPoll();
+        setFlash('success', 'Saved and runtime YAML loaded successfully.');
+        return;
+      }
+      if (reload.state === 'error') {
+        stopReloadPoll();
+        setFlash('error', `Saved, but runtime YAML reload failed: ${reload.error || 'unknown error'}`);
+        return;
+      }
+      if (reload.state === 'pending') {
+        setFlash(
+          'warn',
+          (data.all_quiescent ?? data.all_idle)
+            ? 'Saved. Runtime reload is in progress.'
+            : 'Saved. Waiting for all protocols to become idle or cooldown before reloading the YAML.'
+        );
+        state.reload.pollTimer = window.setTimeout(pollReloadStatus, 1500);
+        return;
+      }
+      stopReloadPoll();
+    } catch (_err) {
+      state.reload.pollTimer = window.setTimeout(pollReloadStatus, 2000);
+    }
   }
 
   async function api(path, options = {}) {
@@ -1104,6 +1147,7 @@
     markRecentProtocol(state.selectedProtocol);
     els.yamlPathLabel.textContent = state.yamlPath;
     setDirty(false);
+    stopReloadPoll();
     clearFlash();
     updateStatusChip();
   }
@@ -1263,7 +1307,17 @@
       state.validation.status = 'ok';
       state.validation.messages = ['Saved and schema validation passed.'];
       state.validation.lastValidatedAt = nowTimeLabel();
-      setFlash('success', `Saved. Backup: ${data.save.backup_path}`);
+      if (data.reload?.state === 'applied') {
+        setFlash('success', `Saved and runtime YAML loaded successfully. Backup: ${data.save.backup_path}`);
+      } else if (data.reload?.state === 'pending') {
+        setFlash('warn', `Saved. Waiting for runtime YAML reload after protocols settle to idle or cooldown. Backup: ${data.save.backup_path}`);
+        stopReloadPoll();
+        state.reload.pollTimer = window.setTimeout(pollReloadStatus, 1500);
+      } else if (data.reload?.state === 'error') {
+        setFlash('error', `Saved, but runtime YAML reload failed: ${data.reload.error || 'unknown error'}`);
+      } else {
+        setFlash('success', `Saved. Backup: ${data.save.backup_path}`);
+      }
       renderRoute();
     } catch (err) {
       state.validation.status = 'error';
@@ -1409,6 +1463,10 @@
       }
       if (action === 'reload-bootstrap') {
         bootstrap();
+        return;
+      }
+      if (action === 'flash-close') {
+        clearFlash();
         return;
       }
       if (action === 'validate-config') {
