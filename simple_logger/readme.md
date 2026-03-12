@@ -1,9 +1,25 @@
 ### simple_logger
-* subscribe to /rosout and read all logs
-* from the log msg keep only to msgs coming from a file contains "action" in the name
-* store the info to a text file.
 
-### to run the node
+ROS log subscriber and Discord/file logger support.
+
+What it does:
+- subscribes to `/rosout`
+- filters for the runtime messages you care about
+- stores log output locally
+- can forward important events to Discord
+
+### Log location
+
+Logs are written under:
+
+```text
+$SHR_USER_DIR/logs/discord_logs/
 ```
-ros2 run simple_logger simple_logger
+
+`SHR_USER_DIR` must be set before starting the logger.
+
+### Run
+
+```bash
+ros2 run simple_logger simple_logger_discord
 ```

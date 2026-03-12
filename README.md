@@ -1,168 +1,187 @@
 # smart_home_robot
 
-## Setup
+ROS 2 workspace for the Smart Home Robot system.
 
-``` 
-mkdir -p smart_home_pytree_ws/src
-cd ~/smart_home_pytree_ws/src
-sudo apt-get install mpg321
-pip install -r requirements.txt
+This repository contains the runtime packages, dashboard, human-interaction node, message definitions, and logging utilities. User-specific deployment data does not belong in git and is loaded from `SHR_USER_DIR`.
 
-cd ~/smart_home_pytree_ws
-rosdep install --from-paths src --ignore-src -r -y
+## Workspace
 
-if you run rosdep then no need for this
-
----
-git clone https://github.com/splintered-reality/py_trees
-git clone https://github.com/splintered-reality/py_trees_ros/
-git clone https://github.com/splintered-reality/py_trees_ros_viewer
-git clone https://github.com/splintered-reality/py_trees_ros_interfaces
----
-
-git clone https://github.com/AssistiveRoboticsUNH/smart_home_robot
-
-pip install -r requirements.txt
-
-cd ~/smarthome_ws 
-colcon build --symlink-install
-source install/setup.bash
-
-the yaml file to be used that contains information about the house should be stored as an env variable under 
-** house_yaml_path**
-
-If you plan on using the smart plug you need to define the plug_ip  as an environment variable
-```
-
-For simulation you will need 
-
-
-```
-sudo apt install ros-$ROS_DISTRO-navigation2
-sudo apt install ros-$ROS_DISTRO-nav2-bringup
-
-Jazzy and newer
-sudo apt install ros-$ROS_DISTRO-nav2-minimal-tb*
-
-iron and older
-sudo apt install ros-$ROS_DISTRO-turtlebot3-gazebo
-
-source /opt/ros/<ros2-distro>/setup.
-export TURTLEBOT3_MODEL=waffle  # Iron and older only with Gazebo Classic
-export GAZEBO_MODEL_PATH=$GAZEBO_MODEL_PATH:/opt/ros/<ros2-distro>/share/turtlebot3_gazebo/models # Iron and older only with Gazebo Classic
-
-```
-### Environment Setup Instructions (Optional)
-
-1. **Use the template file**
-
-   This project provides a template for required environment variables: .env.example
-
-2. **Create your personal `.env` file**
-
-Copy the template into an actual `.env` file that will hold your values:
+Expected workspace path:
 
 ```bash
-cp env.example .env 
+~/smarthome_ws/src/smart_home_robot
 ```
 
-3. **Fill in the required variables**
-Open .env and replace all placeholder values with your own configuration
-(API keys, tokens, paths, etc.).
+## User Data Layout
 
-4. **Load the environment variables**
-Before running the project, load your .env file into your shell:
+Each deployed user gets a private data root:
+
+```text
+$SHR_USER_DIR/
+├── configs/
+│   ├── house_config.yaml
+│   └── house_config.yaml.bak.*
+├── audios/
+├── videos/
+├── images/
+├── logs/
+├── database/
+└── map/
 ```
-source .env
+
+Use:
+- `configs/house_config.yaml` for the active house/protocol YAML
+- `audios/` for `play_audio` assets
+- `videos/` for `play_video` assets
+- `logs/` for runtime log output
+- `database/` for sqlite files such as `protocol_tracker.db`
+
+## Install
+
+```bash
+sudo apt-get install -y mpg321
+
+mkdir -p ~/smarthome_ws/src
+cd ~/smarthome_ws/src
+git clone https://github.com/AssistiveRoboticsUNH/smart_home_robot
+cd smart_home_robot
+pip install -r requirements.txt
+cd ~/smarthome_ws
+rosdep install --from-paths src --ignore-src -r -y
+colcon build --symlink-install
+source install/setup.bash
 ```
-or add it to your .bashrc : ```source /home/hello-robot/smarthome_ws/src/smart_home_robot/.env```
-to check that things are setup:
-echo $house_yaml_path you should get your path
 
-5. **Do not commit `.env`**
-The `.env` file contains sensitive information and must stay private.
-It is already included in `.gitignore` to prevent accidental commits.
+## `.env` Setup
 
+`.env` is part of the required local setup. 
+Use it for secrets and API credentials only.
 
+Create it from the template:
 
-## Running in Simulation
-note you will need the turtlebot package installed
-
-Run the launch script
+```bash
+cd ~/smarthome_ws/src/smart_home_robot
+cp env.example .env
 ```
+
+Edit `.env` with your API keys, tokens, and passwords.
+
+## Create a User Profile
+
+```bash
+cd ~/smarthome_ws/src/smart_home_robot
+./setup_user.sh
+```
+
+The script will:
+- create `~/shr_user/<user_name>/`
+- create `configs/`, `audios/`, `videos/`, `images/`, `logs/`, `database/`, and `map/`
+- copy `smart_home_pytree/config/house_info.yaml` into `configs/house_config.yaml` if it does not already exist
+- print the exact `SHR_USER_DIR` export line for `~/.bashrc`
+- print what to source for `.env` in `~/.bashrc`
+
+Recommended `~/.bashrc` lines:
+
+```bash
+export SHR_USER_DIR="$HOME/shr_user/akash"
+source $HOME/smarthome_ws/src/smart_home_robot/.env
+```
+
+Reload your shell:
+
+```bash
+source ~/.bashrc
+```
+
+Verify:
+
+```bash
+echo "$SHR_USER_DIR"
+ls "$SHR_USER_DIR/configs/house_config.yaml"
+```
+
+## Common Commands
+
+Start the dashboard:
+```bash
+# it initializes the robot state interface by default
+ros2 run shr_dashboard dashboard_server
+```
+
+Start the orchestrator:
+
+```bash
+# if dashboard is not started, orchestrator will initialize robot state interface
+ros2 run smart_home_pytree protocol_orchestrator [--test_time "15:30"] [--debug]
+```
+
+With optional flags:
+
+```bash
+ros2 run smart_home_pytree protocol_orchestrator 
+```
+
+Run a single GenericProtocol directly:
+
+```bash
+# run necessary navigation and robot launch files and then
+python3 smart_home_pytree/smart_home_pytree/protocols/generic_protocol.py --protocol_name medicine_am
+```
+
+
+Render a GenericProtocol tree png image:
+
+```bash
+python3 smart_home_pytree/smart_home_pytree/render_protocol_tree.py --protocol_name medicine_am [--output_dir /tmp]
+```
+
+
+## Simulation Setup
+
+Jazzy is the default ROS 2 distro for this robot. Install Jazzy simulation dependencies first:
+
+```bash
+sudo apt install ros-$ROS_DISTRO-navigation2
+sudo apt install ros-$ROS_DISTRO-nav2-bringup
+sudo apt install ros-$ROS_DISTRO-nav2-minimal-tb3*
+```
+
+For Iron and older:
+
+```bash
+sudo apt install ros-$ROS_DISTRO-turtlebot3-gazebo
+export TURTLEBOT3_MODEL=waffle
+export GAZEBO_MODEL_PATH=$GAZEBO_MODEL_PATH:/opt/ros/$ROS_DISTRO/share/turtlebot3_gazebo/models
+```
+
+Run simulation:
+
+```bash
 ros2 launch smart_home_pytree sim_robot.launch.py
 ```
 
-then in another terminal run the orchestrator
+Then run the orchestrator in another terminal:
 
-Prerequisites: Before running, you must set an environment variable pointing to your configuration file. By default, the script looks for house_yaml_path.
 ```bash
-export house_yaml_path="/absolute/path/to/your/config.yaml"
-```
-Basic Execution:
-```
-python3 protocol_orchestrator.py 
+ros2 run smart_home_pytree protocol_orchestrator --test_time "15:30" --debug
 ```
 
-Testing Specific Times: Run with time override for 2:30 PM and debug mode
-```
-python3 protocol_orchestrator.py --test_time "14:30" --debug
-```
+## Packages
 
-| Argument | Type | Default | Description |
-| :--- | :--- | :--- | :--- |
-| `--test_time` | `str` | `""` | Optional time override in `HH:MM` format. If provided, the system ignores the wall clock and uses this static time. |
-| `--debug` | `flag` | `False` | Enable detailed debug output to the console. |
-| `--env_yaml_file_name` | `str` | `"house_yaml_path"` | The **name** of the environment variable to read the YAML path from. Change this if you use a different env var name. |
+- `smart_home_pytree`: protocol runtime, tree builders, triggers, persistence
+- `shr_dashboard`: operator dashboard and protocol designer
+- `shr_human_interaction`: speech and yes/no question interface
+- `simple_logger`: Discord and file logging helpers
+- `shr_msgs`: shared ROS interfaces
 
+## Rule
 
-You can also run with ros
+Do not keep deployed user data in git.
 
-```
-ros2 run smart_home_pytree protocol_orchestrator -- --debug --test_time 10:30 --env_yaml_file_name house_yaml_path
-```
-
-## Instructions to run planner. Will make it nicer 
-
-TO TEST AT OLSON
-follow the instruction in file Desktop/Running_demo.txt on the robot 
-
-
-currently you need to publish person_location. by default it uses perosn_location at living_room
-
-
-to run a specific protocol
-```
-python3 two_reminder_protocol.py --protocol_name medicine_am
-```
-look in the yaml file to figure out the requirements for each protocol
-
-for coffee in addtion to time being between 9:30 and 1 it requires two topics to be true
-
-```
-ros2 topic pub /coffee std_msgs/msg/Bool "data: True"
-ros2 topic pub /coffee_pot std_msgs/msg/Bool "data: True"
-```
-
-Helper commands:
-to find free ports:
-```
- for port in {5556..5600}; do   if ! ss -tuln | grep -q ":$port "; then     echo "Port $port is free";   fi; done
-```
-
-run video action:
-```
-ros2 action send_goal /play_video shr_msgs/action/PlayVideoRequest "file_name: 'file:///storage/emulated/0/Download/maggie_coffee.mp4'"
-```
-To trigger start_exercise its should be either for the display or ```ros2 topic pub /display_rx std_msgs/msg/String "data: 'exercise_requested'" ```
-
-
-### Set up Webapp
-Install the application in https://github.com/AssistiveRoboticsUNH/Hello_Face on your tablet
-
-1. Connect the tablet to your laptop and copy the Hello_Face.apk in the apk folder to the Download folder on your tablet.
-2. go to the Download folder on your tablet and click on the apk file to install it.
-3. Set your Robot IP & Help Number (Swipe from left → Settings → enter values → Save.)
-
-### Linting command
-autopep8 --in-place --recursive --aggressive smart_home_pytree/
+That includes:
+- active `house_config.yaml`
+- user audio/video files
+- backups
+- sqlite databases
+- logs
+- `.env`
