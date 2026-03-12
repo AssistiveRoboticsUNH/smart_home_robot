@@ -123,6 +123,65 @@ class ProtocolTracker:
                 self._conn = None
 
     # ------------------------------------------------------------------
+    # _tracker_meta  – lightweight cross-process coordination
+    # ------------------------------------------------------------------
+
+    def set_meta(self, key: str, value: str | None):
+        """Insert or update a tracker meta key."""
+        with self._lock:
+            if value is None:
+                self._conn.execute("DELETE FROM _tracker_meta WHERE key = ?", (key,))
+            else:
+                self._conn.execute(
+                    "INSERT OR REPLACE INTO _tracker_meta (key, value) VALUES (?, ?)",
+                    (key, value),
+                )
+            self._conn.commit()
+
+    def get_meta(self, key: str, default: str | None = None) -> str | None:
+        """Return a tracker meta value or *default* when absent."""
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT value FROM _tracker_meta WHERE key = ?",
+                (key,),
+            ).fetchone()
+            return row["value"] if row else default
+
+    def request_config_reload(self, yaml_path: str):
+        """Mark a new dashboard YAML save as pending runtime reload."""
+        now_iso = datetime.now().isoformat()
+        self.set_meta("config_reload_state", "pending")
+        self.set_meta("config_reload_yaml_path", yaml_path)
+        self.set_meta("config_reload_requested_at", now_iso)
+        self.set_meta("config_reload_applied_at", None)
+        self.set_meta("config_reload_error", None)
+
+    def mark_config_reload_applied(self, yaml_path: str | None = None):
+        """Mark the latest config reload request as applied."""
+        self.set_meta("config_reload_state", "applied")
+        if yaml_path is not None:
+            self.set_meta("config_reload_yaml_path", yaml_path)
+        self.set_meta("config_reload_applied_at", datetime.now().isoformat())
+        self.set_meta("config_reload_error", None)
+
+    def mark_config_reload_error(self, error: str, yaml_path: str | None = None):
+        """Mark the latest config reload request as failed."""
+        self.set_meta("config_reload_state", "error")
+        if yaml_path is not None:
+            self.set_meta("config_reload_yaml_path", yaml_path)
+        self.set_meta("config_reload_error", error)
+
+    def get_config_reload_status(self) -> dict[str, str | None]:
+        """Return the current dashboard/runtime config reload handshake state."""
+        return {
+            "state": self.get_meta("config_reload_state"),
+            "yaml_path": self.get_meta("config_reload_yaml_path"),
+            "requested_at": self.get_meta("config_reload_requested_at"),
+            "applied_at": self.get_meta("config_reload_applied_at"),
+            "error": self.get_meta("config_reload_error"),
+        }
+
+    # ------------------------------------------------------------------
     # protocol_log  – append-only history
     # ------------------------------------------------------------------
 

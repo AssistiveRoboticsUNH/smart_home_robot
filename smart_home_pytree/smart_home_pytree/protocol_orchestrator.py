@@ -60,6 +60,7 @@ class ProtocolOrchestrator:
         """
         self.rclpy_initialized_here = False
         self.debug = debug
+        self.yaml_path_key = yaml_path_key or "house_yaml_path"
 
         if not rclpy.ok():
             try:
@@ -91,7 +92,7 @@ class ProtocolOrchestrator:
         self.last_satisfied = None
 
         self.robot_interface = robot_interface or RobotInterface(
-            yaml_path_key=yaml_path_key or "house_yaml_path",
+            yaml_path_key=self.yaml_path_key,
         )
         
         # Setup logger
@@ -124,7 +125,7 @@ class ProtocolOrchestrator:
         self.trigger_monitor = TriggerMonitor(
             self.robot_interface,
             wake_event=self.orchestrator_wakeup,
-            yaml_path_key=yaml_path_key,
+            yaml_path_key=self.yaml_path_key,
             test_time=test_time,
         )
 
@@ -152,6 +153,33 @@ class ProtocolOrchestrator:
                 return False
         return True
 
+    def _all_protocols_quiescent(self):
+        tracker = self.trigger_monitor.tracker
+        rows = tracker.get_all_states()
+        if self.running_tree is not None:
+            return False
+        return all((row.get("state") or "idle") in {"idle", "cooldown"} for row in rows)
+
+    def _maybe_apply_config_reload(self):
+        tracker = self.trigger_monitor.tracker
+        status = tracker.get_config_reload_status()
+        if status.get("state") != "pending":
+            return
+        if not self._all_protocols_quiescent():
+            return
+
+        yaml_path = status.get("yaml_path") or os.getenv(self.yaml_path_key)
+        try:
+            load_locations_to_blackboard(yaml_path, force=True)
+            load_protocols_to_bb(yaml_path, force=True)
+            self.robot_interface.reload_house_config()
+            self.trigger_monitor.reload_config(yaml_path=yaml_path)
+            tracker.mark_config_reload_applied(yaml_path)
+            self.bb_logger.notify_discord("[Orchestrator] House yaml reloaded successfully")
+        except Exception as exc:
+            tracker.mark_config_reload_error(str(exc), yaml_path=yaml_path)
+            self.bb_logger.error(f"[Orchestrator] Failed to reload house yaml: {exc}")
+
     def orchestrator_loop(self):
         """
         Reactive Event Loop.
@@ -164,6 +192,8 @@ class ProtocolOrchestrator:
             #     print("[Orchestrator] while of orchestrator_loop...")
             self.bb_logger.debug("[Orchestrator] In the while of orchestrator_loop...") 
 
+            self._maybe_apply_config_reload()
+
             # 1. Gatekeeper: Doesn't do anything if robot isn't ready
             if not self._state_is_ready():
                 self.bb_logger.info("[Orchestrator]  Robot state not ready. Waiting...")    
@@ -171,8 +201,10 @@ class ProtocolOrchestrator:
                 continue
 
             # 2. THE BLOCK: Wait here until HumanInterface or TriggerMonitor wakes the event
-            self.orchestrator_wakeup.wait()
+            self.orchestrator_wakeup.wait(timeout=1.0)
             self.orchestrator_wakeup.clear()
+
+            self._maybe_apply_config_reload()
 
             if self.stop_flag:
                 self.bb_logger.notify_discord("[Orchestrator] stop_flag was triggered") 

@@ -174,6 +174,7 @@ class RobotInterface(Node):
 
         super().__init__("robot_interface")
         self.state = RobotState()
+        self.yaml_path_key = yaml_path_key
         self.person_init = (
             resolve_person_init(yaml_path_key=yaml_path_key)
             if person_init is _PERSON_INIT_UNSET
@@ -256,10 +257,22 @@ class RobotInterface(Node):
             "RobotInterface initialized and spinning in background thread."
         )
         if self.person_init:
-            self.get_logger().warn(
-                f"person_location initialized from house yaml: {self.person_init}"
-            )
-            self.state.update("person_location", self.person_init)
+            self._apply_person_init(self.person_init)
+
+    def _apply_person_init(self, person_init: str | None):
+        if not person_init:
+            return
+        self.get_logger().warn(
+            f"person_location initialized from house yaml: {person_init}"
+        )
+        self.state.update("person_location", person_init)
+
+    def reload_house_config(self):
+        """Reload YAML-driven runtime state such as person_init."""
+        self.person_init = resolve_person_init(yaml_path_key=self.yaml_path_key)
+        if self.person_init:
+            self._apply_person_init(self.person_init)
+        self.get_logger().info("RobotInterface reloaded house yaml settings.")
 
     def speak(self, text:str):
         msg = String()

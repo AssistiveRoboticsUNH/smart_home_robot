@@ -41,8 +41,9 @@ class TriggerMonitor:
         test_time: str = "",
     ):
         self.robot_interface = robot_interface
-        yaml_path = yaml_path or get_house_yaml_path(yaml_path_key)
-        self.protocols_yaml = load_house_config_yaml(yaml_path)
+        self.yaml_path_key = yaml_path_key
+        self.yaml_path = yaml_path or get_house_yaml_path(yaml_path_key)
+        self.protocols_yaml = load_house_config_yaml(self.yaml_path)
 
         self.current_satisfied_protocols = []
         self.lock = threading.RLock()
@@ -78,6 +79,23 @@ class TriggerMonitor:
             self.bb_logger.debug(
                 f"[TriggerMonitor] Time Simulation Active. Starts at {test_time} (Offset: {self.time_offset})"
             )
+
+    def reload_config(self, yaml_path: str | None = None):
+        """Reload trigger YAML and derived trigger metadata."""
+        self.yaml_path = yaml_path or get_house_yaml_path(self.yaml_path_key)
+        self.protocols_yaml = load_house_config_yaml(self.yaml_path)
+        with self.lock:
+            self.current_satisfied_protocols = []
+            self.completed_protocols.clear()
+            self.protocols_to_reset.clear()
+            self.pending_waits.clear()
+            self.monitor_state_success.clear()
+        self._restore_state_from_db()
+        self.event_keys = self._extract_event_keys()
+        self.bb_logger.info(
+            f"[TriggerMonitor] Reloaded house yaml. Event keys: {self.event_keys}"
+        )
+        self.recompute_satisfied()
 
     def _sync_external_state_changes(self):
         self.persistence.sync_external_state_changes(

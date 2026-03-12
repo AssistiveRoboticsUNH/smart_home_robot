@@ -43,7 +43,7 @@ def update_protocol_config(protocol_name: str, key_to_update: str, new_value: st
     
     return True
 
-def load_locations_to_blackboard(yaml_path: str, debug: bool = False):
+def load_locations_to_blackboard(yaml_path: str, debug: bool = False, force: bool = False):
     """
     Load location data from a YAML file and register it to the py_trees blackboard.
     """
@@ -51,11 +51,12 @@ def load_locations_to_blackboard(yaml_path: str, debug: bool = False):
     # Get blackboard
     blackboard = py_trees.blackboard.Blackboard()
 
-    try:
-        blackboard.get("initialized")
-        return blackboard
-    except BaseException:
-        pass
+    if not force:
+        try:
+            blackboard.get("initialized")
+            return blackboard
+        except BaseException:
+            pass
     # ------------------------
 
     # Load YAML
@@ -83,13 +84,22 @@ def load_locations_to_blackboard(yaml_path: str, debug: bool = False):
     return blackboard
 
 
-def load_protocols_to_bb(yaml_path: str, debug: bool = False):
+def load_protocols_to_bb(yaml_path: str, debug: bool = False, force: bool = False):
     """
     Load protocol related data from a YAML file and register it to the py_trees blackboard.
     also sets done flags to false for each action in the protocol.
     """
     # Get blackboard
     blackboard = py_trees.blackboard.Blackboard()
+
+    if force and blackboard.exists("_protocol_registry_names"):
+        prior_names = blackboard.get("_protocol_registry_names") or []
+        for name in prior_names:
+            if blackboard.exists(name):
+                blackboard.unset(name)
+            done_key = f"{name}_done"
+            if blackboard.exists(done_key):
+                blackboard.unset(done_key)
 
     # Load YAML
     data = load_house_config_yaml(yaml_path)
@@ -192,6 +202,8 @@ def load_protocols_to_bb(yaml_path: str, debug: bool = False):
 
         blackboard.set(protocol_name, protocol_dict)
         blackboard.set(f"{protocol_name}_done", protocol_dict_done)
+
+    blackboard.set("_protocol_registry_names", sorted(protocols.keys()))
 
     if debug:
         for key, value in blackboard.storage.items():
