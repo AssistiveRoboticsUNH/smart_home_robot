@@ -77,15 +77,8 @@ The script will:
 - create `~/shr_user/<user_name>/`
 - create `configs/`, `audios/`, `videos/`, `images/`, `logs/`, `database/`, and `map/`
 - copy `smart_home_pytree/config/house_info.yaml` into `configs/house_config.yaml` if it does not already exist
-- print the exact `SHR_USER_DIR` export line for `~/.bashrc`
-- print what to source for `.env` in `~/.bashrc`
-
-Recommended `~/.bashrc` lines:
-
-```bash
-export SHR_USER_DIR="$HOME/shr_user/akash"
-source $HOME/smarthome_ws/src/smart_home_robot/.env
-```
+- add or update the required `SHR_USER_DIR` export line in `~/.bashrc`
+- add the `.env` source line to `~/.bashrc` if it is missing
 
 Reload your shell:
 
