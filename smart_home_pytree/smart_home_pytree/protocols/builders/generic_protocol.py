@@ -19,7 +19,7 @@ Supported step features:
 
 Standalone usage example (run `medicine_am` once):
     export SHR_USER_DIR=$HOME/shr_user/<user_name>
-    python3 smart_home_pytree/smart_home_pytree/protocols/generic_protocol.py --protocol_name medicine_am
+    python3 smart_home_pytree/smart_home_pytree/protocols/builders/generic_protocol.py --protocol_name medicine_am
 
 What happens in standalone mode:
 - Loads `locations` and `protocols` from YAML into the py_trees blackboard

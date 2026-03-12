@@ -119,7 +119,7 @@ Run a single GenericProtocol directly:
 
 ```bash
 # run necessary navigation and robot launch files and then
-python3 smart_home_pytree/smart_home_pytree/protocols/generic_protocol.py --protocol_name medicine_am
+python3 smart_home_pytree/smart_home_pytree/protocols/builders/generic_protocol.py --protocol_name medicine_am
 ```
 
 
