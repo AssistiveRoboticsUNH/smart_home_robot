@@ -20,7 +20,10 @@ ROBOT_NAME                = os.getenv("ROBOT_NAME", "Robot")
 ROBOT_PASS                = os.getenv("robot_pass") or os.getenv("ROBOT_PASS", "")
 
 # ===== Local log folder =====
-BASE_LOG_DIR = os.path.join(os.path.expanduser("~"), "shr_logs", "discord_logs")
+_shr_user_dir = os.getenv("SHR_USER_DIR")
+if not _shr_user_dir:
+    raise RuntimeError("SHR_USER_DIR is not set. Configure a user profile before starting simple_logger.")
+BASE_LOG_DIR = os.path.join(os.path.expanduser(_shr_user_dir), "logs", "discord_logs")
 os.makedirs(BASE_LOG_DIR, exist_ok=True)
 
 class LogSubscriber(Node):

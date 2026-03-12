@@ -9,6 +9,7 @@ from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPo
 from std_msgs.msg import Bool, Float32, Int32, String
 
 from smart_home_pytree.protocols.loader import load_house_config_yaml
+from smart_home_pytree.utils import get_house_yaml_path
 
 
 _PERSON_INIT_UNSET = object()
@@ -96,9 +97,9 @@ def resolve_person_init_from_yaml_path(yaml_path: str | None) -> str | None:
     return text or None
 
 
-def resolve_person_init(yaml_path_key: str = "house_yaml_path") -> str | None:
-    """Resolve person_init using the configured house-yaml environment variable."""
-    return resolve_person_init_from_yaml_path(os.getenv(yaml_path_key))
+def resolve_person_init() -> str | None:
+    """Resolve person_init from the active user house config."""
+    return resolve_person_init_from_yaml_path(get_house_yaml_path())
 
 
 class RobotState:
@@ -168,15 +169,14 @@ class RobotInterface(Node):
                     cls._instance = super().__new__(cls)
         return cls._instance
 
-    def __init__(self, *, person_init=_PERSON_INIT_UNSET, yaml_path_key="house_yaml_path"):
+    def __init__(self, *, person_init=_PERSON_INIT_UNSET):
         if getattr(self, "_initialized", False):
             return
 
         super().__init__("robot_interface")
         self.state = RobotState()
-        self.yaml_path_key = yaml_path_key
         self.person_init = (
-            resolve_person_init(yaml_path_key=yaml_path_key)
+            resolve_person_init()
             if person_init is _PERSON_INIT_UNSET
             else person_init
         )
@@ -269,7 +269,7 @@ class RobotInterface(Node):
 
     def reload_house_config(self):
         """Reload YAML-driven runtime state such as person_init."""
-        self.person_init = resolve_person_init(yaml_path_key=self.yaml_path_key)
+        self.person_init = resolve_person_init()
         if self.person_init:
             self._apply_person_init(self.person_init)
         self.get_logger().info("RobotInterface reloaded house yaml settings.")

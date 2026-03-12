@@ -63,7 +63,8 @@ def setup_function(function):
     os.environ["PROTOCOL_TRACKER_DB"] = _tmp_db.name
     _tmp_db.close()
 
-    yaml_file_path = os.getenv("house_yaml_path", None)
+    from smart_home_pytree.utils import get_house_yaml_path
+    yaml_file_path = get_house_yaml_path()
     load_protocols_to_bb(yaml_file_path)
     print("\nsetup_function()")
 

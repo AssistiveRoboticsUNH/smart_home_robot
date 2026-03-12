@@ -9,6 +9,7 @@ import rclpy
 from shr_msgs.action import QuestionRequest  # Ensure this import is correct
 from smart_home_pytree.behaviors.set_protocol_bb import SetProtocolBB
 from smart_home_pytree.protocols.registry import load_protocols_to_bb
+from smart_home_pytree.utils import get_house_yaml_path
 
 GENERIC_CONFIRMATION_RESULT_KEY = "user_confirmation_result"
 
@@ -103,7 +104,7 @@ def main():
     rclpy.init()
     # 1. Create the node manually
     node = rclpy.create_node("test_node")
-    yaml_file_path = os.getenv("house_yaml_path", None)
+    yaml_file_path = get_house_yaml_path()
 
     blackboard = py_trees.blackboard.Blackboard()
     load_protocols_to_bb(yaml_file_path, debug=False)

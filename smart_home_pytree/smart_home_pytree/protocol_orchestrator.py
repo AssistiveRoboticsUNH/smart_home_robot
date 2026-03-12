@@ -15,7 +15,7 @@ Key Components:
 - shutdown: Gracefully stops all threads and ROS nodes.
 
 Usage:
-- Run the orchestrator: `ros2 run smart_home_pytree protocol_orchestrator --debug --test_time 10:30 --env_yaml_file_name house_yaml_path`
+- Run the orchestrator: `ros2 run smart_home_pytree protocol_orchestrator --debug --test_time 10:30`
 '''
 
 import argparse
@@ -35,7 +35,7 @@ from smart_home_pytree.human_interface import HumanInterface
 from smart_home_pytree.protocols.registry import load_protocols_to_bb, load_locations_to_blackboard
 from smart_home_pytree.robot_interface import RobotInterface
 from smart_home_pytree.triggers.engine import TriggerMonitor
-from smart_home_pytree.utils import BlackboardLogger
+from smart_home_pytree.utils import BlackboardLogger, get_house_yaml_path
 
 
 class ProtocolOrchestrator:
@@ -47,7 +47,7 @@ class ProtocolOrchestrator:
     interruptions, and manages the execution threads of specific protocol trees.
     """
 
-    def __init__(self, robot_interface=None, test_time: str = "", debug=False, yaml_path_key=None):
+    def __init__(self, robot_interface=None, test_time: str = "", debug=False):
         """
         Initialize the Orchestrator.
 
@@ -60,8 +60,6 @@ class ProtocolOrchestrator:
         """
         self.rclpy_initialized_here = False
         self.debug = debug
-        self.yaml_path_key = yaml_path_key or "house_yaml_path"
-
         if not rclpy.ok():
             try:
                 rclpy.init(args=None)
@@ -91,9 +89,7 @@ class ProtocolOrchestrator:
         self.required_state_keys = ["charging"]
         self.last_satisfied = None
 
-        self.robot_interface = robot_interface or RobotInterface(
-            yaml_path_key=self.yaml_path_key,
-        )
+        self.robot_interface = robot_interface or RobotInterface()
         
         # Setup logger
         blackboard = py_trees.blackboard.Blackboard()
@@ -125,7 +121,6 @@ class ProtocolOrchestrator:
         self.trigger_monitor = TriggerMonitor(
             self.robot_interface,
             wake_event=self.orchestrator_wakeup,
-            yaml_path_key=self.yaml_path_key,
             test_time=test_time,
         )
 
@@ -168,7 +163,7 @@ class ProtocolOrchestrator:
         if not self._all_protocols_quiescent():
             return
 
-        yaml_path = status.get("yaml_path") or os.getenv(self.yaml_path_key)
+        yaml_path = status.get("yaml_path") or get_house_yaml_path()
         try:
             load_locations_to_blackboard(yaml_path, force=True)
             load_protocols_to_bb(yaml_path, force=True)
@@ -634,27 +629,10 @@ def main():
         help="Enable debug output.",
     )
 
-    parser.add_argument(
-        "--env_yaml_file_name",
-        type=str,
-        default="house_yaml_path",
-        help=(
-            "Name of the environment variable that stores the YAML file path "
-            "(default: house_yaml_path)."
-        ),
-    )
-
     args, _ = parser.parse_known_args()
     test_time = args.test_time
 
-
-    # Resolve YAML file path from environment variable
-    print(f"Environment variable path is set to  '{args.env_yaml_file_name}'")
-    yaml_file_path = os.getenv(args.env_yaml_file_name)
-    if yaml_file_path is None:
-        raise RuntimeError(
-            f"Environment variable '{args.env_yaml_file_name}' is not set."
-        )
+    yaml_file_path = get_house_yaml_path()
     # blackboard = py_trees.blackboard.Blackboard()
     print("Loading location and protocol to bb")
     
@@ -667,7 +645,7 @@ def main():
         print("[INFO] Using system time")
 
     # For testing:
-    orch = ProtocolOrchestrator(test_time=test_time, debug=args.debug, yaml_path_key=args.env_yaml_file_name)
+    orch = ProtocolOrchestrator(test_time=test_time, debug=args.debug)
 
     try:
         print("ORCHI LOOP")
@@ -686,5 +664,5 @@ if __name__ == "__main__":
 # ros2 topic pub /display_rx std_msgs/msg/String "data: 'exercise_stop'"
 
 
-# ros2 run smart_home_pytree protocol_orchestrator -- --debug --test_time 10:30 --env_yaml_file_name house_yaml_path
+# ros2 run smart_home_pytree protocol_orchestrator -- --debug --test_time 10:30
 # ros2 run rqt_console rqt_console

@@ -16,7 +16,7 @@ from smart_home_pytree.protocols.registry import load_protocols_to_bb, load_loca
 from smart_home_pytree.trees.ask_question_tree import AskQuestionTree
 from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
 from smart_home_pytree.trees.move_to_person_location import MoveToPersonLocationTree
-from smart_home_pytree.utils import str2bool
+from smart_home_pytree.utils import get_house_yaml_path, resolve_media_dir_path, str2bool
 
 # --- Helper Behaviors ---
 class CheckRobotStateKey_(py_trees.behaviour.Behaviour):
@@ -132,7 +132,9 @@ class ExerciseRandomProtocolTree(BaseTreeRunner):
         self.time_between_reps = self.protocol_info["time_between_reps"]
         self.start_key = self.protocol_info["start_state_key"]
         self.stop_key = self.protocol_info["stop_state_key"]
-        self.video_dir_path = self.protocol_info["video_dir_path"]
+        self.video_dir_path = resolve_media_dir_path(
+            self.protocol_info["video_dir_path"], "video"
+        )
 
         if "storage/emulated/0" in self.video_dir_path:
             self.tablet = True
@@ -505,7 +507,7 @@ def main(args=None):
     protocol_name = args.protocol_name
     print("protocol_name: ", protocol_name)
 
-    yaml_file_path = os.getenv("house_yaml_path_test", None)
+    yaml_file_path = get_house_yaml_path()
     load_locations_to_blackboard(yaml_file_path, debug=False)
     load_protocols_to_bb(yaml_file_path, debug=True)
 

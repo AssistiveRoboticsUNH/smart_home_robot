@@ -10,14 +10,15 @@ from py_trees import display
 from smart_home_pytree.protocols.loader import load_house_config_yaml
 from smart_home_pytree.protocols.builders.generic_protocol import GenericProtocolTree
 from smart_home_pytree.protocols.registry import load_locations_to_blackboard, load_protocols_to_bb
+from smart_home_pytree.utils import get_house_yaml_path
 
 
 def _resolve_house_yaml_path() -> str:
     """Resolve house YAML path from environment variables."""
-    yaml_path = os.getenv("house_yaml_path") or os.getenv("HOUSE_YAML_PATH")
+    yaml_path = get_house_yaml_path()
     if not yaml_path:
         raise EnvironmentError(
-            "Missing house YAML env var. Set 'house_yaml_path' (or 'HOUSE_YAML_PATH')."
+            "Missing house config path. Set SHR_USER_DIR so configs/house_config.yaml can be resolved."
         )
     if not os.path.isfile(yaml_path):
         raise FileNotFoundError(f"house YAML path not found: {yaml_path}")

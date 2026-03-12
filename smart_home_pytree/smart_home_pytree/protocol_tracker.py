@@ -5,9 +5,9 @@ Two tables:
   * ``protocol_log``   - immutable history of every protocol run
   * ``protocol_state``  - live per-protocol state (one row per protocol)
 
-The database file lives at ``~/shr_logs/protocol_tracker.db`` by default
-(overridable via the *db_path* constructor arg or the ``PROTOCOL_TRACKER_DB``
-environment variable).
+The database file lives at ``$SHR_USER_DIR/database/protocol_tracker.db`` by
+default. This can still be overridden via the *db_path* constructor arg or the
+``PROTOCOL_TRACKER_DB`` environment variable.
 """
 
 from __future__ import annotations
@@ -19,9 +19,7 @@ from pathlib import Path
 from threading import RLock
 from typing import Any
 
-
-_DEFAULT_DB_DIR = os.path.join(os.path.expanduser("~"), "shr_logs")
-_DEFAULT_DB_PATH = os.path.join(_DEFAULT_DB_DIR, "protocol_tracker.db")
+from smart_home_pytree.utils import get_user_database_dir
 
 # Sentinel object to distinguish "not provided" from None
 _SENTINEL = object()
@@ -35,7 +33,9 @@ class ProtocolTracker:
     # ------------------------------------------------------------------
 
     def __init__(self, db_path: str | None = None):
-        resolved = db_path or os.getenv("PROTOCOL_TRACKER_DB", _DEFAULT_DB_PATH)
+        user_db_dir = get_user_database_dir(required=True)
+        default_db_path = str((user_db_dir / "protocol_tracker.db").resolve())
+        resolved = db_path or os.getenv("PROTOCOL_TRACKER_DB", default_db_path)
         self._db_path = str(Path(resolved).expanduser().resolve())
         os.makedirs(os.path.dirname(self._db_path), exist_ok=True)
         self._lock = RLock()

@@ -37,12 +37,10 @@ class TriggerMonitor:
         robot_interface,
         wake_event: threading.Event | None = None,
         yaml_path: str | None = None,
-        yaml_path_key=None,
         test_time: str = "",
     ):
         self.robot_interface = robot_interface
-        self.yaml_path_key = yaml_path_key
-        self.yaml_path = yaml_path or get_house_yaml_path(yaml_path_key)
+        self.yaml_path = yaml_path or get_house_yaml_path()
         self.protocols_yaml = load_house_config_yaml(self.yaml_path)
 
         self.current_satisfied_protocols = []
@@ -82,7 +80,7 @@ class TriggerMonitor:
 
     def reload_config(self, yaml_path: str | None = None):
         """Reload trigger YAML and derived trigger metadata."""
-        self.yaml_path = yaml_path or get_house_yaml_path(self.yaml_path_key)
+        self.yaml_path = yaml_path or get_house_yaml_path()
         self.protocols_yaml = load_house_config_yaml(self.yaml_path)
         with self.lock:
             self.current_satisfied_protocols = []

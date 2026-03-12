@@ -11,7 +11,7 @@ import py_trees
 
 from smart_home_pytree.behaviors.set_protocol_bb import SetProtocolBB
 from smart_home_pytree.protocols.registry import load_protocols_to_bb
-from smart_home_pytree.utils import parse_duration
+from smart_home_pytree.utils import get_house_yaml_path, parse_duration
 
 
 class YieldWait(py_trees.behaviour.Behaviour):
@@ -182,7 +182,7 @@ def main():
     import os
     import pprint
 
-    yaml_file_path = os.getenv("house_yaml_path", None)
+    yaml_file_path = get_house_yaml_path()
     load_protocols_to_bb(yaml_file_path)
 
     # ---- setup blackboard ----

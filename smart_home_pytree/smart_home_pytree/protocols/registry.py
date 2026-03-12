@@ -212,8 +212,9 @@ def load_protocols_to_bb(yaml_path: str, debug: bool = False, force: bool = Fals
     return blackboard
         
 if __name__ == "__main__":
+    from smart_home_pytree.utils import get_house_yaml_path
 
-    yaml_file_path = os.getenv("house_yaml_path", None)
+    yaml_file_path = get_house_yaml_path()
     print("yaml_file_path", yaml_file_path)
     bb = load_locations_to_blackboard(yaml_file_path)
     print("bb: ", bb)

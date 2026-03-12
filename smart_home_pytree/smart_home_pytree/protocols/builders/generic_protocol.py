@@ -18,7 +18,7 @@ Supported step features:
 
 
 Standalone usage example (run `medicine_am` once):
-    export house_yaml_path=<path_to>/smart_home_robot/smart_home_pytree/config/house_info.yaml
+    export SHR_USER_DIR=$HOME/shr_user/<user_name>
     python3 smart_home_pytree/smart_home_pytree/protocols/generic_protocol.py --protocol_name medicine_am
 
 What happens in standalone mode:
@@ -41,7 +41,7 @@ from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
 from smart_home_pytree.protocols.builders.shared_builder_utils import (
     make_run_tree_action,
 )
-from smart_home_pytree.utils import parse_duration, str2bool
+from smart_home_pytree.utils import get_house_yaml_path, parse_duration, str2bool
 
 
 class GenericProtocolTree(BaseTreeRunner):
@@ -373,7 +373,7 @@ def main(args=None):
     parser.add_argument("--protocol_name", type=str, default="medicine_am")
 
     args, _ = parser.parse_known_args()
-    yaml_file_path = os.getenv("house_yaml_path", None)
+    yaml_file_path = get_house_yaml_path()
     load_locations_to_blackboard(yaml_file_path)
     load_protocols_to_bb(yaml_file_path)
 
