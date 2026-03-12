@@ -20,6 +20,10 @@ import yaml
 
 from smart_home_pytree.protocols.schema import RUN_TREE_SPECS, validate_house_config
 from smart_home_pytree.robot_interface import ROBOT_STATE_SPECS
+from smart_home_pytree.utils import (
+    get_house_yaml_path,
+    list_user_files,
+)
 
 _LOCK = threading.RLock()
 
@@ -43,23 +47,12 @@ class ConfigContext:
     yaml_path: Path
 
 
-def resolve_house_yaml_path(explicit_path: str | None = None) -> ConfigContext:
-    """Resolve the active house config path.
-
-    Priority:
-    1. explicit_path arg
-    2. env var `house_yaml_path`
-    """
-    raw = explicit_path or os.getenv("house_yaml_path")
-    if not raw:
-        raise DashboardConfigError(
-            "house_yaml_path is not set. Set the environment variable or pass an explicit path."
-        )
-    path = Path(raw).expanduser().resolve()
-    if not path.exists():
-        raise DashboardConfigError(f"house config file not found: {path}")
-    if not path.is_file():
-        raise DashboardConfigError(f"house config path is not a file: {path}")
+def resolve_house_yaml_path() -> ConfigContext:
+    """Resolve the active user house config path from SHR_USER_DIR."""
+    try:
+        path = Path(get_house_yaml_path()).expanduser().resolve()
+    except RuntimeError as exc:
+        raise DashboardConfigError(str(exc)) from exc
     return ConfigContext(yaml_path=path)
 
 
@@ -109,6 +102,10 @@ def backup_and_save_config(ctx: ConfigContext, data: dict) -> dict:
 def _infer_param_kind(param_name: str, type_hint: str) -> str:
     hint = (type_hint or "").lower()
     name = (param_name or "").lower()
+    if name == "audio_path":
+        return "audio_asset"
+    if name == "video_path":
+        return "video_asset"
     if name == "execution_location":
         return "execution_location"
     if name == "end_sleep":
@@ -183,6 +180,10 @@ def build_dashboard_payload(ctx: ConfigContext) -> dict[str, Any]:
             "day_options": DAY_OPTIONS,
             "generic_protocol_names": generic_names,
             "special_protocol_names": special_names,
+            "user_assets": {
+                "audio_files": list_user_files("audios", suffixes=(".mp3", ".wav", ".ogg", ".m4a")),
+                "video_files": list_user_files("videos", suffixes=(".mp4", ".mov", ".mkv", ".avi", ".webm")),
+            },
             "reset_types": ["eod", "instant", "periodic"],
             "ui_capabilities": {
                 "supports_xy_proximity": True,

@@ -140,7 +140,7 @@ def create_app() -> Flask:
     @app.route("/api/dashboard/bootstrap", methods=["GET"])
     def api_bootstrap():
         try:
-            ctx = resolve_house_yaml_path(request.args.get("yaml_path"))
+            ctx = resolve_house_yaml_path()
             payload = build_dashboard_payload(ctx)
             return jsonify({"ok": True, **payload})
         except DashboardConfigError as exc:
@@ -172,7 +172,7 @@ def create_app() -> Flask:
         if not isinstance(data, dict):
             return jsonify({"ok": False, "error": "Body must contain object field 'config'"}), 400
         try:
-            ctx = resolve_house_yaml_path(body.get("yaml_path"))
+            ctx = resolve_house_yaml_path()
             save_info = backup_and_save_config(ctx, data)
             tracker = _get_tracker()
             tracker.request_config_reload(str(ctx.yaml_path))

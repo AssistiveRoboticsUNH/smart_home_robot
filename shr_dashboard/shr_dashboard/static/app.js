@@ -202,6 +202,16 @@
     return ['', ...Object.keys(state.config?.locations || {})];
   }
 
+  function assetOptions(kind, currentValue = '') {
+    const assets = state.metadata?.user_assets || {};
+    const configured = kind === 'audio_asset' ? (assets.audio_files || []) : (assets.video_files || []);
+    const options = [...configured];
+    const current = String(currentValue || '').trim();
+    if (current && !options.includes(current)) options.unshift(current);
+    if (!options.includes('')) options.unshift('');
+    return options;
+  }
+
   function guessValueType(value) {
     if (typeof value === 'boolean') return 'bool';
     if (typeof value === 'number') return 'number';
@@ -220,6 +230,10 @@
         return param.name === 'num_attempts' ? 3 : 1;
       case 'location':
         return Object.keys(state.config?.locations || {})[0] || '';
+      case 'audio_asset':
+        return (state.metadata?.user_assets?.audio_files || [])[0] || '';
+      case 'video_asset':
+        return (state.metadata?.user_assets?.video_files || [])[0] || '';
       case 'number':
       case 'duration':
       case 'number_or_duration':
@@ -818,6 +832,13 @@
       let control;
       if (param.kind === 'location') {
         control = `<select ${common}>${locationNames.map((loc) => `<option value="${escapeAttr(loc)}" ${String(value ?? '') === loc ? 'selected' : ''}>${escapeHtml(loc)}</option>`).join('')}</select>`;
+      } else if (param.kind === 'audio_asset' || param.kind === 'video_asset') {
+        const options = assetOptions(param.kind, value ?? '');
+        const selected = String(value ?? '');
+        control = `<select ${common}>${options.map((opt) => {
+          const label = opt || (param.kind === 'audio_asset' ? 'Select audio' : 'Select video');
+          return `<option value="${escapeAttr(opt)}" ${selected === opt ? 'selected' : ''}>${escapeHtml(label)}</option>`;
+        }).join('')}</select>`;
       } else if (param.kind === 'execution_location') {
         const options = executionLocationOptions();
         const selected = String(value ?? 'current');
@@ -1752,6 +1773,8 @@
           value = target.value === '' ? '' : Number.parseInt(target.value, 10);
         } else if (spec?.kind === 'number') {
           value = target.value === '' ? '' : Number.parseFloat(target.value);
+        } else if (spec?.kind === 'audio_asset' || spec?.kind === 'video_asset') {
+          value = target.value || '';
         } else if (spec?.kind === 'execution_location') {
           value = target.value || 'current';
         } else {
