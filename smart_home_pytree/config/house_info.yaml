@@ -2,19 +2,19 @@ locations:
   bedroom:
     x: 0.5
     y: 1.44
-    yaw: 0.78
+    yaw: 45
   dining:
     x: 0.5
     y: 1.44
-    yaw: 0.78
+    yaw: 45
   home:
     x: 0.5
     y: -1.4
-    yaw: 3.14
+    yaw: 180
   living_room:
     x: 1.94
     y: -0.4
-    yaw: -0.3
+    yaw: -17
 person_init: living_room
 protocols:
   charge_robot:
@@ -136,7 +136,7 @@ protocols:
   medicine_am:
     action:
       steps:
-      - next_step_after: 30
+      - next_step_after: 20
         tree_name: play_text
         tree_params:
           execution_location: person
