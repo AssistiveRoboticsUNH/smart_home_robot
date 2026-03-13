@@ -84,13 +84,13 @@ protocols:
       low_level:
         reminder_1: "Hey, Brian. It is time for your PM routine. steps are on your poster in the bathroom"
         type_1: text
-        wait_1: 45*60 ## 45 minutes
+        wait_1: 20*60 ## 45 minutes
         reminder_2:  "Hey, Brian. this the second reminder for your PM routine. steps are on your poster in the bathroom"
         type_2: text
         number_of_protocols: 2
       high_level:
         priority: 3
-        success_on: {'state': 'bathroom_sensor', 'value': True}
+        success_on: {'state': 'bathroom_sensor', 'value': True, feedback: 'Hey Brian, good job completing your PM routines'}
         requirements:
           time: {from: "20:00", to: "21:00"}
           permissible_locations: [living_room]

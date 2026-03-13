@@ -8,6 +8,7 @@ from datetime import datetime
 
 import py_trees
 import rclpy
+from std_msgs.msg import String
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.signals import SignalHandlerOptions
 
@@ -27,7 +28,14 @@ class ProtocolOrchestrator:
     interruptions, and manages the execution threads of specific protocol trees.
     """
 
-    def __init__(self, robot_interface=None, test_time: str = "", debug=False, yaml_path_key=None):
+    def __init__(
+        self,
+        robot_interface=None,
+        test_time: str = "",
+        debug=False,
+        yaml_path_key=None,
+        protocol_timeout_minutes: float = 30.0,
+    ):
         """
         Initialize the Orchestrator.
 
@@ -37,9 +45,13 @@ class ProtocolOrchestrator:
             test_time (str, optional): Simulated time for testing (e.g., "09:00").
                 Defaults to "".
             debug (bool, optional): Enable verbose logging. Defaults to False.
+            protocol_timeout_minutes (float, optional): Max time for a protocol to run
+                before being stopped. Defaults to 30.0 minutes.
         """
         self.rclpy_initialized_here = False
         self.debug = debug
+        self.protocol_timeout_sec = int(protocol_timeout_minutes * 60)
+        self.protocol_timeout_timer = None
 
         if not rclpy.ok():
             try:
@@ -85,7 +97,12 @@ class ProtocolOrchestrator:
         # Saved globally so 'logger' is available to every single Python file in project
         blackboard.set("logger", custom_logger)
         self.bb_logger = blackboard.get("logger")
-        
+
+        # Protocol heartbeat: publish protocol_active for watchdog (cross-process)
+        self._protocol_active_pub = self.robot_interface.create_publisher(
+            String, "/protocol_active", 10
+        )
+
         self.bb_logger.notify_discord("[Orchestrator] Orchestrator initilized")          
 
         # Setup HumanInterface 
@@ -254,11 +271,38 @@ class ProtocolOrchestrator:
                 self.stop_protocol()
                 self.start_protocol(best_candidate)
 
+    def _protocol_timeout_callback(self):
+        """Called when a protocol exceeds the timeout. Stops the running protocol."""
+        with self.lock:
+            if not self.running_tree:
+                return
+            name = self.running_tree["name"]
+            tree = self.running_tree["tree"]
+        self.bb_logger.notify_discord(
+            f"[Orchestrator] Protocol '{name}' timed out after "
+            f"{self.protocol_timeout_sec}s. Stopping."
+        )
+        tree.stop_tree()
+
+    def _cancel_protocol_timeout(self):
+        """Cancel the protocol timeout timer if it is running."""
+        if self.protocol_timeout_timer is not None:
+            self.protocol_timeout_timer.cancel()
+            self.protocol_timeout_timer = None
+
     def _run_protocol(self, tree_runner, class_protocol_name):
         """Run a protocol tree and clean up when done."""
         try:
             tree_runner.run_until_done()
         finally:
+            self._cancel_protocol_timeout()
+            # Clear protocol_active 
+            bb = py_trees.blackboard.Blackboard()
+            bb.set("protocol_active", None)
+            msg = String()
+            msg.data = ""
+            self._protocol_active_pub.publish(msg)
+
             self.bb_logger.notify_discord(f"tree_runner.final_status {tree_runner.final_status}")
             if tree_runner.final_status == py_trees.common.Status.SUCCESS:
                 self.bb_logger.info(
@@ -268,8 +312,6 @@ class ProtocolOrchestrator:
 
             with self.lock:
                 self.bb_logger.info(f"[Orchestrator] Finished: {class_protocol_name}")
-                # tree = self.running_tree["tree"]
-                # tree.nodes_cleanup() ## script does on its own
                 self.running_tree = None
                 self.running_thread = None
 
@@ -332,12 +374,32 @@ class ProtocolOrchestrator:
         )
 
         tree_runner.setup()
+        self.bb_logger.info(
+                f"[Orchestrator] setup tree for protocol {protocol_name}"
+            )        # Set protocol_active (blackboard + topic for watchdog)
+        bb = py_trees.blackboard.Blackboard()
+        bb.set("protocol_active", class_protocol_name)
+        msg = String()
+        msg.data = class_protocol_name
+        self._protocol_active_pub.publish(msg)
+
         thread = threading.Thread(
             target=self._run_protocol,
             args=(tree_runner, class_protocol_name),
             daemon=True,
         )
         thread.start()
+        self.bb_logger.info(
+                f"[Orchestrator] run_protocol for {protocol_name}"
+            )
+        
+        self._cancel_protocol_timeout()
+        self.protocol_timeout_timer = threading.Timer(
+            self.protocol_timeout_sec,
+            self._protocol_timeout_callback,
+        )
+        self.protocol_timeout_timer.daemon = True
+        self.protocol_timeout_timer.start()
 
         with self.lock:
             self.running_tree = {
@@ -347,27 +409,55 @@ class ProtocolOrchestrator:
             }
             self.running_thread = thread
 
+
     def stop_protocol(self):
-        """Stop the currently running protocol."""
+        """Stop the currently running protocol. Blocks until the protocol thread exits."""
+        self._cancel_protocol_timeout()
+
         with self.lock:
             if not self.running_tree:
                 return
-            name = self.running_tree["name"]
-            self.bb_logger.notify_discord(f"[Orchestrator] Stopping: {name}")
-            tree = self.running_tree["tree"]
 
+            name = self.running_tree["name"]
+            tree = self.running_tree["tree"]
+            thread = self.running_thread
+
+        self.bb_logger.notify_discord(f"[Orchestrator] Stopping: {name}")
         tree.stop_tree()
-        self.running_thread.join(timeout=5)
-        # tree.cleanup() ## cleans up on its own with stop tree
+
+        if thread is None:
+            return
+
+        join_timeout = 10
+        thread.join(timeout=join_timeout)
+
+        if thread.is_alive():
+            self.bb_logger.notify_discord(
+                f"[Orchestrator] WARNING: '{name}' did not stop within {join_timeout}s."
+            )
+
+            max_wait = 60
+            waited = 0
+
+            while thread.is_alive() and waited < max_wait:
+                thread.join(timeout=2)
+                waited += 2
+
+            if thread.is_alive():
+                self.bb_logger.notify_discord(
+                    f"[Orchestrator] ERROR: '{name}' thread still alive after {max_wait}s."
+                )
 
         with self.lock:
             self.running_tree = None
             self.running_thread = None
 
+
     def shutdown(self):
         """Gracefully stop everything (ROS-safe)."""
         self.bb_logger.notify_discord("[Orchestrator] Shutting down...")
-        
+
+        self._cancel_protocol_timeout()
 
         # 1. Stop orchestrator logic
         self.stop_flag = True
@@ -450,6 +540,13 @@ def main():
     )
 
     parser.add_argument(
+        "--protocol_timeout_minutes",
+        type=float,
+        default=30.0,
+        help="Max minutes a protocol can run before being stopped (default: 30).",
+    )
+
+    parser.add_argument(
         "--env_yaml_file_name",
         type=str,
         default="house_yaml_path",
@@ -462,7 +559,7 @@ def main():
     args, _ = parser.parse_known_args()
     test_time = args.test_time
 
-
+    print(f"Starting Protocol Orchestrator with protocol_timeout_minutes={args.protocol_timeout_minutes}, ")
     # Resolve YAML file path from environment variable
     print(f"Environment variable path is set to  '{args.env_yaml_file_name}'")
     yaml_file_path = os.getenv(args.env_yaml_file_name)
@@ -482,7 +579,12 @@ def main():
         print("[INFO] Using system time")
 
     # For testing:
-    orch = ProtocolOrchestrator(test_time=test_time, debug=args.debug, yaml_path_key=args.env_yaml_file_name)
+    orch = ProtocolOrchestrator(
+        test_time=test_time,
+        debug=args.debug,
+        yaml_path_key=args.env_yaml_file_name,
+        protocol_timeout_minutes=args.protocol_timeout_minutes,
+    )
 
     try:
         print("ORCHI LOOP")
@@ -509,3 +611,4 @@ if __name__ == "__main__":
 
 
 
+# ros2 run smart_home_pytree protocol_orchestrator -- --env_yaml_file_name house_yaml_path

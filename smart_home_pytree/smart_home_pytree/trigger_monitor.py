@@ -130,6 +130,10 @@ class TriggerMonitor:
             if success:
                 self.bb_logger.notify_discord(f"[success_on] {full_name} satisfied ({mode})")
 
+                feedback = rule.get("feedback")
+                if feedback:
+                    self.robot_interface.speak(feedback)
+
                 self.pending_waits.pop(full_name, None)
                 # self.completed_protocols.discard(full_name)
                 to_remove.append(full_name)
@@ -142,7 +146,8 @@ class TriggerMonitor:
         Normalize success_on into:
         {
             "mode": "all" | "any",
-            "conditions": [{"state": str, "value": Any}, ...]
+            "conditions": [{"state": str, "value": Any}, ...],
+            "feedback": str (optional) - positive message to speak when success is achieved
         }
 
         support formats:
@@ -157,16 +162,29 @@ class TriggerMonitor:
         3. success_on:
             state: coffee
             value: true
+            feedback: "Good job!"  # optional feedback to speak after success
         """
+        feedback = success_on.get("feedback")
+
         # single condition (legacy)
         if "state" in success_on:
-            return {"mode": "all", "conditions": [success_on]}
+            cond = {k: v for k, v in success_on.items() if k in ("state", "value")}
+            result = {"mode": "all", "conditions": [cond]}
+            if feedback:
+                result["feedback"] = feedback
+            return result
 
         if "all" in success_on:
-            return {"mode": "all", "conditions": success_on["all"]}
+            result = {"mode": "all", "conditions": success_on["all"]}
+            if feedback:
+                result["feedback"] = feedback
+            return result
 
         if "any" in success_on:
-            return {"mode": "any", "conditions": success_on["any"]}
+            result = {"mode": "any", "conditions": success_on["any"]}
+            if feedback:
+                result["feedback"] = feedback
+            return result
 
         raise ValueError(f"Invalid success_on format: {success_on}")
 

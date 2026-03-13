@@ -55,16 +55,16 @@ protocols:
   XReminderProtocol:
     medicine_am:
       low_level:
-        reminder_1: "/home/olagh48652/smart-home/src/smart-home-robot/shr_resources/resources/food_reminder.mp3"
-        type_1: audio
+        reminder_1: "Machine learning (ML) is a field of study in artificial intelligence concerned with the development and study of statistical algorithms that can learn from data and generalize to unseen data, and thus perform tasks without explicit instructions.[1] Within a subdiscipline of machine learning, advances in the field of deep learning have allowed neural networks, a class of statistical algorithms, to surpass many previous machine learning approaches in performance."
+        type_1: text
         wait_1: 120
-        reminder_2:  "please take your night medicine"
+        reminder_2:  "please take your night medicine najs ajl akj al the lajn ftj al ifn tojfs aisj aj"
         type_2: text
         number_of_protocols: 2
       high_level:
         priority: 2
         requirements:
-          time: {'from': '15:00', 'to': '17:00'}
+          time: {'from': '10:00', 'to': '11:10'}
           permissible_locations: [living_room]
 
     medicine_pm:
@@ -77,9 +77,9 @@ protocols:
         number_of_protocols: 2
       high_level:
         priority: 2
-        success_on: {'state': 'coffee', 'value': True}
+        success_on: {'state': 'coffee', 'value': True, feedback: 'Hey Brian, good job completing your PM routines'}
         requirements: 
-          time: {'from': '14:00', 'to': '15:00'}
+          time: {'from': '9:11', 'to': '10:20'}
           permissible_locations: [living_room]
 
     medicine_3:
@@ -97,25 +97,25 @@ protocols:
         priority: 2
         success_on: {'state': 'coffee', 'value': True}
         requirements: 
-          time: {'from': '10:00', 'to': '12:00'}
+          time: {'from': '8:21', 'to': '8:30'}
           permissible_locations: [living_room]
 
-  ExerciseProtocol:
-    exercise:
-      low_level:
-        exercise_yaml_file: "/home/olagh48652/smart_home_pytree_ws/src/smart_home_robot/smart_home_pytree/config/exercise_routine_test.yaml" 
-        video_dir_path: "/home/olagh48652/Exercise_Videos" ## path on the tablet 
-        start_state_key: "start_exercise"
-        stop_state_key: "stop_exercise"
-        get_confirmation: "Do you want to exercise now?" ## if empty then dont ask to indicate whether the protocol should start after the person asks
-      high_level:
-        reset_pattern:
-          type: instant ## if triggered should play directly
-        priority: 4
-        requirements: 
-          event: 
-            - {'state': 'start_exercise', 'value': True}
-          time: {'from': '15:00', 'to': '17:00'}
+  # ExerciseProtocol:
+  #   exercise:
+  #     low_level:
+  #       exercise_yaml_file: "/home/olagh48652/smart_home_pytree_ws/src/smart_home_robot/smart_home_pytree/config/exercise_routine_test.yaml" 
+  #       video_dir_path: "/home/olagh48652/Exercise_Videos" ## path on the tablet 
+  #       start_state_key: "start_exercise"
+  #       stop_state_key: "stop_exercise"
+  #       get_confirmation: "Do you want to exercise now?" ## if empty then dont ask to indicate whether the protocol should start after the person asks
+  #     high_level:
+  #       reset_pattern:
+  #         type: instant ## if triggered should play directly
+  #       priority: 4
+  #       requirements: 
+  #         event: 
+  #           - {'state': 'start_exercise', 'value': True}
+  #         time: {'from': '8:21', 'to': '17:00'}
 
   ## you should have one either random or normal exercise protocol
   ExerciseRandomProtocol:
@@ -128,9 +128,10 @@ protocols:
         time_between_exercises: 6 ## time between exercises in seconds
         time_between_reps: 3 ## time between reps in seconds
         video_dir_path: "/home/olagh48652/Exercise_Videos" ## path on the tablet 
+        # video_dir_path: "file:///storage/emulated/0/Download/Exercise_Videos"
         start_state_key: "start_exercise"
         stop_state_key: "stop_exercise"
-        get_confirmation: "Do you want to exercise now?" ## if empty then dont ask to indicate whether the protocol should start after the person asks
+        get_confirmation: "" # Do you want to exercise now?" ## if empty then dont ask to indicate whether the protocol should start after the person asks
       high_level:
         reset_pattern:
           type: instant ## if triggered should play directly
@@ -138,19 +139,19 @@ protocols:
         requirements: 
           event: 
             - {'state': 'start_exercise', 'value': True}
-          time: {'from': '13:00', 'to': '14:00'}
+          time: {'from': '8:00', 'to': '10:00'}
 
   AskAndPlayVideoProtocol:
     coffee:
       low_level:
-        question_text: "Would you like to show you how to make coffee?"
+        question_text: "Would you like me to show you how to make coffee?"
         video_path: "/home/olagh48652/Downloads/maggie_coffee.mp4" ## path on the tablet
       high_level:
         priority: 3
         requirements: 
-          event: 
-            - {'state': 'coffee', 'value': True}
-          time: {'from': '03:00', 'to': '4:00'}
+          # event: 
+            # - {'state': 'coffee', 'value': True}
+          time: {'from': '8:30', 'to': '9:00'}
 
   ChargeRobot:
     charge_robot: 
