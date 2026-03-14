@@ -6,6 +6,7 @@ from rclpy.callback_groups import MutuallyExclusiveCallbackGroup, ReentrantCallb
 from std_msgs.msg import String
 
 from shr_msgs.action import PlayVideoRequest
+from smart_home_pytree.utils import validate_media_asset_exists
 
 from .generic_action_server import GenericActionServer, run_action_server
 
@@ -25,10 +26,8 @@ class PlayVideoActionServer(GenericActionServer):
         )
 
     def display_callback(self, msg):
-        # print(f"[Received] {msg.data}")  # print the message content
         if "RES:video_finished" in msg.data:
             self.video_finished = True
-            print("callback self.video_finished", self.video_finished)
             self.get_logger().info("Video finished received!")
 
     # turn video off
@@ -44,16 +43,29 @@ class PlayVideoActionServer(GenericActionServer):
         return CancelResponse.ACCEPT
 
     def execute_callback(self, goal_handle):
-        video_path = goal_handle.request.file_name
-        self.get_logger().info(f"Received video goal: {video_path}")
+        requested_video = goal_handle.request.file_name
+        self.get_logger().info(f"Received video goal: {requested_video}")
 
         # Optional feedback
         feedback = self._action_type.Feedback()
         feedback.running = True
         goal_handle.publish_feedback(feedback)
 
-        # Send video path
-        self.display_pub.publish(String(data=video_path))
+        try:
+            video_relative_path, video_abs_path = validate_media_asset_exists(
+                requested_video, "video"
+            )
+        except (ValueError, FileNotFoundError) as exc:
+            self.get_logger().error(f"Video request rejected: {exc}")
+            goal_handle.abort()
+            result = self._action_type.Result()
+            result.status = f"video request rejected: {exc}"
+            return result
+
+        self.get_logger().info(
+            f"Sending tablet play command for '{video_relative_path}' (source: {video_abs_path})"
+        )
+        self.display_pub.publish(String(data=f"play_video:{video_relative_path}"))
 
         # set to false whenever a video is recieved
         self.video_finished = False
@@ -64,7 +76,7 @@ class PlayVideoActionServer(GenericActionServer):
         while not self.video_finished:
             time.sleep(1)
             if self.get_clock().now() - start_time > timeout:
-                self.get_logger().warn(" Video did not finish in 5 minutes, aborting")
+                self.get_logger().warn("Video did not finish in 3 minutes, aborting")
                 goal_handle.abort()
                 result = self._action_type.Result()
                 result.status = "video failed or timeout"

@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import pprint
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Union
 
 import yaml
@@ -146,6 +146,67 @@ def resolve_media_dir_path(value: str | None, media_kind: str) -> str | None:
     if text in {".", media_kind, f"{media_kind}s"}:
         return str(media_dir.resolve())
     return str((media_dir / text).resolve())
+
+
+def get_media_root_dir(media_kind: str, required: bool = False) -> Path | None:
+    if media_kind == "audio":
+        return get_user_audio_dir(required=required)
+    if media_kind == "video":
+        return get_user_video_dir(required=required)
+    raise ValueError(f"Unsupported media_kind: {media_kind}")
+
+
+def normalize_media_asset_reference(value: str | None, media_kind: str) -> str:
+    if value is None:
+        raise ValueError(f"{media_kind} asset reference is required")
+
+    text = str(value).strip()
+    if not text:
+        raise ValueError(f"{media_kind} asset reference cannot be empty")
+
+    if text.startswith("file://"):
+        text = text[7:]
+    elif "://" in text:
+        raise ValueError(
+            f"{media_kind} asset reference must be a relative path or local file path under $SHR_USER_DIR/{media_kind}s"
+        )
+
+    asset_root = get_media_root_dir(media_kind, required=True).resolve()
+    path = Path(text).expanduser()
+
+    if path.is_absolute():
+        resolved = path.resolve()
+        try:
+            return resolved.relative_to(asset_root).as_posix()
+        except ValueError as exc:
+            raise ValueError(
+                f"{media_kind} asset path '{resolved}' is outside {asset_root}"
+            ) from exc
+
+    posix_path = PurePosixPath(text)
+    if posix_path.is_absolute() or ".." in posix_path.parts:
+        raise ValueError(
+            f"{media_kind} asset reference '{text}' must be a safe relative path"
+        )
+    return posix_path.as_posix()
+
+
+def validate_media_asset_exists(value: str | None, media_kind: str) -> tuple[str, Path]:
+    relative_path = normalize_media_asset_reference(value, media_kind)
+    asset_root = get_media_root_dir(media_kind, required=True).resolve()
+    resolved = (asset_root / relative_path).resolve()
+    try:
+        resolved.relative_to(asset_root)
+    except ValueError as exc:
+        raise ValueError(
+            f"{media_kind} asset reference '{relative_path}' escapes {asset_root}"
+        ) from exc
+
+    if not resolved.is_file():
+        raise FileNotFoundError(
+            f"{media_kind} asset not found: {resolved}"
+        )
+    return relative_path, resolved
 
 
 def resolve_config_file_path(value: str | None) -> str | None:

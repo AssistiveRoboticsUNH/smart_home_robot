@@ -167,10 +167,20 @@ Steps:
 - Set the Robot IP and Help Number:
   Swipe from left -> Settings -> enter values -> Save.
 
+### Tablet Video Download
+
+- Robot-side video commands are sent as `play_video:<relative_path>`
+- The robot exposes `"$SHR_USER_DIR/videos"` for tablet download at:
+  - `/media/videos/<relative_path>`
+- A manifest is available at:
+  - `/media/manifest/videos`
+- See [shr_display/README.md](shr_display/README.md) for the tablet integration contract and Android update prompt.
+
 ## Packages
 
 - `smart_home_pytree`: protocol runtime, tree builders, triggers, persistence
 - `shr_dashboard`: operator dashboard and protocol designer
+- `shr_display`: ROS to Android display bridge and tablet media delivery
 - `shr_human_interaction`: speech and yes/no question interface
 - `simple_logger`: Discord and file logging helpers
 - `shr_msgs`: shared ROS interfaces

@@ -6,6 +6,7 @@ shr_display:
     alive_log_interval_sec: 10
     display_alive_timeout_sec: 10
     display_alive_startup_grace_sec: 15
+    media_http_port: 8008
     use_webapp: false
     intersection_file_path: "/home/hello-robot/smarthome_ws/src/smart_home_robot/shr_display/config/intersection.txt"
     webapp_file_path: "/home/hello-robot/smarthome_ws/src/smart_home_robot/shr_display/webapp/app.py"

@@ -17,7 +17,7 @@ from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
 from smart_home_pytree.trees.execution_location_selector import (
     build_execution_location_subtree,
 )
-from smart_home_pytree.utils import get_house_yaml_path, resolve_media_path, str2bool
+from smart_home_pytree.utils import get_house_yaml_path, str2bool
 
 
 class PlayVideoTree(BaseTreeRunner):
@@ -113,7 +113,7 @@ class PlayVideoTree(BaseTreeRunner):
 
         # Custom behaviors
         video_goal = PlayVideoRequest.Goal()
-        video_goal.file_name = resolve_media_path(self.video_path, "video") or self.video_path
+        video_goal.file_name = self.video_path
 
         play_video_reminder = py_trees_ros.actions.ActionClient(
             name="Play_video",

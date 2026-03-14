@@ -23,6 +23,7 @@ import rclpy
 from rclpy.action import CancelResponse
 
 from shr_msgs.action import PlayVideoRequest
+from smart_home_pytree.utils import resolve_media_path, validate_media_asset_exists
 from .generic_action_server import GenericActionServer, run_action_server
 
 
@@ -82,8 +83,15 @@ class PlayVideoLocalActionServer(GenericActionServer):
         :param goal_handle: The handle for the accepted action goal
         :return: Result message describing the outcome
         """
-        video_path = goal_handle.request.file_name
-        self.get_logger().info(f"Playing video locally: {video_path}")
+        requested_video = goal_handle.request.file_name
+        resolved_video_path = requested_video
+        try:
+            _, resolved_path = validate_media_asset_exists(requested_video, "video")
+            resolved_video_path = str(resolved_path)
+        except (ValueError, FileNotFoundError):
+            resolved_video_path = resolve_media_path(requested_video, "video") or requested_video
+
+        self.get_logger().info(f"Playing video locally: {resolved_video_path}")
 
         self.cancel_requested = False
 
@@ -96,7 +104,7 @@ class PlayVideoLocalActionServer(GenericActionServer):
                 "ffplay",
                 "-autoexit",
                 "-loglevel", "quiet",
-                video_path,
+                resolved_video_path,
             ],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,

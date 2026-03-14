@@ -8,6 +8,7 @@ import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
 
+from .media_http_server import MediaHttpServer
 from .protocol_manager import ProtocolManager
 from .zmq_interface import ZmqInterface
 
@@ -50,6 +51,7 @@ class DisplayNode(Node):
         alive_timeout = self.get_parameter('display_alive_timeout_sec').value
         startup_grace = self.get_parameter('display_alive_startup_grace_sec').value
         use_webapp = self.get_parameter('use_webapp').value
+        media_http_port = self.get_parameter('media_http_port').value
 
         self.display_alive = False
         self.display_start_time = time.monotonic()
@@ -63,6 +65,8 @@ class DisplayNode(Node):
         # )
 
         self.zmq = ZmqInterface(tx_port, rx_port)
+        self.media_http_server = MediaHttpServer(media_http_port, self.get_logger())
+        self.media_http_server.start()
         time.sleep(2) # Allow 2 second for zmq connection to establish
         self.zmq.send("ok")
 
@@ -177,6 +181,9 @@ class DisplayNode(Node):
 
     def destroy_node(self):
         """Override destroy_node so we can also terminate the Flask app."""
+        if hasattr(self, "media_http_server"):
+            self.get_logger().info("Stopping media HTTP server...")
+            self.media_http_server.stop()
         if hasattr(self, "flask_process"):
             try:
                 self.get_logger().info("Terminating Flask app...")
