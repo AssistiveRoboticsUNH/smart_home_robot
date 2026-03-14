@@ -222,6 +222,259 @@
     return { state: '', value: '' };
   }
 
+  function makeDefaultTriggerNode(kind = 'event') {
+    if (kind === 'event') return { event: makeDefaultEventTrigger() };
+    if (kind === 'time') return { time: { from: '', to: '', day: [] } };
+    if (kind === 'permissible_locations') return { permissible_locations: [] };
+    if (kind === 'all') return { all: [] };
+    if (kind === 'any') return { any: [] };
+    return { event: makeDefaultEventTrigger() };
+  }
+
+  function triggerNodeMode(node) {
+    if (node && typeof node === 'object' && !Array.isArray(node)) {
+      if (Array.isArray(node.all)) return 'all';
+      if (Array.isArray(node.any)) return 'any';
+    }
+    return '';
+  }
+
+  function normalizeEventRule(evt) {
+    const next = deepClone(evt || makeDefaultEventTrigger());
+    normalizeScalarEvent(next);
+    return next;
+  }
+
+  function normalizeTimeRule(time) {
+    const next = deepClone(time || {});
+    next.day = Array.isArray(next.day) ? next.day : [];
+    if (next.at != null && next.at !== '') {
+      const exact = String(next.at);
+      delete next.at;
+      next.from = exact;
+      next.to = exact;
+    } else {
+      next.from = next.from == null ? '' : String(next.from);
+      next.to = next.to == null ? '' : String(next.to);
+    }
+    delete next.at;
+    return next;
+  }
+
+  function splitTimeValue(value) {
+    const raw = String(value || '');
+    const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(raw);
+    if (!match) return { hour: '', minute: '' };
+    return { hour: match[1], minute: match[2] };
+  }
+
+  function splitTimeValue12(value) {
+    const raw = String(value || '');
+    const match = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(raw);
+    if (!match) return { hour: '', minute: '', meridiem: '' };
+    let hour24 = Number(match[1]);
+    const minute = match[2];
+    const meridiem = hour24 >= 12 ? 'PM' : 'AM';
+    hour24 %= 12;
+    if (hour24 === 0) hour24 = 12;
+    return {
+      hour: String(hour24).padStart(2, '0'),
+      minute,
+      meridiem,
+    };
+  }
+
+  function to24HourTime(hour12, minute, meridiem) {
+    const h12 = Number(hour12);
+    if (!Number.isInteger(h12) || h12 < 1 || h12 > 12) return '';
+    if (!/^\d{2}$/.test(String(minute))) return '';
+    if (!['AM', 'PM'].includes(String(meridiem))) return '';
+    let hour24 = h12 % 12;
+    if (meridiem === 'PM') hour24 += 12;
+    return `${String(hour24).padStart(2, '0')}:${String(minute)}`;
+  }
+
+  function setTimePart(currentValue, part, nextPiece) {
+    const current = splitTimeValue12(currentValue);
+    const nextHour = part === 'hour' ? nextPiece : (current.hour || '12');
+    const nextMinute = part === 'minute' ? nextPiece : (current.minute || '00');
+    const nextMeridiem = part === 'meridiem' ? nextPiece : (current.meridiem || 'AM');
+    return to24HourTime(nextHour, nextMinute, nextMeridiem);
+  }
+
+  function renderTimeSelect(field, value, path) {
+    const parts = splitTimeValue12(value);
+    const hours = Array.from({ length: 12 }, (_, idx) => String(idx + 1).padStart(2, '0'));
+    const minutes = Array.from({ length: 60 }, (_, idx) => String(idx).padStart(2, '0'));
+    return `
+      <div class="time-clock">
+        <div class="time-select-row">
+          <select data-action="trigger-time-part" data-path="${escapeAttr(path)}" data-field="${field}" data-part="hour">
+            <option value="">HH</option>
+          ${hours.map((h) => `<option value="${h}" ${parts.hour === h ? 'selected' : ''}>${h}</option>`).join('')}
+          </select>
+          <span class="time-sep">:</span>
+          <select data-action="trigger-time-part" data-path="${escapeAttr(path)}" data-field="${field}" data-part="minute">
+            <option value="">MM</option>
+          ${minutes.map((m) => `<option value="${m}" ${parts.minute === m ? 'selected' : ''}>${m}</option>`).join('')}
+          </select>
+        </div>
+        <div class="ampm-toggle" role="group" aria-label="${escapeAttr(`${field} meridiem`)}">
+          <button type="button" class="ampm-btn ${parts.meridiem === 'AM' ? 'active' : ''}" data-action="trigger-time-meridiem" data-path="${escapeAttr(path)}" data-field="${field}" data-value="AM">AM</button>
+          <button type="button" class="ampm-btn ${parts.meridiem === 'PM' ? 'active' : ''}" data-action="trigger-time-meridiem" data-path="${escapeAttr(path)}" data-field="${field}" data-value="PM">PM</button>
+        </div>
+      </div>`;
+  }
+
+  function normalizeTriggerNode(node, forceRoot = false) {
+    if (!node || typeof node !== 'object' || Array.isArray(node)) {
+      return forceRoot ? {} : makeDefaultTriggerNode('event');
+    }
+
+    const keys = Object.keys(node).filter((key) => node[key] !== undefined);
+    if (!keys.length) return forceRoot ? {} : makeDefaultTriggerNode('event');
+
+    if (keys.length === 1) {
+      const only = keys[0];
+      if (only === 'all' || only === 'any') {
+        return {
+          [only]: Array.isArray(node[only])
+            ? node[only].map((child) => normalizeTriggerNode(child, false))
+            : [],
+        };
+      }
+      if (only === 'event') {
+        const rules = Array.isArray(node.event) ? node.event : [node.event];
+        const normalizedRules = rules.filter(Boolean).map((evt) => normalizeEventRule(evt));
+        if (!normalizedRules.length) return { event: makeDefaultEventTrigger() };
+        if (normalizedRules.length === 1) return { event: normalizedRules[0] };
+        return { all: normalizedRules.map((evt) => ({ event: evt })) };
+      }
+      if (only === 'time') return { time: normalizeTimeRule(node.time) };
+      if (only === 'permissible_locations') {
+        return { permissible_locations: Array.isArray(node.permissible_locations) ? [...node.permissible_locations] : [] };
+      }
+    }
+
+    const children = [];
+    if ('event' in node) {
+      const eventNode = normalizeTriggerNode({ event: node.event }, false);
+      if (triggerNodeMode(eventNode) === 'all') children.push(...eventNode.all);
+      else children.push(eventNode);
+    }
+    if ('time' in node) children.push({ time: normalizeTimeRule(node.time) });
+    if ('permissible_locations' in node) {
+      children.push({ permissible_locations: Array.isArray(node.permissible_locations) ? [...node.permissible_locations] : [] });
+    }
+    if ('all' in node) children.push({ all: (Array.isArray(node.all) ? node.all : []).map((child) => normalizeTriggerNode(child, false)) });
+    if ('any' in node) children.push({ any: (Array.isArray(node.any) ? node.any : []).map((child) => normalizeTriggerNode(child, false)) });
+
+    if (!children.length) return forceRoot ? {} : makeDefaultTriggerNode('event');
+    return { all: children };
+  }
+
+  function parseTriggerPath(path) {
+    if (!path) return [];
+    return String(path).split('/').filter(Boolean).map((segment) => (/^\d+$/.test(segment) ? Number(segment) : segment));
+  }
+
+  function joinTriggerPath(path, ...parts) {
+    return [path, ...parts].filter((part) => part !== '' && part != null).join('/');
+  }
+
+  function getTriggerNodeAtPath(protocol, path) {
+    let node = ensureTriggers(protocol);
+    for (const segment of parseTriggerPath(path)) {
+      if (node == null) return null;
+      node = node[segment];
+    }
+    return node;
+  }
+
+  function getTriggerParentAtPath(protocol, path) {
+    const segments = parseTriggerPath(path);
+    const key = segments.pop();
+    let node = ensureTriggers(protocol);
+    for (const segment of segments) {
+      if (node == null) return { parent: null, key: null };
+      node = node[segment];
+    }
+    return { parent: node, key };
+  }
+
+  function ensureTriggerRoot(protocol, defaultMode = 'all') {
+    const triggers = ensureTriggers(protocol);
+    if (!Object.keys(triggers).length) {
+      protocol.high_level.triggers = { [defaultMode]: [] };
+    }
+    return protocol.high_level.triggers;
+  }
+
+  function triggerGroupItems(node) {
+    const mode = triggerNodeMode(node);
+    return { mode, items: mode ? node[mode] : [] };
+  }
+
+  function addTriggerNode(protocol, groupPath, kind) {
+    const group = groupPath ? getTriggerNodeAtPath(protocol, groupPath) : ensureTriggerRoot(protocol, 'all');
+    const { mode, items } = triggerGroupItems(group);
+    if (!mode) throw new Error('Trigger target is not a group.');
+    items.push(makeDefaultTriggerNode(kind));
+  }
+
+  function removeTriggerNode(protocol, path) {
+    const { parent, key } = getTriggerParentAtPath(protocol, path);
+    if (parent == null || key == null) return;
+    if (Array.isArray(parent)) parent.splice(Number(key), 1);
+    else delete parent[key];
+    const triggers = ensureTriggers(protocol);
+    const mode = triggerNodeMode(triggers);
+    if (mode && Array.isArray(triggers[mode]) && triggers[mode].length === 0) {
+      protocol.high_level.triggers = {};
+    }
+  }
+
+  function setTriggerGroupMode(protocol, path, nextMode) {
+    const group = path ? getTriggerNodeAtPath(protocol, path) : ensureTriggerRoot(protocol, nextMode);
+    const { mode, items } = triggerGroupItems(group);
+    if (mode === nextMode) return;
+    delete group[mode];
+    group[nextMode] = items;
+  }
+
+  function hasTriggerKind(triggerBlock, kind) {
+    if (!triggerBlock || typeof triggerBlock !== 'object' || Array.isArray(triggerBlock)) return false;
+    if (kind === 'time' && triggerBlock.time) return true;
+    if (kind === 'event' && triggerBlock.event) return true;
+    for (const groupKey of ['all', 'any']) {
+      const children = triggerBlock[groupKey];
+      if (Array.isArray(children) && children.some((child) => hasTriggerKind(child, kind))) return true;
+    }
+    return false;
+  }
+
+  function triggerStats(triggerBlock) {
+    const stats = { events: 0, times: 0, locations: 0, groups: 0 };
+    if (!triggerBlock || typeof triggerBlock !== 'object' || Array.isArray(triggerBlock)) return stats;
+    if (triggerBlock.event) stats.events += Array.isArray(triggerBlock.event) ? triggerBlock.event.length : 1;
+    if (triggerBlock.time) stats.times += 1;
+    if (triggerBlock.permissible_locations) stats.locations += 1;
+    for (const groupKey of ['all', 'any']) {
+      const children = triggerBlock[groupKey];
+      if (Array.isArray(children)) {
+        stats.groups += 1;
+        children.forEach((child) => {
+          const childStats = triggerStats(child);
+          stats.events += childStats.events;
+          stats.times += childStats.times;
+          stats.locations += childStats.locations;
+          stats.groups += childStats.groups;
+        });
+      }
+    }
+    return stats;
+  }
+
   function makeDefaultParamValue(param) {
     switch (param.kind) {
       case 'execution_location':
@@ -296,10 +549,10 @@
       });
     }
     if (state.ui.filters.hasTime) {
-      items = items.filter(({ protocol }) => !!protocol?.high_level?.triggers?.time);
+      items = items.filter(({ protocol }) => hasTriggerKind(protocol?.high_level?.triggers || {}, 'time'));
     }
     if (state.ui.filters.hasEvent) {
-      items = items.filter(({ protocol }) => (protocol?.high_level?.triggers?.event || []).length > 0);
+      items = items.filter(({ protocol }) => hasTriggerKind(protocol?.high_level?.triggers || {}, 'event'));
     }
     const sort = state.ui.listSort;
     items.sort((a, b) => {
@@ -480,10 +733,12 @@
 
   function triggerSummary(protocol) {
     const triggers = protocol?.high_level?.triggers || {};
+    const stats = triggerStats(triggers);
     const bits = [];
-    if (triggers.event?.length) bits.push(`event:${triggers.event.length}`);
-    if (triggers.time?.from && triggers.time?.to) bits.push(`${triggers.time.from}-${triggers.time.to}`);
-    if (triggers.permissible_locations?.length) bits.push(`loc:${triggers.permissible_locations.length}`);
+    if (stats.events) bits.push(`event:${stats.events}`);
+    if (stats.times) bits.push(`time:${stats.times}`);
+    if (stats.locations) bits.push(`loc:${stats.locations}`);
+    if (stats.groups) bits.push(`groups:${stats.groups}`);
     return bits.join(' · ') || 'No triggers';
   }
 
@@ -545,18 +800,14 @@
       </div>`;
   }
 
-  function renderEventRows(protocol) {
-    const events = protocol.high_level?.triggers?.event || [];
-    return `
-      <div class="section stack compact-section nested-card">
-        <div class="section-header">
-          <div>
-            <h3>Event Trigger</h3>
-          </div>
-          <button class="btn small primary" data-action="event-add">Add Event Trigger</button>
-        </div>
-        ${events.map((evt, idx) => renderEventRow(evt, idx)).join('')}
-      </div>`;
+  function triggerRuleLabel(node) {
+    if (node?.event) return 'Event';
+    if (node?.time) return 'Time';
+    if (node?.permissible_locations) return 'Location Filter';
+    const mode = triggerNodeMode(node);
+    if (mode === 'all') return 'AND Group';
+    if (mode === 'any') return 'OR Group';
+    return 'Rule';
   }
 
   function clientValidationForSelected() {
@@ -570,29 +821,50 @@
       messages.push(message);
     };
 
-    const triggers = protocol.high_level?.triggers || {};
-    const time = triggers.time;
+    const triggers = ensureTriggers(protocol);
     const hhmm = /^([01]\d|2[0-3]):([0-5]\d)$/;
-    if (time) {
-      if (time.from && !hhmm.test(String(time.from))) push('time.from', 'Time Trigger "From" must be HH:MM');
-      if (time.to && !hhmm.test(String(time.to))) push('time.to', 'Time Trigger "To" must be HH:MM');
-    }
-
-    (triggers.event || []).forEach((evt, idx) => {
-      if (!evt?.state || !String(evt.state).trim()) {
-        push(`event.${idx}.state`, `Event ${idx + 1}: Event Key is required`);
+    const validateTriggerNode = (node, pathLabel = 'triggers') => {
+      if (!node || typeof node !== 'object' || Array.isArray(node)) {
+        push(pathLabel, 'Trigger rule is invalid.');
         return;
       }
-      if (evt?.state === 'robot_location_xy') {
-        if (!(typeof evt.within_m === 'number') || Number.isNaN(evt.within_m) || evt.within_m <= 0) {
-          push(`event.${idx}.within_m`, `Event ${idx + 1}: Within (m) must be > 0`);
-        }
-        const p = evt.point_xy;
-        if (!Array.isArray(p) || p.length !== 2 || p.some((v) => typeof v !== 'number' || Number.isNaN(v))) {
-          push(`event.${idx}.point_xy`, `Event ${idx + 1}: Target XY must be two numbers`);
-        }
+      const mode = triggerNodeMode(node);
+      if (mode) {
+        const items = node[mode] || [];
+        if (!items.length) push(pathLabel, 'Trigger group must contain at least one clause.');
+        items.forEach((child, idx) => validateTriggerNode(child, `${pathLabel}.${mode}[${idx}]`));
+        return;
       }
-    });
+      if (node.event) {
+        const evt = node.event;
+        if (!evt?.state || !String(evt.state).trim()) {
+          push(`${pathLabel}.event.state`, 'Event trigger key is required.');
+          return;
+        }
+        if (evt.state === 'robot_location_xy') {
+          if (!(typeof evt.within_m === 'number') || Number.isNaN(evt.within_m) || evt.within_m <= 0) {
+            push(`${pathLabel}.event.within_m`, 'Proximity trigger radius must be > 0.');
+          }
+          const p = evt.point_xy;
+          if (!Array.isArray(p) || p.length !== 2 || p.some((v) => typeof v !== 'number' || Number.isNaN(v))) {
+            push(`${pathLabel}.event.point_xy`, 'Proximity trigger target XY must be two numbers.');
+          }
+        }
+        return;
+      }
+      if (node.time) {
+        const t = node.time || {};
+        if (t.from && !hhmm.test(String(t.from))) push(`${pathLabel}.time.from`, 'Time Trigger "From" must be HH:MM');
+        if (t.to && !hhmm.test(String(t.to))) push(`${pathLabel}.time.to`, 'Time Trigger "To" must be HH:MM');
+        if (t.from && t.to && hhmm.test(String(t.from)) && hhmm.test(String(t.to)) && t.from > t.to) {
+          push(`${pathLabel}.time`, 'Time window From must be earlier than or equal to To.');
+        }
+        return;
+      }
+      if (node.permissible_locations) return;
+      push(pathLabel, 'Trigger clause is empty.');
+    };
+    if (Object.keys(triggers).length) validateTriggerNode(triggers);
 
     const reset = protocol.high_level?.reset_pattern || {};
     if (reset.type === 'periodic') {
@@ -615,7 +887,26 @@
     return msg ? `<div class="field-error">${escapeHtml(msg)}</div>` : '';
   }
 
-  function renderScalarEventRow(evt, idx, kind, isLocationValue) {
+  function pathLabelFromPath(path) {
+    const segments = parseTriggerPath(path);
+    let out = '';
+    segments.forEach((segment) => {
+      if (typeof segment === 'number') out += `[${segment}]`;
+      else out += out ? `.${segment}` : segment;
+    });
+    return out;
+  }
+
+  function renderTriggerEventStateSelect(evt, path) {
+    const description = robotStateSpec(evt?.state)?.description || '';
+    const options = [
+      `<option value="" ${!(evt?.state) ? 'selected' : ''}>Select Event</option>`,
+      ...robotStateSpecs().map((s) => `<option value="${escapeAttr(s.name)}" ${s.name === (evt?.state || '') ? 'selected' : ''}>${escapeHtml(s.name)}</option>`),
+    ].join('');
+    return `<select data-action="trigger-event-state" data-path="${escapeAttr(path)}" title="${escapeAttr(description)}">${options}</select>`;
+  }
+
+  function renderTriggerScalarEventNode(evt, path, kind, isLocationValue) {
     const rawValue = evt?.value;
     const op = kind === 'number' ? (evt?.op || '=') : '=';
     let textValue = '';
@@ -624,17 +915,24 @@
     const locationOptions = isLocationValue ? locationValueOptionsForState(evt?.state) : [];
 
     return `
-      <div class="section event-row">
+      <div class="section event-row trigger-clause-card">
+        <div class="trigger-clause-head">
+          <div>
+            <div class="eyebrow">Event Rule</div>
+            <h3>Match a robot state value</h3>
+          </div>
+          <button class="btn small danger" data-action="trigger-remove-node" data-path="${escapeAttr(path)}">Remove</button>
+        </div>
         <div class="row">
           <div class="col-4">
             <label>Event Key</label>
-            ${renderEventStateSelect(evt, idx)}
-            ${errorHtml(`event.${idx}.state`)}
+            ${renderTriggerEventStateSelect(evt, path)}
+            ${errorHtml(`triggers.${pathLabelFromPath(path)}.event.state`)}
           </div>
           <div class="col-2">
             <label>Op</label>
             ${kind === 'number' ? `
-              <select data-action="event-op" data-idx="${idx}">
+              <select data-action="trigger-event-op" data-path="${escapeAttr(path)}">
                 <option value="=" ${op === '=' ? 'selected' : ''}>=</option>
                 <option value="!=" ${op === '!=' ? 'selected' : ''}>!=</option>
                 <option value=">" ${op === '>' ? 'selected' : ''}>&gt;</option>
@@ -646,47 +944,47 @@
           <div class="col-6">
             <label>Expected Value</label>
             ${kind === 'bool' ? `
-              <select data-action="event-value" data-idx="${idx}" data-type="bool">
+              <select data-action="trigger-event-value" data-path="${escapeAttr(path)}" data-type="bool">
                 <option value="true" ${rawValue === true ? 'selected' : ''}>true</option>
                 <option value="false" ${rawValue === false ? 'selected' : ''}>false</option>
               </select>` : isLocationValue ? `
-              <select data-action="event-value" data-idx="${idx}" data-type="string">
+              <select data-action="trigger-event-value" data-path="${escapeAttr(path)}" data-type="string">
                 ${locationOptions.map((loc) => `<option value="${escapeAttr(loc)}" ${String(rawValue ?? '') === loc ? 'selected' : ''}>${escapeHtml(loc)}</option>`).join('')}
               </select>` : `
-              <input type="${kind === 'number' ? 'number' : 'text'}" data-action="event-value" data-idx="${idx}" data-type="${kind}" value="${escapeAttr(textValue)}" />`
+              <input type="${kind === 'number' ? 'number' : 'text'}" data-action="trigger-event-value" data-path="${escapeAttr(path)}" data-type="${kind}" value="${escapeAttr(textValue)}" />`
             }
-          </div>
-          <div class="col-12 btns">
-            <button class="btn small danger" data-action="event-remove" data-idx="${idx}">Remove</button>
           </div>
         </div>
       </div>`;
   }
 
-  function renderXYProximityEventRow(evt, idx) {
+  function renderTriggerXYProximityNode(evt, path) {
     const p = Array.isArray(evt?.point_xy) && evt.point_xy.length === 2 ? evt.point_xy : [];
     const pointCsv = p.length === 2 ? `${p[0]}, ${p[1]}` : '';
     return `
-      <div class="section event-row event-row-special">
-        <div class="section-header" style="margin-bottom:4px;">
-          <h3 style="margin:0">Proximity Trigger (robot_location_xy)</h3>
-          <button class="btn small danger" data-action="event-remove" data-idx="${idx}">Remove</button>
+      <div class="section event-row event-row-special trigger-clause-card">
+        <div class="trigger-clause-head">
+          <div>
+            <div class="eyebrow">Event Rule</div>
+            <h3>Proximity Trigger</h3>
+          </div>
+          <button class="btn small danger" data-action="trigger-remove-node" data-path="${escapeAttr(path)}">Remove</button>
         </div>
         <div class="row">
           <div class="col-4">
             <label>Event Key</label>
-            ${renderEventStateSelect(evt, idx)}
-            ${errorHtml(`event.${idx}.state`)}
+            ${renderTriggerEventStateSelect(evt, path)}
+            ${errorHtml(`triggers.${pathLabelFromPath(path)}.event.state`)}
           </div>
           <div class="col-3">
             <label>Within (m)</label>
-            <input type="number" step="0.01" min="0" data-action="event-within-m" data-idx="${idx}" value="${escapeAttr(evt?.within_m ?? 1.0)}" />
-            ${errorHtml(`event.${idx}.within_m`)}
+            <input type="number" step="0.01" min="0" data-action="trigger-event-within-m" data-path="${escapeAttr(path)}" value="${escapeAttr(evt?.within_m ?? 1.0)}" />
+            ${errorHtml(`triggers.${pathLabelFromPath(path)}.event.within_m`)}
           </div>
           <div class="col-5">
             <label>Target XY (x, y)</label>
-            <input type="text" data-action="event-point-xy-csv" data-idx="${idx}" value="${escapeAttr(pointCsv)}" placeholder="2.10, 3.45" />
-            ${errorHtml(`event.${idx}.point_xy`)}
+            <input type="text" data-action="trigger-event-point-xy-csv" data-path="${escapeAttr(path)}" value="${escapeAttr(pointCsv)}" placeholder="2.10, 3.45" />
+            ${errorHtml(`triggers.${pathLabelFromPath(path)}.event.point_xy`)}
           </div>
           <div class="col-12">
             <div class="inline-note">Enter two floats separated by comma. Trigger fires when robot is within the radius of this point.</div>
@@ -695,95 +993,147 @@
       </div>`;
   }
 
-  function renderEventStateSelect(evt, idx) {
-    const description = robotStateSpec(evt?.state)?.description || '';
-    const options = [
-      `<option value="" ${!(evt?.state) ? 'selected' : ''}>Select Event</option>`,
-      ...robotStateSpecs().map((s) => `<option value="${escapeAttr(s.name)}" ${s.name === (evt?.state || '') ? 'selected' : ''}>${escapeHtml(s.name)}</option>`),
-    ].join('');
-    return `<select data-action="event-state" data-idx="${idx}" title="${escapeAttr(description)}">${options}</select>`;
-  }
-
-  function renderEventRow(evt, idx) {
+  function renderTriggerEventNode(node, path) {
+    const evt = node.event || {};
     const kind = eventKindForState(evt?.state, evt?.value);
     const uiKind = eventUiKindForState(evt?.state);
-    if (uiKind === 'xy_proximity') return renderXYProximityEventRow(evt, idx);
-    if (uiKind === 'location_name') return renderScalarEventRow(evt, idx, 'string', true);
-    return renderScalarEventRow(evt, idx, kind, false);
+    if (uiKind === 'xy_proximity') return renderTriggerXYProximityNode(evt, path);
+    if (uiKind === 'location_name') return renderTriggerScalarEventNode(evt, path, 'string', true);
+    return renderTriggerScalarEventNode(evt, path, kind, false);
   }
 
-  function renderTimeSection(protocol) {
-    const time = protocol.high_level?.triggers?.time || {};
-    const enabled = !!(protocol.high_level?.triggers && Object.prototype.hasOwnProperty.call(protocol.high_level.triggers, 'time'));
+  function renderTriggerTimeNode(node, path) {
+    const time = normalizeTimeRule(node.time || {});
     const days = new Set(time.day || []);
     const dayChecks = (state.metadata?.day_options || []).map((day) => `
       <label class="checkbox-line">
-        <input type="checkbox" data-action="time-day-toggle" data-day="${day}" ${days.has(day) ? 'checked' : ''} ${!enabled ? 'disabled' : ''}/>
+        <input type="checkbox" data-action="trigger-time-day-toggle" data-path="${escapeAttr(path)}" data-day="${day}" ${days.has(day) ? 'checked' : ''}/>
         <span>${capitalize(day)}</span>
       </label>`).join('');
 
     return `
-      <div class="section stack compact-section nested-card">
-        <div class="section-header">
+      <div class="section trigger-clause-card">
+        <div class="trigger-clause-head">
           <div>
-            <h3>Time Window</h3>
+            <div class="eyebrow">Time Rule</div>
+            <h3>Time Window Match</h3>
           </div>
-          ${enabled
-            ? '<button class="btn small danger" data-action="time-remove">Remove Time Window</button>'
-            : '<button class="btn small primary" data-action="time-add">Add Time Trigger</button>'}
+          <button class="btn small danger" data-action="trigger-remove-node" data-path="${escapeAttr(path)}">Remove</button>
         </div>
-        ${!enabled ? '' : `
         <div class="row">
           <div class="col-6">
-            <label>From (HH:MM)</label>
-            <input type="time" step="60" data-action="time-field" data-field="from" value="${escapeAttr(time.from || '')}" />
-            ${errorHtml('time.from')}
+            <label>From</label>
+            ${renderTimeSelect('from', time.from || '', path)}
+            ${errorHtml(`triggers.${pathLabelFromPath(path)}.time.from`)}
           </div>
           <div class="col-6">
-            <label>To (HH:MM)</label>
-            <input type="time" step="60" data-action="time-field" data-field="to" value="${escapeAttr(time.to || '')}" />
-            ${errorHtml('time.to')}
+            <label>To</label>
+            ${renderTimeSelect('to', time.to || '', path)}
+            ${errorHtml(`triggers.${pathLabelFromPath(path)}.time.to`)}
           </div>
           <div class="col-12">
             <label>Days (empty = every day)</label>
             <div class="day-grid">${dayChecks}</div>
           </div>
-        </div>`}
+        </div>
       </div>`;
   }
 
-  function renderPermissibleLocationsSection(protocol) {
+  function renderTriggerLocationNode(node, path) {
     const locations = Object.keys(state.config?.locations || {});
-    const selected = new Set(protocol.high_level?.triggers?.permissible_locations || []);
-    const enabled = protocol.high_level?.triggers && Array.isArray(protocol.high_level.triggers.permissible_locations);
+    const selected = new Set(node.permissible_locations || []);
     return `
-      <div class="section stack compact-section nested-card">
-        <div class="section-header">
+      <div class="section trigger-clause-card">
+        <div class="trigger-clause-head">
           <div>
-            <h3>Permisible Location</h3>
+            <div class="eyebrow">Location Rule</div>
+            <h3>Permissible Locations</h3>
           </div>
-          ${enabled
-            ? '<button class="btn small danger" data-action="permloc-remove">Remove Location Filter</button>'
-            : '<button class="btn small primary" data-action="permloc-add">Add Location Filter</button>'}
+          <button class="btn small danger" data-action="trigger-remove-node" data-path="${escapeAttr(path)}">Remove</button>
         </div>
-        ${!enabled ? '<div class="inline-note"></div>' : `
         <div class="day-grid">
           ${locations.map((loc) => `
             <label class="checkbox-line">
-              <input type="checkbox" data-action="permloc-toggle" data-location="${escapeAttr(loc)}" ${selected.has(loc) ? 'checked' : ''}/>
+              <input type="checkbox" data-action="trigger-location-toggle" data-path="${escapeAttr(path)}" data-location="${escapeAttr(loc)}" ${selected.has(loc) ? 'checked' : ''}/>
               <span>${escapeHtml(loc)}</span>
             </label>`).join('')}
-        </div>`}
+        </div>
       </div>`;
   }
 
-  function renderTriggersOverview(protocol) {
-    const triggers = protocol?.high_level?.triggers || {};
+  function renderTriggerAddBar(path, compact = false) {
+    return `
+      <div class="trigger-add-bar ${compact ? 'compact' : ''}">
+        <button class="btn small primary" data-action="trigger-add-node" data-path="${escapeAttr(path)}" data-kind="event">Add Event</button>
+        <button class="btn small ghost" data-action="trigger-add-node" data-path="${escapeAttr(path)}" data-kind="time">Add Time</button>
+        <button class="btn small ghost" data-action="trigger-add-node" data-path="${escapeAttr(path)}" data-kind="permissible_locations">Add Location</button>
+        <button class="btn small ghost" data-action="trigger-add-node" data-path="${escapeAttr(path)}" data-kind="all">Add AND Group</button>
+        <button class="btn small ghost" data-action="trigger-add-node" data-path="${escapeAttr(path)}" data-kind="any">Add OR Group</button>
+      </div>`;
+  }
+
+  function renderTriggerGroupNode(node, path, depth = 0, isRoot = false) {
+    const { mode, items } = triggerGroupItems(node);
+    const title = isRoot ? 'Protocol Trigger Logic' : (mode === 'all' ? 'AND Group' : 'OR Group');
+    const desc = mode === 'all'
+      ? 'All clauses in this group must match.'
+      : 'Any one clause in this group may match.';
+    return `
+      <div class="section trigger-group-card ${isRoot ? 'trigger-group-root' : ''}" data-depth="${depth}">
+        <div class="trigger-group-head">
+          <div>
+            <div class="eyebrow">${isRoot ? 'Root Rule' : 'Nested Group'}</div>
+            <h3>${escapeHtml(title)}</h3>
+            <div class="inline-note">${escapeHtml(desc)}</div>
+          </div>
+          <div class="trigger-inline-actions">
+            <select data-action="trigger-group-mode" data-path="${escapeAttr(path)}">
+              <option value="all" ${mode === 'all' ? 'selected' : ''}>AND</option>
+              <option value="any" ${mode === 'any' ? 'selected' : ''}>OR</option>
+            </select>
+            ${isRoot ? '' : `<button class="btn small danger" data-action="trigger-remove-node" data-path="${escapeAttr(path)}">Remove Group</button>`}
+          </div>
+        </div>
+        <div class="trigger-group-body">
+          ${items.length
+            ? items.map((child, idx) => renderTriggerNode(child, joinTriggerPath(path, mode, idx), depth + 1)).join('')
+            : '<div class="inline-note">No clauses in this group yet.</div>'}
+        </div>
+        ${renderTriggerAddBar(path, items.length > 0)}
+      </div>`;
+  }
+
+  function renderTriggerNode(node, path, depth = 0) {
+    const mode = triggerNodeMode(node);
+    if (mode) return renderTriggerGroupNode(node, path, depth, false);
+    if (node?.event) return renderTriggerEventNode(node, path);
+    if (node?.time) return renderTriggerTimeNode(node, path);
+    if (node?.permissible_locations) return renderTriggerLocationNode(node, path);
+    return `<div class="section trigger-clause-card"><div class="inline-note">Unknown trigger rule: ${escapeHtml(triggerRuleLabel(node))}</div></div>`;
+  }
+
+  function renderTriggerBuilder(protocol) {
+    const triggers = ensureTriggers(protocol);
+    const stats = triggerStats(triggers);
+    const hasRoot = !!triggerNodeMode(triggers);
     const bits = [];
-    bits.push(`State triggers: ${(triggers.event || []).length}`);
-    bits.push(`Time window: ${triggers.time ? 'on' : 'off'}`);
-    bits.push(`Location filter: ${Array.isArray(triggers.permissible_locations) ? 'on' : 'off'}`);
-    return `<div class="inline-note trigger-overview">${escapeHtml(bits.join(' · '))}</div>`;
+    bits.push(`${stats.events} event${stats.events === 1 ? '' : 's'}`);
+    bits.push(`${stats.times} time rule${stats.times === 1 ? '' : 's'}`);
+    bits.push(`${stats.locations} location filter${stats.locations === 1 ? '' : 's'}`);
+    return `
+      <div class="section stack trigger-builder-shell">
+        <div class="inline-note trigger-overview">${escapeHtml(bits.join(' · '))}</div>
+        ${hasRoot
+          ? renderTriggerGroupNode(triggers, '', 0, true)
+          : `
+            <div class="section trigger-empty-state">
+              <div>
+                <h3>Build Trigger Logic</h3>
+                <div class="inline-note">Start with a rule clause, then combine clauses with AND / OR groups as needed.</div>
+              </div>
+              ${renderTriggerAddBar('', false)}
+            </div>`}
+      </div>`;
   }
 
   function renderResetSection(protocol) {
@@ -1119,10 +1469,7 @@
         </div>
 
         ${renderCollapsibleSection('triggers', '2. Triggers', 'Define when the protocol becomes eligible to run.', `
-          ${renderTriggersOverview(protocol)}
-          ${renderEventRows(protocol)}
-          ${renderTimeSection(protocol)}
-          ${renderPermissibleLocationsSection(protocol)}
+          ${renderTriggerBuilder(protocol)}
         `)}
 
         ${renderCollapsibleSection('actions', '3. Actions', 'Compose action steps and confirmation branches for this protocol.', renderStepsSection(protocol))}
@@ -1262,7 +1609,7 @@
 
   function ensureTriggers(protocol) {
     ensureGenericShapes(protocol);
-    protocol.high_level.triggers ||= {};
+    protocol.high_level.triggers = normalizeTriggerNode(protocol.high_level.triggers || {}, true);
     return protocol.high_level.triggers;
   }
 
@@ -1449,39 +1796,6 @@
         renderRoute();
         return;
       }
-      if (action === 'time-add') {
-        const protocol = selectedProtocolObj();
-        if (!protocol) return;
-        const triggers = ensureTriggers(protocol);
-        triggers.time ||= { from: '', to: '', day: [] };
-        setDirty(true);
-        renderRoute();
-        return;
-      }
-      if (action === 'time-remove') {
-        const protocol = selectedProtocolObj();
-        if (!protocol) return;
-        delete ensureTriggers(protocol).time;
-        setDirty(true);
-        renderRoute();
-        return;
-      }
-      if (action === 'permloc-add') {
-        const protocol = selectedProtocolObj();
-        if (!protocol) return;
-        ensureTriggers(protocol).permissible_locations ||= [];
-        setDirty(true);
-        renderRoute();
-        return;
-      }
-      if (action === 'permloc-remove') {
-        const protocol = selectedProtocolObj();
-        if (!protocol) return;
-        delete ensureTriggers(protocol).permissible_locations;
-        setDirty(true);
-        renderRoute();
-        return;
-      }
       if (action === 'reload-bootstrap') {
         bootstrap();
         return;
@@ -1514,16 +1828,23 @@
       if (!protocol) return;
       ensureGenericShapes(protocol);
 
-      if (action === 'event-add') {
-        ensureTriggers(protocol).event ||= [];
-        protocol.high_level.triggers.event.push(makeDefaultEventTrigger());
+      if (action === 'trigger-add-node') {
+        addTriggerNode(protocol, btn.dataset.path || '', btn.dataset.kind || 'event');
         setDirty(true);
         renderRoute();
         return;
       }
-      if (action === 'event-remove') {
-        const idx = Number(btn.dataset.idx);
-        protocol.high_level.triggers.event.splice(idx, 1);
+      if (action === 'trigger-remove-node') {
+        removeTriggerNode(protocol, btn.dataset.path || '');
+        setDirty(true);
+        renderRoute();
+        return;
+      }
+      if (action === 'trigger-time-meridiem') {
+        const node = getTriggerNodeAtPath(protocol, btn.dataset.path || '');
+        const time = node.time ||= { from: '', to: '', day: [] };
+        const field = btn.dataset.field;
+        time[field] = setTimePart(time[field], 'meridiem', btn.dataset.value || 'AM');
         setDirty(true);
         renderRoute();
         return;
@@ -1640,32 +1961,24 @@
       if (!protocol) return;
       ensureGenericShapes(protocol);
 
-      if (action === 'time-enable') {
-        const triggers = ensureTriggers(protocol);
-        if (target.checked) triggers.time ||= { from: '', to: '', day: [] };
-        else delete triggers.time;
+      if (action === 'trigger-group-mode') {
+        setTriggerGroupMode(protocol, target.dataset.path || '', target.value);
         setDirty(true);
         renderRoute();
         return;
       }
-      if (action === 'permloc-enable') {
-        const triggers = ensureTriggers(protocol);
-        if (target.checked) triggers.permissible_locations ||= [];
-        else delete triggers.permissible_locations;
-        setDirty(true);
-        renderRoute();
-        return;
-      }
-      if (action === 'permloc-toggle') {
-        const arr = ensureTriggers(protocol).permissible_locations ||= [];
+      if (action === 'trigger-location-toggle') {
+        const node = getTriggerNodeAtPath(protocol, target.dataset.path || '');
+        const arr = node.permissible_locations ||= [];
         const s = new Set(arr);
         if (target.checked) s.add(target.dataset.location); else s.delete(target.dataset.location);
-        protocol.high_level.triggers.permissible_locations = [...s];
+        node.permissible_locations = [...s];
         setDirty(true);
         return;
       }
-      if (action === 'time-day-toggle') {
-        const time = ensureTriggers(protocol).time ||= { from: '', to: '', day: [] };
+      if (action === 'trigger-time-day-toggle') {
+        const node = getTriggerNodeAtPath(protocol, target.dataset.path || '');
+        const time = node.time ||= { from: '', to: '', day: [] };
         const days = new Set(time.day || []);
         if (target.checked) days.add(target.dataset.day); else days.delete(target.dataset.day);
         time.day = [...days];
@@ -1696,30 +2009,30 @@
         setDirty(true);
         return;
       }
-      if (action === 'event-state') {
-        const idx = Number(target.dataset.idx);
-        const evt = (protocol.high_level.triggers.event || [])[idx];
+      if (action === 'trigger-event-state') {
+        const node = getTriggerNodeAtPath(protocol, target.dataset.path || '');
+        const evt = node.event ||= makeDefaultEventTrigger();
         evt.state = target.value;
         normalizeScalarEvent(evt);
         setDirty(true);
         renderRoute();
         return;
       }
-      if (action === 'event-op') {
-        const idx = Number(target.dataset.idx);
-        protocol.high_level.triggers.event[idx].op = target.value;
+      if (action === 'trigger-event-op') {
+        const node = getTriggerNodeAtPath(protocol, target.dataset.path || '');
+        node.event.op = target.value;
         setDirty(true);
         return;
       }
-      if (action === 'event-within-m') {
-        const idx = Number(target.dataset.idx);
-        protocol.high_level.triggers.event[idx].within_m = Number(target.value || 0);
+      if (action === 'trigger-event-within-m') {
+        const node = getTriggerNodeAtPath(protocol, target.dataset.path || '');
+        node.event.within_m = Number(target.value || 0);
         setDirty(true);
         return;
       }
-      if (action === 'event-point-xy-csv') {
-        const idx = Number(target.dataset.idx);
-        const evt = protocol.high_level.triggers.event[idx];
+      if (action === 'trigger-event-point-xy-csv') {
+        const node = getTriggerNodeAtPath(protocol, target.dataset.path || '');
+        const evt = node.event;
         const parts = String(target.value || '').split(',').map((s) => s.trim()).filter(Boolean);
         if (parts.length === 2) {
           const x = Number(parts[0]);
@@ -1729,9 +2042,9 @@
         setDirty(true);
         return;
       }
-      if (action === 'event-value') {
-        const idx = Number(target.dataset.idx);
-        const evt = protocol.high_level.triggers.event[idx];
+      if (action === 'trigger-event-value') {
+        const node = getTriggerNodeAtPath(protocol, target.dataset.path || '');
+        const evt = node.event;
         const type = target.dataset.type;
         if (type === 'bool') evt.value = target.value === 'true';
         else if (type === 'number') evt.value = Number(target.value || 0);
@@ -1740,9 +2053,12 @@
         setDirty(true);
         return;
       }
-      if (action === 'time-field') {
-        const time = ensureTriggers(protocol).time ||= { from: '', to: '', day: [] };
-        time[target.dataset.field] = target.value;
+      if (action === 'trigger-time-part') {
+        const node = getTriggerNodeAtPath(protocol, target.dataset.path || '');
+        const time = node.time ||= { from: '', to: '', day: [] };
+        const field = target.dataset.field;
+        const part = target.dataset.part;
+        time[field] = setTimePart(time[field], part, target.value);
         setDirty(true);
         return;
       }
