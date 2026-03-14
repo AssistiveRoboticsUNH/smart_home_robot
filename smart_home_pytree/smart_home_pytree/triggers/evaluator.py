@@ -21,11 +21,27 @@ def extract_event_keys(protocols_yaml: dict) -> list[str]:
     for protocol_data in protocols_yaml.get("protocols", {}).values():
         high_level_subdata = protocol_data.get("high_level", {})
         triggers = high_level_subdata.get("triggers", {})
-        event_reqs = triggers.get("event", [])
-        for event_rule in event_reqs:
-            if "state" in event_rule:
-                event_keys.add(event_rule["state"])
+        _collect_event_keys_from_trigger_block(triggers, event_keys)
     return sorted(event_keys)
+
+
+def _normalize_event_rules(event_reqs):
+    if isinstance(event_reqs, dict):
+        return [event_reqs]
+    return event_reqs or []
+
+
+def _collect_event_keys_from_trigger_block(trigger_block: dict, event_keys: set[str]) -> None:
+    if not isinstance(trigger_block, dict):
+        return
+
+    for event_rule in _normalize_event_rules(trigger_block.get("event")):
+        if isinstance(event_rule, dict) and "state" in event_rule:
+            event_keys.add(event_rule["state"])
+
+    for key in ("all", "any"):
+        for child in trigger_block.get(key, []) or []:
+            _collect_event_keys_from_trigger_block(child, event_keys)
 
 
 def collect_current_events(robot_interface, event_keys: list[str], bb_logger) -> dict[str, Any]:
@@ -64,9 +80,12 @@ def check_time_requirement(time_req, current_time_str: str) -> bool:
     if not time_req:
         return True
     fmt = "%H:%M"
+    t_now = datetime.strptime(current_time_str, fmt)
+    if "at" in time_req:
+        t_at = datetime.strptime(time_req["at"], fmt)
+        return t_now == t_at
     t_from = datetime.strptime(time_req["from"], fmt)
     t_to = datetime.strptime(time_req["to"], fmt)
-    t_now = datetime.strptime(current_time_str, fmt)
     return t_from <= t_now <= t_to
 
 
@@ -130,7 +149,7 @@ def check_event_requirement(event_reqs, current_events, bb_logger=None) -> bool:
     if not event_reqs:
         return True
 
-    for event_rule in event_reqs:
+    for event_rule in _normalize_event_rules(event_reqs):
         topic = event_rule["state"]
         if topic not in current_events:
             return False
@@ -145,3 +164,64 @@ def check_event_requirement(event_reqs, current_events, bb_logger=None) -> bool:
             return False
 
     return True
+
+
+def evaluate_trigger_block(
+    trigger_block,
+    *,
+    current_events,
+    current_time_str: str,
+    current_day,
+    robot_interface,
+    bb_logger=None,
+) -> bool:
+    if not trigger_block:
+        return True
+    if not isinstance(trigger_block, dict):
+        return False
+
+    results = []
+
+    if "event" in trigger_block:
+        results.append(check_event_requirement(trigger_block["event"], current_events, bb_logger))
+    if "time" in trigger_block:
+        time_req = trigger_block["time"]
+        day_req = time_req.get("day", []) if isinstance(time_req, dict) else []
+        results.append(
+            check_day_requirement(day_req, current_day)
+            and check_time_requirement(time_req, current_time_str)
+        )
+    if "permissible_locations" in trigger_block:
+        results.append(
+            check_location_requirement(robot_interface, trigger_block["permissible_locations"], bb_logger)
+        )
+    if "all" in trigger_block:
+        results.append(
+            all(
+                evaluate_trigger_block(
+                    child,
+                    current_events=current_events,
+                    current_time_str=current_time_str,
+                    current_day=current_day,
+                    robot_interface=robot_interface,
+                    bb_logger=bb_logger,
+                )
+                for child in (trigger_block.get("all") or [])
+            )
+        )
+    if "any" in trigger_block:
+        results.append(
+            any(
+                evaluate_trigger_block(
+                    child,
+                    current_events=current_events,
+                    current_time_str=current_time_str,
+                    current_day=current_day,
+                    robot_interface=robot_interface,
+                    bb_logger=bb_logger,
+                )
+                for child in (trigger_block.get("any") or [])
+            )
+        )
+
+    return all(results) if results else True

@@ -32,7 +32,7 @@ ALLOWED_RUNNERS = {
 ALLOWED_PROTOCOL_KEYS_GENERIC = {"runner", "action", "high_level"}
 ALLOWED_PROTOCOL_KEYS_SPECIAL = {"runner", "low_level", "high_level"}
 ALLOWED_HIGH_LEVEL_KEYS = {"priority", "triggers", "reset_pattern", "success_on"}
-ALLOWED_TRIGGER_KEYS = {"time", "event", "permissible_locations"}
+ALLOWED_TRIGGER_KEYS = {"time", "event", "permissible_locations", "all", "any"}
 ALLOWED_ACTION_BLOCK_KEYS = {"steps"}
 
 ALLOWED_TREE_STEP_KEYS = {"tree_name", "tree_params", "next_step_after"}
@@ -319,36 +319,65 @@ def _validate_high_level(protocol_name: str, high_level: Any, locations: dict) -
 def _validate_triggers(protocol_name: str, triggers: Any, locations: dict) -> None:
     path = f"protocols.{protocol_name}.high_level.triggers"
     _ensure_type(triggers, dict, path)
-    _reject_unknown_keys(triggers, ALLOWED_TRIGGER_KEYS, path)
+    _validate_trigger_block(triggers, path, locations)
 
-    if "time" in triggers:
-        _validate_time_requirement(triggers["time"], f"{path}.time")
-    if "event" in triggers:
-        _validate_event_conditions(triggers["event"], f"{path}.event", locations)
-    if "permissible_locations" in triggers:
+
+def _validate_trigger_block(trigger_block: Any, path: str, locations: dict) -> None:
+    _ensure_type(trigger_block, dict, path)
+    _reject_unknown_keys(trigger_block, ALLOWED_TRIGGER_KEYS, path)
+
+    if "time" in trigger_block:
+        _validate_time_requirement(trigger_block["time"], f"{path}.time")
+    if "event" in trigger_block:
+        _validate_event_conditions(trigger_block["event"], f"{path}.event", locations)
+    if "permissible_locations" in trigger_block:
         _validate_permissible_locations(
-            triggers["permissible_locations"],
+            trigger_block["permissible_locations"],
             locations,
             f"{path}.permissible_locations",
         )
+    if "all" in trigger_block:
+        _validate_trigger_group(trigger_block["all"], f"{path}.all", locations)
+    if "any" in trigger_block:
+        _validate_trigger_group(trigger_block["any"], f"{path}.any", locations)
+
+
+def _validate_trigger_group(group_items: Any, path: str, locations: dict) -> None:
+    _ensure_type(group_items, list, path)
+    if not group_items:
+        raise ValueError(f"{path} must be a non-empty list when provided")
+    for idx, item in enumerate(group_items, start=1):
+        _validate_trigger_block(item, f"{path}[{idx}]", locations)
 
 
 def _validate_time_requirement(time_req: Any, path: str) -> None:
     _ensure_type(time_req, dict, path)
-    _reject_unknown_keys(time_req, {"from", "to", "day"}, path)
-    if "from" not in time_req or "to" not in time_req:
-        raise ValueError(f"{path} must contain both 'from' and 'to'")
+    _reject_unknown_keys(time_req, {"from", "to", "at", "day"}, path)
 
-    t_from = _parse_hhmm(time_req["from"], f"{path}.from")
-    t_to = _parse_hhmm(time_req["to"], f"{path}.to")
-    if t_from > t_to:
-        raise ValueError(f"{path}.from must be <= {path}.to (same-day windows only)")
+    has_window = "from" in time_req or "to" in time_req
+    has_at = "at" in time_req
+
+    if has_window and has_at:
+        raise ValueError(f"{path} cannot combine 'at' with 'from'/'to'")
+    if has_window:
+        if "from" not in time_req or "to" not in time_req:
+            raise ValueError(f"{path} must contain both 'from' and 'to'")
+        t_from = _parse_hhmm(time_req["from"], f"{path}.from")
+        t_to = _parse_hhmm(time_req["to"], f"{path}.to")
+        if t_from > t_to:
+            raise ValueError(f"{path}.from must be <= {path}.to (same-day windows only)")
+    elif has_at:
+        _parse_hhmm(time_req["at"], f"{path}.at")
+    else:
+        raise ValueError(f"{path} must contain either 'at' or both 'from' and 'to'")
 
     if "day" in time_req:
         _validate_day_requirement(time_req["day"], f"{path}.day")
 
 
 def _validate_event_conditions(event_reqs: Any, path: str, locations: dict) -> None:
+    if isinstance(event_reqs, dict):
+        event_reqs = [event_reqs]
     _ensure_type(event_reqs, list, path)
     if not event_reqs:
         raise ValueError(f"{path} must be a non-empty list when provided")

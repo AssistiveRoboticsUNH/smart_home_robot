@@ -13,6 +13,7 @@ from smart_home_pytree.triggers.evaluator import (
     check_event_requirement,
     check_location_requirement,
     check_time_requirement,
+    evaluate_trigger_block,
     collect_current_events,
     event_condition_match,
     event_xy_within_point_match,
@@ -244,6 +245,16 @@ class TriggerMonitor:
     def check_event_requirement(self, event_reqs, current_events):
         return check_event_requirement(event_reqs, current_events, self.bb_logger)
 
+    def evaluate_trigger_block(self, trigger_block, current_events, current_day=None):
+        return evaluate_trigger_block(
+            trigger_block,
+            current_events=current_events,
+            current_time_str=self.get_current_time_string(),
+            current_day=current_day,
+            robot_interface=self.robot_interface,
+            bb_logger=self.bb_logger,
+        )
+
     def _event_xy_within_point_match(self, current_value, event_rule: dict) -> bool:
         return event_xy_within_point_match(current_value, event_rule)
 
@@ -280,17 +291,7 @@ class TriggerMonitor:
 
             if not resumed:
                 triggers = high_level_subdata.get("triggers", {})
-                event_reqs = triggers.get("event", [])
-                time_req = triggers.get("time", {})
-                day_req = time_req.get("day", []) if isinstance(time_req, dict) else []
-                loc_req = triggers.get("permissible_locations", [])
-
-                if (
-                    self.check_day_requirement(day_req, current_day)
-                    and self.check_event_requirement(event_reqs, current_events)
-                    and self.check_time_requirement(time_req)
-                    and self.check_location_requirement(loc_req)
-                ):
+                if self.evaluate_trigger_block(triggers, current_events, current_day):
                     priority = high_level_subdata.get("priority", 1)
                     satisfied.append((full_name, priority))
             else:
