@@ -20,7 +20,10 @@ ROBOT_NAME                = os.getenv("ROBOT_NAME", "Robot")
 ROBOT_PASS                = os.getenv("robot_pass") or os.getenv("ROBOT_PASS", "")
 
 # ===== Local log folder =====
-BASE_LOG_DIR = os.path.join(os.path.expanduser("~"), "shr_logs", "discord_logs")
+_shr_user_dir = os.getenv("SHR_USER_DIR")
+if not _shr_user_dir:
+    raise RuntimeError("SHR_USER_DIR is not set. Configure a user profile before starting simple_logger.")
+BASE_LOG_DIR = os.path.join(os.path.expanduser(_shr_user_dir), "logs", "discord_logs")
 os.makedirs(BASE_LOG_DIR, exist_ok=True)
 
 class LogSubscriber(Node):
@@ -201,14 +204,16 @@ class LogSubscriber(Node):
 
 
         if not self.notified_start:
-            await self.notifier.send_message(f'{td} >> **Robot Started**\n')
+            if self.notifier:
+                await self.notifier.send_message(f'{td} >> **Robot Started**\n')
             self.log_offline(f'\n{td} >> **Robot Started**\n')
             self.notified_start = True
 
         
         # --- Emergency: explicit dock failure phrase (case-insensitive) ---
         if self.dock_fail_phrase.lower() in data_l:
-            await self.emergency_notifier.send_message(f"🚨🚨🚨 **Emergency** 🚨🚨🚨 \n{ROBOT_NAME}: Failed to dock! Please check ASAP")
+            if self.emergency_notifier:
+                await self.emergency_notifier.send_message(f"🚨🚨🚨 **Emergency** 🚨🚨🚨 \n{ROBOT_NAME}: Failed to dock! Please check ASAP")
 
         # Watchdog triggers from raw stream (case-insensitive)
         if self.watch_trigger_phrase in data_l:

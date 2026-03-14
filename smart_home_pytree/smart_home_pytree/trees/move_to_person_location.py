@@ -11,6 +11,7 @@ import argparse
 import py_trees
 import rclpy
 
+from smart_home_pytree.behaviors.action_behaviors import wait
 from smart_home_pytree.behaviors.get_person_location import GetPersonLocation
 from smart_home_pytree.behaviors.robot_person_same_location import (
     RobotPersonSameLocation,
@@ -44,6 +45,7 @@ class MoveToPersonLocationTree(BaseTreeRunner):
             executor=executor,
             **kwargs,
         )
+        self.end_sleep = float(kwargs.get("end_sleep", 0) or 0)
         
         
     def create_tree(self) -> py_trees.behaviour.Behaviour:
@@ -96,6 +98,13 @@ class MoveToPersonLocationTree(BaseTreeRunner):
             [robot_same_room_pre, go_to_person_sequence_with_retry]
         )
         root.add_children([get_person_room_pre, move_if_not_same_loc])
+        if self.end_sleep > 0:
+            root.add_child(
+                wait.Wait(
+                    name=f"{self.node_name}_end_sleep",
+                    duration_in_sec=self.end_sleep,
+                )
+            )
 
         return root
 

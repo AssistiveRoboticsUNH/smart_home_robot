@@ -20,4 +20,4 @@ from smart_home_pytree.behaviors import (
 )
 from smart_home_pytree.trees import base_tree_runner, move_to_tree
 
-from . import registry, robot_interface
+from . import robot_interface

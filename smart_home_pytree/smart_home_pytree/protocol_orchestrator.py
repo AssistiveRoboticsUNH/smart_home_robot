@@ -1,22 +1,41 @@
+#/bin/env python3
+'''
+Protocol Orchestrator
+This node manages the lifecycle of Behavior Tree protocols based on triggers and events.
+It runs a main event loop that monitors triggers, handles human interruptions,and manages 
+the execution threads of specific protocol trees.
+
+Key Components:
+- ProtocolOrchestrator: Main class that encapsulates the orchestration logic.
+- orchestrator_loop: Reactive event loop that waits for triggers or human interruptions and acts accordingly.
+- _handle_human_interrupt: Logic to pause the system when a human interruption is detected and resume when cleared.
+- _reconcile_protocols: Compares currently running protocol against satisfied triggers to decide if we should Start, Stop, or Swap tasks.
+- start_protocol: Dynamically imports and starts a protocol tree in its own thread.
+- stop_protocol: Stops the currently running protocol and logs preemption if applicable.
+- shutdown: Gracefully stops all threads and ROS nodes.
+
+Usage:
+- Run the orchestrator: `ros2 run smart_home_pytree protocol_orchestrator --debug --test_time 10:30`
+'''
+
 import argparse
 import importlib
 import os
 import re
 import threading
 import time
+import uuid
 from datetime import datetime
 
 import py_trees
 import rclpy
-from std_msgs.msg import String
 from rclpy.executors import MultiThreadedExecutor
-from rclpy.signals import SignalHandlerOptions
 
 from smart_home_pytree.human_interface import HumanInterface
-from smart_home_pytree.registry import load_protocols_to_bb, load_locations_to_blackboard
+from smart_home_pytree.protocols.registry import load_protocols_to_bb, load_locations_to_blackboard
 from smart_home_pytree.robot_interface import RobotInterface
-from smart_home_pytree.trigger_monitor import TriggerMonitor
-from smart_home_pytree.utils import BlackboardLogger
+from smart_home_pytree.triggers.engine import TriggerMonitor
+from smart_home_pytree.utils import BlackboardLogger, get_house_yaml_path
 
 
 class ProtocolOrchestrator:
@@ -28,14 +47,7 @@ class ProtocolOrchestrator:
     interruptions, and manages the execution threads of specific protocol trees.
     """
 
-    def __init__(
-        self,
-        robot_interface=None,
-        test_time: str = "",
-        debug=False,
-        yaml_path_key=None,
-        protocol_timeout_minutes: float = 30.0,
-    ):
+    def __init__(self, robot_interface=None, test_time: str = "", debug=False):
         """
         Initialize the Orchestrator.
 
@@ -45,20 +57,12 @@ class ProtocolOrchestrator:
             test_time (str, optional): Simulated time for testing (e.g., "09:00").
                 Defaults to "".
             debug (bool, optional): Enable verbose logging. Defaults to False.
-            protocol_timeout_minutes (float, optional): Max time for a protocol to run
-                before being stopped. Defaults to 30.0 minutes.
         """
         self.rclpy_initialized_here = False
         self.debug = debug
-        self.protocol_timeout_sec = int(protocol_timeout_minutes * 60)
-        self.protocol_timeout_timer = None
-
         if not rclpy.ok():
             try:
-                rclpy.init(
-                    args=None,
-                    signal_handler_options=SignalHandlerOptions.NO,
-                )
+                rclpy.init(args=None)
                 self.rclpy_initialized_here = True
                 print(
                     " self.rclpy_initialized_here should be true: ",
@@ -79,6 +83,7 @@ class ProtocolOrchestrator:
         self.running_tree = None
         self.running_thread = None
         self.lock = threading.Lock()
+        self.preempted_sessions = set()
         self.stop_flag = False
         self.state_ready = False
         self.required_state_keys = ["charging"]
@@ -97,13 +102,13 @@ class ProtocolOrchestrator:
         # Saved globally so 'logger' is available to every single Python file in project
         blackboard.set("logger", custom_logger)
         self.bb_logger = blackboard.get("logger")
+        
+        self.bb_logger.notify_discord("[Orchestrator] Orchestrator initilized")
 
-        # Protocol heartbeat: publish protocol_active for watchdog (cross-process)
-        self._protocol_active_pub = self.robot_interface.create_publisher(
-            String, "/protocol_active", 10
-        )
-
-        self.bb_logger.notify_discord("[Orchestrator] Orchestrator initilized")          
+        # Expose the protocol tracker on the blackboard so BT behaviors can
+        # update step progress without importing the orchestrator.
+        # (The tracker instance is created inside TriggerMonitor; we set the
+        #  BB key after TriggerMonitor is initialised below.)          
 
         # Setup HumanInterface 
         self.human_interface_node = HumanInterface(
@@ -116,9 +121,11 @@ class ProtocolOrchestrator:
         self.trigger_monitor = TriggerMonitor(
             self.robot_interface,
             wake_event=self.orchestrator_wakeup,
-            yaml_path_key=yaml_path_key,
             test_time=test_time,
         )
+
+        # Expose tracker on blackboard for BT behaviors (IncrementStepProgress)
+        blackboard.set("protocol_tracker", self.trigger_monitor.tracker)
 
         # ---- SINGLE executor for EVERYTHING ----
         self.executor = MultiThreadedExecutor(num_threads=4)
@@ -141,6 +148,33 @@ class ProtocolOrchestrator:
                 return False
         return True
 
+    def _all_protocols_quiescent(self):
+        tracker = self.trigger_monitor.tracker
+        rows = tracker.get_all_states()
+        if self.running_tree is not None:
+            return False
+        return all((row.get("state") or "idle") in {"idle", "cooldown"} for row in rows)
+
+    def _maybe_apply_config_reload(self):
+        tracker = self.trigger_monitor.tracker
+        status = tracker.get_config_reload_status()
+        if status.get("state") != "pending":
+            return
+        if not self._all_protocols_quiescent():
+            return
+
+        yaml_path = status.get("yaml_path") or get_house_yaml_path()
+        try:
+            load_locations_to_blackboard(yaml_path, force=True)
+            load_protocols_to_bb(yaml_path, force=True)
+            self.robot_interface.reload_house_config()
+            self.trigger_monitor.reload_config(yaml_path=yaml_path)
+            tracker.mark_config_reload_applied(yaml_path)
+            self.bb_logger.notify_discord("[Orchestrator] House yaml reloaded successfully")
+        except Exception as exc:
+            tracker.mark_config_reload_error(str(exc), yaml_path=yaml_path)
+            self.bb_logger.error(f"[Orchestrator] Failed to reload house yaml: {exc}")
+
     def orchestrator_loop(self):
         """
         Reactive Event Loop.
@@ -153,6 +187,8 @@ class ProtocolOrchestrator:
             #     print("[Orchestrator] while of orchestrator_loop...")
             self.bb_logger.debug("[Orchestrator] In the while of orchestrator_loop...") 
 
+            self._maybe_apply_config_reload()
+
             # 1. Gatekeeper: Doesn't do anything if robot isn't ready
             if not self._state_is_ready():
                 self.bb_logger.info("[Orchestrator]  Robot state not ready. Waiting...")    
@@ -160,8 +196,10 @@ class ProtocolOrchestrator:
                 continue
 
             # 2. THE BLOCK: Wait here until HumanInterface or TriggerMonitor wakes the event
-            self.orchestrator_wakeup.wait()
+            self.orchestrator_wakeup.wait(timeout=1.0)
             self.orchestrator_wakeup.clear()
+
+            self._maybe_apply_config_reload()
 
             if self.stop_flag:
                 self.bb_logger.notify_discord("[Orchestrator] stop_flag was triggered") 
@@ -271,47 +309,88 @@ class ProtocolOrchestrator:
                 self.stop_protocol()
                 self.start_protocol(best_candidate)
 
-    def _protocol_timeout_callback(self):
-        """Called when a protocol exceeds the timeout. Stops the running protocol."""
-        with self.lock:
-            if not self.running_tree:
-                return
-            name = self.running_tree["name"]
-            tree = self.running_tree["tree"]
-        self.bb_logger.notify_discord(
-            f"[Orchestrator] Protocol '{name}' timed out after "
-            f"{self.protocol_timeout_sec}s. Stopping."
-        )
-        tree.stop_tree()
-
-    def _cancel_protocol_timeout(self):
-        """Cancel the protocol timeout timer if it is running."""
-        if self.protocol_timeout_timer is not None:
-            self.protocol_timeout_timer.cancel()
-            self.protocol_timeout_timer = None
-
-    def _run_protocol(self, tree_runner, class_protocol_name):
+    def _run_protocol(
+        self,
+        tree_runner,
+        class_protocol_name,
+        run_session_id: str,
+        session_start: datetime,
+    ):
         """Run a protocol tree and clean up when done."""
+        start_time = session_start
+        tracker = self.trigger_monitor.tracker
         try:
             tree_runner.run_until_done()
         finally:
-            self._cancel_protocol_timeout()
-            # Clear protocol_active 
-            bb = py_trees.blackboard.Blackboard()
-            bb.set("protocol_active", None)
-            msg = String()
-            msg.data = ""
-            self._protocol_active_pub.publish(msg)
-
+            end_time = datetime.now()
             self.bb_logger.notify_discord(f"tree_runner.final_status {tree_runner.final_status}")
-            if tree_runner.final_status == py_trees.common.Status.SUCCESS:
+            with self.lock:
+                preempted = run_session_id in self.preempted_sessions
+                if preempted:
+                    self.preempted_sessions.discard(run_session_id)
+
+            state_row = tracker.get_state(class_protocol_name) or {}
+            state_name = state_row.get("state")
+
+            if preempted:
+                # stop_protocol() already persisted and logged preemption for this session.
+                pass
+            elif tree_runner.final_status == py_trees.common.Status.SUCCESS:
                 self.bb_logger.info(
                     f"{class_protocol_name} is marked completed" 
                 )
                 self.trigger_monitor.mark_completed(class_protocol_name)
+                # Log the successful run
+                tracker.log_protocol_run(
+                    protocol=class_protocol_name,
+                    start_time=start_time,
+                    end_time=end_time,
+                    status="completed",
+                    run_session_id=run_session_id,
+                )
+                tracker.upsert_state(class_protocol_name, run_session_id=None)
+            elif (
+                tree_runner.final_status == py_trees.common.Status.FAILURE
+                and state_name == "waiting"
+            ):
+                # Yield-wait intentionally ends this run chunk so the orchestrator
+                # can schedule other protocols; this is not an execution failure.
+                tracker.log_protocol_run(
+                    protocol=class_protocol_name,
+                    start_time=start_time,
+                    end_time=end_time,
+                    status="yielded",
+                    run_session_id=run_session_id,
+                    detail="yield wait handoff",
+                )
+                tracker.upsert_state(
+                    class_protocol_name,
+                    last_status="yielded",
+                )
+            else:
+                # Log failed / non-success run
+                status = "failed"
+                failure_reason = str(tree_runner.final_status) if tree_runner.final_status else "unknown"
+                tracker.log_protocol_run(
+                    protocol=class_protocol_name,
+                    start_time=start_time,
+                    end_time=end_time,
+                    status=status,
+                    run_session_id=run_session_id,
+                    failure_reason=failure_reason,
+                )
+                tracker.upsert_state(
+                    class_protocol_name,
+                    state="idle",
+                    started_at=None,
+                    last_status=status,
+                    run_session_id=None,
+                )
 
             with self.lock:
                 self.bb_logger.info(f"[Orchestrator] Finished: {class_protocol_name}")
+                # tree = self.running_tree["tree"]
+                # tree.nodes_cleanup() ## script does on its own
                 self.running_tree = None
                 self.running_thread = None
 
@@ -355,13 +434,13 @@ class ProtocolOrchestrator:
         #  Dynamically import module & class
         try:
             module = importlib.import_module(
-                f"smart_home_pytree.protocols.{snake_case_class_name}"
+                f"smart_home_pytree.protocols.builders.{snake_case_class_name}"
             )
             # gets the class from the file in module
             tree_class = getattr(module, f"{tree_class_name}Tree")
         except Exception as e:
             self.bb_logger.notify_discord(
-                f"[Orchestrator] Failed to load tree '{tree_class_name}Tree' from module smart_home_pytree.trees.{snake_case_class_name} : {e}"
+                f"[Orchestrator] Failed to load tree '{tree_class_name}Tree' from module smart_home_pytree.protocols.builders.{snake_case_class_name} : {e}"
             )
             return
 
@@ -373,91 +452,98 @@ class ProtocolOrchestrator:
             executor=self.executor,
         )
 
-        tree_runner.setup()
-        self.bb_logger.info(
-                f"[Orchestrator] setup tree for protocol {protocol_name}"
-            )        # Set protocol_active (blackboard + topic for watchdog)
-        bb = py_trees.blackboard.Blackboard()
-        bb.set("protocol_active", class_protocol_name)
-        msg = String()
-        msg.data = class_protocol_name
-        self._protocol_active_pub.publish(msg)
+        # New session for fresh run, or re-use existing session after yield-resume.
+        tracker = self.trigger_monitor.tracker
+        existing_state = tracker.get_state(class_protocol_name) or {}
+        run_session_id = existing_state.get("run_session_id") or uuid.uuid4().hex
+        session_start = datetime.now()
+        if existing_state.get("run_session_id") and existing_state.get("started_at"):
+            try:
+                session_start = datetime.fromisoformat(existing_state["started_at"])
+            except (TypeError, ValueError):
+                session_start = datetime.now()
 
+        tree_runner.setup()
         thread = threading.Thread(
             target=self._run_protocol,
-            args=(tree_runner, class_protocol_name),
+            args=(tree_runner, class_protocol_name, run_session_id, session_start),
             daemon=True,
         )
         thread.start()
-        self.bb_logger.info(
-                f"[Orchestrator] run_protocol for {protocol_name}"
-            )
-        
-        self._cancel_protocol_timeout()
-        self.protocol_timeout_timer = threading.Timer(
-            self.protocol_timeout_sec,
-            self._protocol_timeout_callback,
-        )
-        self.protocol_timeout_timer.daemon = True
-        self.protocol_timeout_timer.start()
 
         with self.lock:
             self.running_tree = {
                 "name": protocol_name,
+                "full_name": class_protocol_name,
                 "priority": priority,
                 "tree": tree_runner,
+                "run_session_id": run_session_id,
+                "session_start": session_start,
             }
             self.running_thread = thread
 
+        # Persist: mark as running + set total step count
+        total_steps = None
+        try:
+            proto_yaml = self.trigger_monitor.protocols_yaml["protocols"].get(protocol_name, {})
+            if proto_yaml.get("runner", "GenericProtocol") == "GenericProtocol":
+                total_steps = len(proto_yaml.get("action", {}).get("steps", []))
+        except Exception:
+            pass
+        tracker.upsert_state(
+            class_protocol_name,
+            state="running",
+            started_at=session_start,
+            total_steps=total_steps,
+            completed_step=0,
+            last_status=None,
+            run_session_id=run_session_id,
+        )
 
     def stop_protocol(self):
-        """Stop the currently running protocol. Blocks until the protocol thread exits."""
-        self._cancel_protocol_timeout()
-
+        """Stop the currently running protocol."""
         with self.lock:
             if not self.running_tree:
                 return
-
             name = self.running_tree["name"]
+            full_name = self.running_tree.get("full_name")
+            run_session_id = self.running_tree.get("run_session_id")
+            session_start = self.running_tree.get("session_start") or datetime.now()
+            if run_session_id:
+                self.preempted_sessions.add(run_session_id)
+            self.bb_logger.notify_discord(f"[Orchestrator] Stopping: {name}")
             tree = self.running_tree["tree"]
-            thread = self.running_thread
 
-        self.bb_logger.notify_discord(f"[Orchestrator] Stopping: {name}")
         tree.stop_tree()
+        self.running_thread.join(timeout=5)
+        # tree.cleanup() ## cleans up on its own with stop tree
 
-        if thread is None:
-            return
-
-        join_timeout = 10
-        thread.join(timeout=join_timeout)
-
-        if thread.is_alive():
-            self.bb_logger.notify_discord(
-                f"[Orchestrator] WARNING: '{name}' did not stop within {join_timeout}s."
+        # Log preemption
+        if full_name:
+            self.trigger_monitor.tracker.log_protocol_run(
+                protocol=full_name,
+                start_time=session_start,
+                end_time=datetime.now(),
+                status="preempted",
+                run_session_id=run_session_id,
+                detail="stopped by orchestrator",
             )
-
-            max_wait = 60
-            waited = 0
-
-            while thread.is_alive() and waited < max_wait:
-                thread.join(timeout=2)
-                waited += 2
-
-            if thread.is_alive():
-                self.bb_logger.notify_discord(
-                    f"[Orchestrator] ERROR: '{name}' thread still alive after {max_wait}s."
-                )
+            self.trigger_monitor.tracker.upsert_state(
+                full_name,
+                state="idle",
+                started_at=None,
+                last_status="preempted",
+                run_session_id=None,
+            )
 
         with self.lock:
             self.running_tree = None
             self.running_thread = None
 
-
     def shutdown(self):
         """Gracefully stop everything (ROS-safe)."""
         self.bb_logger.notify_discord("[Orchestrator] Shutting down...")
-
-        self._cancel_protocol_timeout()
+        
 
         # 1. Stop orchestrator logic
         self.stop_flag = True
@@ -472,6 +558,10 @@ class ProtocolOrchestrator:
 
         if self.running_tree:
             self.stop_protocol()
+
+        # Close protocol tracker database
+        if hasattr(self, 'trigger_monitor') and self.trigger_monitor and hasattr(self.trigger_monitor, 'tracker'):
+            self.trigger_monitor.tracker.close()
 
         # 3. STOP EXECUTOR FIRST (CRITICAL)
         if hasattr(self, "executor") and self.executor:
@@ -539,34 +629,10 @@ def main():
         help="Enable debug output.",
     )
 
-    parser.add_argument(
-        "--protocol_timeout_minutes",
-        type=float,
-        default=30.0,
-        help="Max minutes a protocol can run before being stopped (default: 30).",
-    )
-
-    parser.add_argument(
-        "--env_yaml_file_name",
-        type=str,
-        default="house_yaml_path",
-        help=(
-            "Name of the environment variable that stores the YAML file path "
-            "(default: house_yaml_path)."
-        ),
-    )
-
     args, _ = parser.parse_known_args()
     test_time = args.test_time
 
-    print(f"Starting Protocol Orchestrator with protocol_timeout_minutes={args.protocol_timeout_minutes}, ")
-    # Resolve YAML file path from environment variable
-    print(f"Environment variable path is set to  '{args.env_yaml_file_name}'")
-    yaml_file_path = os.getenv(args.env_yaml_file_name)
-    if yaml_file_path is None:
-        raise RuntimeError(
-            f"Environment variable '{args.env_yaml_file_name}' is not set."
-        )
+    yaml_file_path = get_house_yaml_path()
     # blackboard = py_trees.blackboard.Blackboard()
     print("Loading location and protocol to bb")
     
@@ -579,21 +645,13 @@ def main():
         print("[INFO] Using system time")
 
     # For testing:
-    orch = ProtocolOrchestrator(
-        test_time=test_time,
-        debug=args.debug,
-        yaml_path_key=args.env_yaml_file_name,
-        protocol_timeout_minutes=args.protocol_timeout_minutes,
-    )
+    orch = ProtocolOrchestrator(test_time=test_time, debug=args.debug)
 
     try:
         print("ORCHI LOOP")
         orch.orchestrator_loop()
     except KeyboardInterrupt:
         print("[Main] KeyboardInterrupt received.")
-        orch.bb_logger.info("KeyboardInterrupt received. Triggering shutdown...")
-        orch.stop_flag = True
-        orch.orchestrator_wakeup.set()
     finally:
         orch.shutdown()
 
@@ -605,10 +663,6 @@ if __name__ == "__main__":
 # ros2 topic pub /display_rx std_msgs/msg/String "data: 'exercise_requested'"
 # ros2 topic pub /display_rx std_msgs/msg/String "data: 'exercise_stop'"
 
-# ros2 run smart_home_pytree protocol_orchestrator --  --test_time 10:30 --env_yaml_file_name house_yaml_path
-# ros2 run smart_home_pytree protocol_orchestrator -- --debug --test_time 10:30 --env_yaml_file_name house_yaml_path
+
+# ros2 run smart_home_pytree protocol_orchestrator -- --debug --test_time 10:30
 # ros2 run rqt_console rqt_console
-
-
-
-# ros2 run smart_home_pytree protocol_orchestrator -- --env_yaml_file_name house_yaml_path

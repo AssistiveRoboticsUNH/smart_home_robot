@@ -4,6 +4,8 @@ import time
 
 import py_trees
 
+from smart_home_pytree.utils import resolve_media_path
+
 
 class PlayAudio(py_trees.behaviour.Behaviour):
     """
@@ -22,21 +24,22 @@ class PlayAudio(py_trees.behaviour.Behaviour):
     def initialise(self):
         """Called once when the behavior starts."""
         print("[PlayAudio] initialise")
+        resolved_audio_path = resolve_media_path(self.audio_path, "audio")
 
         # Check file exists
-        if not os.path.isfile(self.audio_path):
-            print("[PlayAudio] File does not exist:", self.audio_path)
+        if not resolved_audio_path or not os.path.isfile(resolved_audio_path):
+            print("[PlayAudio] File does not exist:", resolved_audio_path or self.audio_path)
             self.proc = None
             return
 
         try:
             # Launch mpg321 asynchronously
             self.proc = subprocess.Popen(
-                ["mpg321", "-q", self.audio_path],
+                ["mpg321", "-q", resolved_audio_path],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
-            print(f"[PlayAudio] Started: {self.audio_path}")
+            print(f"[PlayAudio] Started: {resolved_audio_path}")
 
         except Exception as e:
             print("[PlayAudio] Failed to start audio:", e)

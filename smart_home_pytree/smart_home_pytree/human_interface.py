@@ -19,7 +19,7 @@ class HumanInterface(Node):
         self,
         human_interrupt_event: threading.Event,
         orchestrator_wakeup: threading.Event,
-        node_name: str = "human_interface",
+        node_name: str = "voice_trigger",
         robot_interface=None,
     ):
         """
@@ -28,7 +28,7 @@ class HumanInterface(Node):
         Args:
             human_interrupt_event (threading.Event): Shared event to signal human interruption.
             orchestrator_wakeup (threading.Event): Shared event to wake the main loop.
-            node_name (str, optional): ROS node name. Defaults to 'human_interface'.
+            node_name (str, optional): ROS node name. Defaults to 'voice_trigger'.
             robot_interface (object, optional): Interface to update robot state. Defaults to None.
         """
         super().__init__(node_name)
@@ -127,12 +127,9 @@ class HumanInterface(Node):
             if not self.human_interrupt_event.is_set():
                 with self.decisive_command_lock:
                     self.decisive_command = False ## make sure to start again
-                    
-                if self.bb_logger:
-                    self.bb_logger.notify_discord(
-                        "[HumanInterface] WAKEWORD DETECTED! Pausing Orchestrator."
-                    )
-                    
+                self.get_logger().warn(
+                    "[HumanInterface] WAKEWORD DETECTED! Pausing Orchestrator."
+                )
                 self.human_interrupt_event.set()
                 self.orchestrator_wakeup.set()
 

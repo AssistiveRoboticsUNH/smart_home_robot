@@ -13,10 +13,12 @@ from smart_home_pytree.behaviors.action_behaviors.ask_question import (
 )
 from smart_home_pytree.behaviors.check_protocol_bb import CheckProtocolBB
 from smart_home_pytree.behaviors.set_protocol_bb import SetProtocolBB
-from smart_home_pytree.registry import load_protocols_to_bb
+from smart_home_pytree.protocols.registry import load_locations_to_blackboard, load_protocols_to_bb
 from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
-from smart_home_pytree.trees.move_to_person_location import MoveToPersonLocationTree
-from smart_home_pytree.utils import str2bool
+from smart_home_pytree.trees.execution_location_selector import (
+    build_execution_location_subtree,
+)
+from smart_home_pytree.utils import get_house_yaml_path, str2bool
 
 
 class AskQuestionTree(BaseTreeRunner):
@@ -61,6 +63,7 @@ class AskQuestionTree(BaseTreeRunner):
                 f"Available keys: {list(protocol_info.keys())}"
             )
         self.question_text = protocol_info[data_key]
+        self.execution_location = kwargs.get("execution_location", "current")
         
         
         super().__init__(
@@ -86,13 +89,13 @@ class AskQuestionTree(BaseTreeRunner):
         """
 
         # 1. Subtree: Navigation logic
-        move_to_person_tree = MoveToPersonLocationTree(
-            node_name=f"{self.protocol_name}_move_to_person",
+        move_to_execution_location = build_execution_location_subtree(
+            execution_location=self.execution_location,
+            node_name=f"{self.protocol_name}_{self.data_key}",
             robot_interface=self.robot_interface,
             debug=self.debug,
             executor=self.executor,
         )
-        move_to_person = move_to_person_tree.create_tree()
 
         # 2. Goal Setup: Define the question parameters
         question_goal = QuestionRequest.Goal()
@@ -118,7 +121,7 @@ class AskQuestionTree(BaseTreeRunner):
             name=f"{self.protocol_name}_ask_sequence", memory=True
         )
 
-        question_sequence.add_children([move_to_person, ask_and_eval])
+        question_sequence.add_children([move_to_execution_location, ask_and_eval])
 
         selector = py_trees.composites.Selector(
             name=f"Run Question If Needed", memory=True
@@ -164,8 +167,9 @@ def main(args=None):
     data_key = args.data_key
     print("protocol_name: ", protocol_name)
 
-    yaml_file_path = os.getenv("house_yaml_path", None)
+    yaml_file_path = get_house_yaml_path()
 
+    load_locations_to_blackboard(yaml_file_path)
     load_protocols_to_bb(yaml_file_path)
 
     tree_runner = AskQuestionTree(

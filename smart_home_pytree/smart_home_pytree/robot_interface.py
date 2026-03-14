@@ -1,3 +1,4 @@
+import os
 import threading
 
 import rclpy
@@ -5,7 +6,100 @@ from geometry_msgs.msg import PoseWithCovarianceStamped
 from rclpy.executors import MultiThreadedExecutor
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
-from std_msgs.msg import Bool, Int32, String
+from std_msgs.msg import Bool, Float32, Int32, String
+
+from smart_home_pytree.protocols.loader import load_house_config_yaml
+from smart_home_pytree.utils import get_house_yaml_path
+
+
+_PERSON_INIT_UNSET = object()
+
+
+ROBOT_STATE_SPECS = {
+    "person_location": {
+        "kind": "string",
+        "ui_kind": "location_name",
+        "description": "Current detected person location label.",
+    },
+    "robot_location": {
+        "kind": "string",
+        "ui_kind": "location_name",
+        "description": "Current robot landmark/location label.",
+    },
+    "position": {
+        "kind": "string",
+        "ui_kind": "location_name",
+        "description": "Move-away target mode (typically 'home' or 'away').",
+    },
+    "move_away": {
+        "kind": "bool",
+        "description": "Trigger to run move-away behavior.",
+    },
+    "coffee": {
+        "kind": "bool",
+        "description": "Coffee-related trigger event.",
+    },
+    "bathroom_sensor": {
+        "kind": "bool",
+        "description": "Bathroom motion/sensor event.",
+    },
+    "charging": {
+        "kind": "bool",
+        "description": "Whether robot is charging.",
+    },
+    "start_exercise": {
+        "kind": "bool",
+        "description": "Exercise start trigger.",
+    },
+    "stop_exercise": {
+        "kind": "bool",
+        "description": "Exercise stop trigger.",
+    },
+    "sim_time": {
+        "kind": "string",
+        "description": "Simulated clock override string (HH:MM).",
+    },
+    "robot_location_xy": {
+        "kind": "tuple",
+        "ui_kind": "xy_proximity",
+        "description": "Robot XY coordinates from AMCL in format (x, y).",
+    },
+    "battery_percent": {
+        "kind": "int",
+        "description": "Battery state-of-charge percentage (0-100) from pimu.",
+    },
+    "voltage_36v": {
+        "kind": "float",
+        "description": "36V bus voltage from pimu.",
+    },
+    "voltage_12v": {
+        "kind": "float",
+        "description": "12V bus voltage from pimu.",
+    },
+    "over_tilt": {
+        "kind": "bool",
+        "description": "Robot tilt alert from pimu.",
+    },
+}
+
+
+def resolve_person_init_from_yaml_path(yaml_path: str | None) -> str | None:
+    """Read optional person_init from house yaml."""
+    if not yaml_path or not os.path.isfile(yaml_path):
+        return None
+
+    data = load_house_config_yaml(yaml_path)
+    value = data.get("person_init")
+    if value is None:
+        return None
+
+    text = str(value).strip()
+    return text or None
+
+
+def resolve_person_init() -> str | None:
+    """Resolve person_init from the active user house config."""
+    return resolve_person_init_from_yaml_path(get_house_yaml_path())
 
 
 class RobotState:
@@ -36,6 +130,18 @@ class RobotState:
         """Return a list of all available keys in the state."""
         return list(self._data.keys())
 
+    def snapshot(self) -> dict:
+        """Return a JSON-safe copy of the full state dict."""
+        out = {}
+        for k, v in self._data.items():
+            if isinstance(v, (str, int, float, bool)) or v is None:
+                out[k] = v
+            elif isinstance(v, (tuple, list)):
+                out[k] = list(v)
+            else:
+                out[k] = str(v)
+        return out
+
     # Debug / Introspection
     def __str__(self):
         keys = list(self._data.keys())
@@ -56,19 +162,24 @@ class RobotInterface(Node):
     _instance = None
     _lock = threading.Lock()
 
-    def __new__(cls):
+    def __new__(cls, *args, **kwargs):
         if cls._instance is None:
             with cls._lock:
                 if cls._instance is None:
                     cls._instance = super().__new__(cls)
         return cls._instance
 
-    def __init__(self):
+    def __init__(self, *, person_init=_PERSON_INIT_UNSET):
         if getattr(self, "_initialized", False):
             return
 
         super().__init__("robot_interface")
         self.state = RobotState()
+        self.person_init = (
+            resolve_person_init()
+            if person_init is _PERSON_INIT_UNSET
+            else person_init
+        )
         self.qos_profile = QoSProfile(
             reliability=ReliabilityPolicy.RELIABLE,
             history=HistoryPolicy.KEEP_LAST,
@@ -127,17 +238,41 @@ class RobotInterface(Node):
 
         self.create_subscription(String, "sim_time", self.sim_time_callback, 10)
 
+        # Pimu telemetry (published by pimu_monitor)
+        self.create_subscription(
+            Int32, "battery_percent", self.battery_percent_callback, self.qos_profile
+        )
+        self.create_subscription(
+            Float32, "voltage_36v", self.voltage_36v_callback, self.qos_profile
+        )
+        self.create_subscription(
+            Float32, "voltage_12v", self.voltage_12v_callback, self.qos_profile
+        )
+        self.create_subscription(
+            Bool, "over_tilt", self.over_tilt_callback, self.qos_profile
+        )
+
         self._initialized = True
         self.get_logger().info(
             "RobotInterface initialized and spinning in background thread."
         )
-        # self.state.update('robot_location_xy', None)
+        if self.person_init:
+            self._apply_person_init(self.person_init)
 
+    def _apply_person_init(self, person_init: str | None):
+        if not person_init:
+            return
         self.get_logger().warn(
-            "person_location initialset to living_room. SHOULD BE ONLY USED FOR TESTING"
+            f"person_location initialized from house yaml: {person_init}"
         )
-        self.state.update("person_location", "living_room")
-        # self.state.update("person_location", "bedroom")
+        self.state.update("person_location", person_init)
+
+    def reload_house_config(self):
+        """Reload YAML-driven runtime state such as person_init."""
+        self.person_init = resolve_person_init()
+        if self.person_init:
+            self._apply_person_init(self.person_init)
+        self.get_logger().info("RobotInterface reloaded house yaml settings.")
 
     def speak(self, text:str):
         msg = String()
@@ -205,12 +340,27 @@ class RobotInterface(Node):
         # Example: msg.data = "10:30"
         self.state["sim_time"] = msg.data
 
+    # --- Pimu telemetry callbacks ---
+    def battery_percent_callback(self, msg: Int32):
+        self.get_logger().debug(f"Battery percent: {msg.data}")
+        self.state.update("battery_percent", msg.data)
+
+    def voltage_36v_callback(self, msg: Float32):
+        self.state.update("voltage_36v", round(float(msg.data), 2))
+
+    def voltage_12v_callback(self, msg: Float32):
+        self.state.update("voltage_12v", round(float(msg.data), 2))
+
+    def over_tilt_callback(self, msg: Bool):
+        self.get_logger().debug(f"Over tilt: {msg.data}")
+        self.state.update("over_tilt", msg.data)
+
 
 # ros2 topic pub /sim_time std_msgs/msg/String "{data: '10:30'}"
 
 
 def main():
-    """for standalone testing ONLY"""
+    """Standalone RobotInterface spin helper for direct execution."""
     rclpy.init()
 
     robot_interface = RobotInterface()

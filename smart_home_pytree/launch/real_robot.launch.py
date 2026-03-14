@@ -10,10 +10,10 @@ from launch_ros.actions import Node
 def generate_launch_description():
     ld = LaunchDescription()
 
-    charge_monitor = Node(
+    pimu_monitor = Node(
         package="smart_home_pytree",
-        executable="charge_monitor",
-        name="charge_monitor",
+        executable="pimu_monitor",
+        name="pimu_monitor",
         output="screen",
     )
 
@@ -52,7 +52,7 @@ def generate_launch_description():
         output="screen",
     )
 
-    ld.add_action(charge_monitor)
+    ld.add_action(pimu_monitor)
     ld.add_action(discord_logger)
     ld.add_action(display_node)
     ld.add_action(play_video_node_cmd)

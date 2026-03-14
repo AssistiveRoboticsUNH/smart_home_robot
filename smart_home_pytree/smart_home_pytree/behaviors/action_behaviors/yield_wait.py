@@ -10,8 +10,8 @@ import time
 import py_trees
 
 from smart_home_pytree.behaviors.set_protocol_bb import SetProtocolBB
-from smart_home_pytree.registry import load_protocols_to_bb
-from smart_home_pytree.utils import parse_duration
+from smart_home_pytree.protocols.registry import load_protocols_to_bb
+from smart_home_pytree.utils import get_house_yaml_path, parse_duration
 
 
 class YieldWait(py_trees.behaviour.Behaviour):
@@ -93,7 +93,7 @@ class YieldWait(py_trees.behaviour.Behaviour):
         protocol_info = bb.get(self.protocol_name)
         wait_time_unparsed = protocol_info[self.wait_time_key]
         wait_seconds = parse_duration(wait_time_unparsed)
-        # Construct full protocol identifier (e.g., "XReminderProtocol.medicine_am")
+        # Construct full protocol identifier (e.g., "GenericProtocol.medicine_am")
         request_key = f"{self.class_name}.{self.protocol_name}"
    
         compound_key = f"{self.protocol_name}_done.{self.wait_time_key}_done"
@@ -158,8 +158,8 @@ class YieldWait(py_trees.behaviour.Behaviour):
             return py_trees.common.Status.SUCCESS
             
         bb = py_trees.blackboard.Blackboard()
-        wait_requests = bb.get("wait_requests")
-        request_key = "{self.class_name}.{self.protocol_name}"
+        wait_requests = bb.get("wait_requests") or {}
+        request_key = f"{self.class_name}.{self.protocol_name}"
 
         # Check if TriggerMonitor picked up the request (removed from dict)
         if request_key not in wait_requests:
@@ -182,13 +182,13 @@ def main():
     import os
     import pprint
 
-    yaml_file_path = os.getenv("house_yaml_path", None)
+    yaml_file_path = get_house_yaml_path()
     load_protocols_to_bb(yaml_file_path)
 
     # ---- setup blackboard ----
     bb = py_trees.blackboard.Blackboard()
 
-    class_name = "TwoReminderProtocol"
+    class_name = "GenericProtocol"
     protocol_name = "medicine_am"
     wait_time_key = "wait_time_between_reminders"
 

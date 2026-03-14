@@ -13,6 +13,7 @@ import py_trees
 import py_trees_ros
 import rclpy
 
+from smart_home_pytree.behaviors.action_behaviors import wait
 from smart_home_pytree.behaviors.check_robot_state_key import CheckRobotStateKey
 from smart_home_pytree.behaviors.move_to_behavior import MoveToLandmark
 from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
@@ -76,6 +77,7 @@ class MoveToLocationTree(BaseTreeRunner):
         else:
             # Otherwise use kwargs, defaulting to "person_location"
             self.location_key = self.kwargs.get("location_key", "person_location")
+        self.end_sleep = float(kwargs.get("end_sleep", 0) or 0)
 
 
     def create_tree(self) -> py_trees.behaviour.Behaviour:
@@ -129,6 +131,13 @@ class MoveToLocationTree(BaseTreeRunner):
         # for actual move action
 
         root.add_child(move_to_position)
+        if self.end_sleep > 0:
+            root.add_child(
+                wait.Wait(
+                    name=f"{self.node_name}_end_sleep",
+                    duration_in_sec=self.end_sleep,
+                )
+            )
         return root
 
     # know what action server need to be there for debugging

@@ -2,6 +2,7 @@
 
 import os
 import signal
+import tempfile
 import threading
 import time
 
@@ -13,7 +14,7 @@ import rclpy
 from nav2_msgs.action import NavigateToPose
 from rclpy.executors import MultiThreadedExecutor
 from smart_home_pytree.protocol_orchestrator import ProtocolOrchestrator
-from smart_home_pytree.registry import load_protocols_to_bb
+from smart_home_pytree.protocols.registry import load_protocols_to_bb
 from smart_home_pytree.robot_interface import RobotInterface
 
 from shr_msgs.action import DockingRequest
@@ -56,12 +57,28 @@ def setup_function(function):
     blackboard = py_trees.blackboard.Blackboard()
     blackboard.storage.clear()
 
-    yaml_file_path = os.getenv("house_yaml_path", None)
+    # Use a fresh temporary DB so persistent state from previous runs
+    # (or the production robot) does not interfere with the test.
+    _tmp_db = tempfile.NamedTemporaryFile(suffix=".db", prefix="tracker_test_", delete=False)
+    os.environ["PROTOCOL_TRACKER_DB"] = _tmp_db.name
+    _tmp_db.close()
+
+    from smart_home_pytree.utils import get_house_yaml_path
+    yaml_file_path = get_house_yaml_path()
     load_protocols_to_bb(yaml_file_path)
     print("\nsetup_function()")
 
 
 def teardown_function(function):
+    # Remove the temporary tracker DB created in setup
+    tmp_db = os.environ.pop("PROTOCOL_TRACKER_DB", None)
+    if tmp_db and os.path.exists(tmp_db):
+        os.unlink(tmp_db)
+        # WAL/SHM sidecars
+        for ext in ("-wal", "-shm"):
+            p = tmp_db + ext
+            if os.path.exists(p):
+                os.unlink(p)
     print("\nteardown_function()")
 
 
@@ -212,13 +229,13 @@ def test_protocol_orchestrator_one_protocol_true():
     satisfied = orch.trigger_monitor.get_satisfied()
     print("Satisfied protocols:", satisfied)
 
-    expected = [("TwoReminderProtocol.medicine_am", 2)]
+    expected = [("GenericProtocol.medicine_am", 2)]
     assert satisfied == expected, (
         f"Expected only medicine_am to be satisfied, got {satisfied}"
     )
 
     assert_protocol_completed(orch, expected)
-    run_orchestrator_until_all_completed(orch, ["TwoReminderProtocol.medicine_am"])
+    run_orchestrator_until_all_completed(orch, ["GenericProtocol.medicine_am"])
     assert_blackboard_protocol_done(blackboard, "medicine_am")
 
     executor.shutdown()
@@ -318,14 +335,14 @@ def test_protocol_orchestrator_two_protocol_true():
     satisfied = orch.trigger_monitor.get_satisfied()
     print("Satisfied protocols:", satisfied)
 
-    expected = [("TwoReminderProtocol.medicine_am", 2), ("CoffeeProtocol.coffee", 3)]
+    expected = [("GenericProtocol.medicine_am", 2), ("GenericProtocol.coffee", 3)]
     assert satisfied == expected, (
         f"Expected medicine_am and coffee to be satisfied, got {satisfied}"
     )
 
     assert_protocol_completed(orch, expected)
     run_orchestrator_until_all_completed(
-        orch, ["TwoReminderProtocol.medicine_am", "CoffeeProtocol.coffee"]
+        orch, ["GenericProtocol.medicine_am", "GenericProtocol.coffee"]
     )
     assert_blackboard_protocol_done(blackboard, "medicine_am")
     assert_blackboard_protocol_done(blackboard, "coffee")
@@ -344,5 +361,3 @@ def test_protocol_orchestrator_two_protocol_true():
     mock_dock_server.destroy_node()
     mock_undock_server.destroy_node()
 
-
-# ~/smart_home_pytree_ws/src/smart_home_pytree: run  python3 -m  pytest test/unit/test_two_reminder_protocol_tree.py -vv

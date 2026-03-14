@@ -6,13 +6,12 @@ from enum import Enum
 
 # from rclpy.executors import MultiThreadedExecutor
 import py_trees
-from std_msgs.msg import Float64
 import py_trees.console as console
 import py_trees_ros.trees
 import rclpy
 from py_trees import display
 
-
+from smart_home_pytree.protocols.registry import load_locations_to_blackboard
 from smart_home_pytree.robot_interface import RobotInterface
 from smart_home_pytree.utils import BlackboardLogger
 
@@ -151,14 +150,6 @@ class BaseTreeRunner:
             root=self.root, unicode_tree_debug=True
         )
 
-        # Publisher for protocol heartbeat (watchdog cross-process monitoring)
-        if self.mode == TreeRunMode.EMBEDDED and self.robot_interface:
-            self._heartbeat_pub = self.robot_interface.create_publisher(
-                Float64, "/protocol_heartbeat", 10
-            )
-        else:
-            self._heartbeat_pub = None
-
         try:
             self.tree.setup(node_name=self.node_name, timeout=15.0)
         except py_trees_ros.exceptions.TimedOutError as e:
@@ -189,13 +180,6 @@ class BaseTreeRunner:
         def tick_tree_until_done(timer):
             try:
                 self.tree.root.tick_once()
-
-                # Protocol heartbeat: update so watchdog knows tree is ticking
-                self.blackboard.set("protocol_heartbeat", time.time())
-                if self._heartbeat_pub is not None:
-                    msg = Float64()
-                    msg.data = time.time()
-                    self._heartbeat_pub.publish(msg)
 
                 # print("=" * 25 + " TREE STATE " + "=" * 25)
                 # print(display.unicode_tree(root=self.tree.root, show_status=True))
@@ -319,11 +303,7 @@ class BaseTreeRunner:
         if not self.nodes_cleanup_done:
             self.nodes_cleanup()
 
-        if (
-            self.mode == TreeRunMode.STANDALONE
-            and self.rclpy_initialized_here
-            and rclpy.ok()
-        ):
+        if self.mode == TreeRunMode.STANDALONE and self.rclpy_initialized_here:
             if self.debug:
                 print("[BaseTreeRunner] rclpy shutdown")
             rclpy.shutdown()

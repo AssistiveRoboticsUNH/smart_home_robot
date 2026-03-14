@@ -6,13 +6,16 @@ import os
 import py_trees
 import rclpy
 
+from smart_home_pytree.behaviors.action_behaviors import wait
 from smart_home_pytree.behaviors.action_behaviors import play_audio
 from smart_home_pytree.behaviors.set_protocol_bb import SetProtocolBB
 from smart_home_pytree.behaviors.check_protocol_bb import CheckProtocolBB
-from smart_home_pytree.registry import load_protocols_to_bb, load_locations_to_blackboard
+from smart_home_pytree.protocols.registry import load_protocols_to_bb, load_locations_to_blackboard
 from smart_home_pytree.trees.base_tree_runner import BaseTreeRunner
-from smart_home_pytree.trees.move_to_person_location import MoveToPersonLocationTree
-from smart_home_pytree.utils import str2bool
+from smart_home_pytree.trees.execution_location_selector import (
+    build_execution_location_subtree,
+)
+from smart_home_pytree.utils import get_house_yaml_path, str2bool
 
 
 class PlayAudioTree(BaseTreeRunner):
@@ -56,6 +59,8 @@ class PlayAudioTree(BaseTreeRunner):
                 f"Available keys: {list(protocol_info.keys())}"
             )
         self.audio_path = protocol_info[data_key]
+        self.end_sleep = float(kwargs.get("end_sleep", 0) or 0)
+        self.execution_location = kwargs.get("execution_location", "current")
         
         super().__init__(
             node_name=node_name,
@@ -85,13 +90,13 @@ class PlayAudioTree(BaseTreeRunner):
             expected_value=True,
         )
         
-        move_to_person_tree = MoveToPersonLocationTree(
-            node_name=f"{self.protocol_name}_move_to_person",
+        move_to_execution_location = build_execution_location_subtree(
+            execution_location=self.execution_location,
+            node_name=f"{self.protocol_name}_{self.data_key}",
             robot_interface=self.robot_interface,
             debug=self.debug,
             executor=self.executor,
         )
-        move_to_person = move_to_person_tree.create_tree()
 
         # Custom behaviors
         play_audio_reminder = play_audio.PlayAudio(
@@ -109,13 +114,16 @@ class PlayAudioTree(BaseTreeRunner):
             name=f"{self.protocol_name}_play_audio", memory=True
         )
 
-        root_sequence.add_children(
-            [
-                move_to_person,
-                play_audio_reminder,
-                set_play_audio_success,
-            ]
-        )
+        children = [move_to_execution_location, play_audio_reminder]
+        if self.end_sleep > 0:
+            children.append(
+                wait.Wait(
+                    name=f"{self.protocol_name}_{self.data_key}_end_sleep",
+                    duration_in_sec=self.end_sleep,
+                )
+            )
+        children.append(set_play_audio_success)
+        root_sequence.add_children(children)
 
         selector.add_children([condition, root_sequence])
         return selector
@@ -149,8 +157,8 @@ def main(args=None):
     parser.add_argument(
         "--data_key",
         type=str,
-        default="reminder_1",
-        help="name of the key in the protocol that needs to run (ex: medicine_am)",
+        default="step_0",
+        help="blackboard step key to run (for example: step_0)",
     )
 
     args, _ = parser.parse_known_args()
@@ -158,7 +166,7 @@ def main(args=None):
     data_key = args.data_key
     print("protocol_name: ", protocol_name)
 
-    yaml_file_path = os.getenv("house_yaml_path", None)
+    yaml_file_path = get_house_yaml_path()
     load_locations_to_blackboard(yaml_file_path)
     load_protocols_to_bb(yaml_file_path)
 

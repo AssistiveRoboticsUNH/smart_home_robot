@@ -8,7 +8,10 @@ import rclpy
 
 from shr_msgs.action import QuestionRequest  # Ensure this import is correct
 from smart_home_pytree.behaviors.set_protocol_bb import SetProtocolBB
-from smart_home_pytree.registry import load_protocols_to_bb
+from smart_home_pytree.protocols.registry import load_protocols_to_bb
+from smart_home_pytree.utils import get_house_yaml_path
+
+GENERIC_CONFIRMATION_RESULT_KEY = "user_confirmation_result"
 
 
 class AskQuestionBehavior(py_trees_ros.actions.ActionClient):
@@ -83,11 +86,13 @@ class AskQuestionBehavior(py_trees_ros.actions.ActionClient):
 
         if answer == "yes":
             set_bb_node.update()
-            self.blackboard.set("user_wants_video", True)
+            # Generic confirmation result for all protocols/workflows.
+            self.blackboard.set(GENERIC_CONFIRMATION_RESULT_KEY, True)
             return py_trees.common.Status.SUCCESS
         elif answer == "no":
             set_bb_node.update()
-            self.blackboard.set("user_wants_video", False)
+            # Generic confirmation result for all protocols/workflows.
+            self.blackboard.set(GENERIC_CONFIRMATION_RESULT_KEY, False)
             return py_trees.common.Status.SUCCESS
         else:
             # done not updated
@@ -99,7 +104,7 @@ def main():
     rclpy.init()
     # 1. Create the node manually
     node = rclpy.create_node("test_node")
-    yaml_file_path = os.getenv("house_yaml_path", None)
+    yaml_file_path = get_house_yaml_path()
 
     blackboard = py_trees.blackboard.Blackboard()
     load_protocols_to_bb(yaml_file_path, debug=False)

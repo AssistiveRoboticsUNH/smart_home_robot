@@ -6,5 +6,6 @@ discord
 timedelta
 zmq
 PyYAML
+Flask
 av
 huggingface-hub
