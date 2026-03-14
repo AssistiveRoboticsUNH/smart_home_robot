@@ -76,7 +76,7 @@ cd ~/smarthome_ws/src/smart_home_robot
 The script will:
 - create `~/shr_user/<user_name>/`
 - create `configs/`, `audios/`, `videos/`, `images/`, `logs/`, `database/`, and `map/`
-- copy `smart_home_pytree/config/house_info.yaml` into `configs/house_config.yaml` if it does not already exist
+- copy `smart_home_pytree/config/house_config_example.yaml` into `configs/house_config.yaml` if it does not already exist
 - add or update the required `SHR_USER_DIR` export line in `~/.bashrc`
 - add the `.env` source line to `~/.bashrc` if it is missing
 

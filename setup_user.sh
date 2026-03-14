@@ -2,7 +2,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SAMPLE_CONFIG="$SCRIPT_DIR/smart_home_pytree/config/house_info.yaml"
+SAMPLE_CONFIG="$SCRIPT_DIR/smart_home_pytree/config/house_config_example.yaml"
 BASE_DIR="$HOME/shr_user"
 ENV_FILE="$SCRIPT_DIR/.env"
 BASHRC_FILE="$HOME/.bashrc"

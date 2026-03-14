@@ -214,3 +214,25 @@ protocols:
         - state: move_away
           value: true
     runner: GenericProtocol
+  evening_sensor_rule_demo:
+    action:
+      steps:
+      - tree_name: play_text
+        tree_params:
+          text: Demo evening trigger rule matched.
+    high_level:
+      priority: 50
+      reset_pattern:
+        type: eod
+      triggers:
+        any:
+        - event:
+            state: sensor1
+            value: true
+        - event:
+            state: sensor2
+            value: true
+        time:
+          from: '19:00'
+          to: '19:00'
+    runner: GenericProtocol
