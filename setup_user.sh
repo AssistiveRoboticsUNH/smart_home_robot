@@ -74,6 +74,7 @@ DB_DIR="$USER_DIR/database"
 MAP_DIR="$USER_DIR/map"
 HOUSE_CONFIG="$CONFIG_DIR/house_config.yaml"
 USER_ALREADY_EXISTS=0
+UPDATE_BASHRC=1
 
 if [[ -d "$USER_DIR" ]]; then
   USER_ALREADY_EXISTS=1
@@ -91,23 +92,29 @@ mkdir -p \
 if [[ "$USER_ALREADY_EXISTS" -eq 1 ]]; then
   echo "User already exists: $USER_DIR"
   echo "Choose an option:"
-  echo "  1. Reset house_config with example config file"
-  echo "  2. Do Nothing"
+  echo "  1. Update env variable only"
+  echo "  2. Reset house_config with example config file"
+  echo "  3. Do Nothing"
 
   while true; do
-    read -r -p "Enter choice [1-2]: " EXISTING_USER_CHOICE
+    read -r -p "Enter choice [1-3]: " EXISTING_USER_CHOICE
     case "$EXISTING_USER_CHOICE" in
       1)
+        echo "Keeping existing user files unchanged. SHR_USER_DIR will be updated in ~/.bashrc."
+        break
+        ;;
+      2)
         cp "$SAMPLE_CONFIG" "$HOUSE_CONFIG"
         echo "Reset config: $HOUSE_CONFIG"
         break
         ;;
-      2)
+      3)
         echo "Leaving existing user data unchanged."
+        UPDATE_BASHRC=0
         break
         ;;
       *)
-        echo "Invalid choice. Enter 1 or 2."
+        echo "Invalid choice. Enter 1, 2, or 3."
         ;;
     esac
   done
@@ -133,10 +140,14 @@ echo
 EXPORT_LINE="export SHR_USER_DIR=\"$USER_DIR\""
 SOURCE_LINE="source $ENV_FILE"
 
-ensure_shr_user_dir_line "$BASHRC_FILE" "$EXPORT_LINE"
-append_line_if_missing "$BASHRC_FILE" "$SOURCE_LINE"
+if [[ "$UPDATE_BASHRC" -eq 1 ]]; then
+  ensure_shr_user_dir_line "$BASHRC_FILE" "$EXPORT_LINE"
+  append_line_if_missing "$BASHRC_FILE" "$SOURCE_LINE"
 
-echo
-echo "Bash setup updated in: $BASHRC_FILE"
-echo "To load the new environment now, run:"
-echo "source ~/.bashrc"
+  echo
+  echo "Bash setup updated in: $BASHRC_FILE"
+  echo "To load the new environment now, run:"
+  echo "source ~/.bashrc"
+else
+  echo "Skipped ~/.bashrc updates."
+fi
