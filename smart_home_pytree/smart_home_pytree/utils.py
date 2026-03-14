@@ -241,12 +241,12 @@ def list_user_files(subdir: str, suffixes: tuple[str, ...] | None = None) -> lis
     if not root.is_dir():
         return []
     entries = []
-    for item in sorted(root.iterdir()):
+    for item in sorted(root.rglob("*")):
         if not item.is_file():
             continue
         if suffixes and item.suffix.lower() not in suffixes:
             continue
-        entries.append(item.name)
+        entries.append(item.relative_to(root).as_posix())
     return entries
 
 
