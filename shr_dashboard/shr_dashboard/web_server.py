@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import threading
 import json
+import logging
 import os
 import time as _time
 from datetime import datetime
@@ -34,6 +35,9 @@ from .config_service import (
     resolve_house_yaml_path,
     validate_config_payload,
 )
+
+
+LOGGER = logging.getLogger("shr_dashboard")
 
 
 def _resolve_static_dir() -> Path:
@@ -232,12 +236,12 @@ def create_app() -> Flask:
         """Return protocol log entries with optional filters.
 
         Query params:
-          date      – YYYY-MM-DD (single-day mode; default: today)
-          date_from – YYYY-MM-DD (range mode; requires date_to)
-          date_to   – YYYY-MM-DD (range mode; requires date_from)
-          all       – true/1/yes to return all dates
-          status    – completed | failed | preempted | yielded (optional)
-          protocol  – substring match on protocol name (optional)
+          date      - YYYY-MM-DD (single-day mode; default: today)
+          date_from - YYYY-MM-DD (range mode; requires date_to)
+          date_to   - YYYY-MM-DD (range mode; requires date_from)
+          all       - true/1/yes to return all dates
+          status    - completed | failed | preempted | yielded (optional)
+          protocol  - substring match on protocol name (optional)
         """
         tracker = _get_tracker()
         status_filter = request.args.get("status", "").strip().lower()
@@ -330,7 +334,7 @@ def create_app() -> Flask:
         """Return lightweight counts of today's protocol runs by status.
 
         Query params:
-          date – YYYY-MM-DD (default: today)
+          date - YYYY-MM-DD (default: today)
         """
         today = datetime.now().strftime("%Y-%m-%d")
         date_str = request.args.get("date", today).strip() or today
@@ -355,9 +359,9 @@ def create_app() -> Flask:
         """Update a single protocol's state from the dashboard.
 
         Body JSON fields (all optional — only provided fields are applied):
-          state        – idle | cooldown | waiting
-          eligible_at  – ISO datetime string or null to clear
-          resume_at    – ISO datetime string or null to clear
+          state        - idle | cooldown | waiting
+          eligible_at  - ISO datetime string or null to clear
+          resume_at    - ISO datetime string or null to clear
         """
         body = request.get_json(force=True, silent=True) or {}
         allowed_states = {"idle", "cooldown", "waiting"}
@@ -400,11 +404,11 @@ def create_app() -> Flask:
         """SSE stream that pushes new data when protocol_state or protocol_log changes.
 
         The client receives:
-          event: state   – when protocol_state.updated_at changes
-          event: log     – when a new protocol_log row appears for the requested date
+          event: state   - when protocol_state.updated_at changes
+          event: log     - when a new protocol_log row appears for the requested date
 
         Query params:
-          date – YYYY-MM-DD (default: today) – which day's log to watch
+          date - YYYY-MM-DD (default: today) - which day's log to watch
         """
         date_str = request.args.get("date", datetime.now().strftime("%Y-%m-%d"))
 
@@ -463,13 +467,41 @@ def main(args=None):
     parser.add_argument("--host", default=os.getenv("SHR_DASHBOARD_HOST", "0.0.0.0"))
     parser.add_argument("--port", type=int, default=int(os.getenv("SHR_DASHBOARD_PORT", "5080")))
     parser.add_argument("--debug", action="store_true")
-    parsed = parser.parse_args(args=args)
+    parsed, unknown = parser.parse_known_args(args=args)
 
-    app = create_app()
+    logging.basicConfig(
+        level=logging.INFO,
+        format="[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s",
+    )
+
+    LOGGER.info(
+        "Starting dashboard_server on http://%s:%s (debug=%s)",
+        parsed.host,
+        parsed.port,
+        parsed.debug,
+    )
+    if unknown:
+        LOGGER.info("Ignoring extra launch arguments: %s", " ".join(unknown))
+
+    app = None
     try:
+        app = create_app()
+        if getattr(app, "_robot_state_error", None):
+            LOGGER.error("Dashboard robot-state client failed to start: %s", app._robot_state_error)
+        else:
+            LOGGER.info("Dashboard robot-state client attached successfully.")
+
+        LOGGER.info("Dashboard server ready. Listening on http://%s:%s", parsed.host, parsed.port)
         app.run(host=parsed.host, port=parsed.port, debug=parsed.debug, use_reloader=False)
+    except KeyboardInterrupt:
+        LOGGER.info("Dashboard server interrupted. Shutting down.")
+        raise
+    except Exception:
+        LOGGER.exception("Dashboard server failed to start or crashed.")
+        raise
     finally:
-        _stop_robot_state_client(app)
+        if app is not None:
+            _stop_robot_state_client(app)
 
 
 if __name__ == "__main__":
