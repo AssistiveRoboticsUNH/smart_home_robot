@@ -53,6 +53,7 @@ class ProtocolTracker:
         # WAL mode for concurrent reads/writes and crash safety
         self._conn.execute("PRAGMA journal_mode=WAL")
         self._conn.execute("PRAGMA synchronous=NORMAL")
+        self._conn.execute("PRAGMA foreign_keys=ON")
 
     def _migrate(self):
         """Create tables if they don't exist."""
@@ -95,6 +96,22 @@ class ProtocolTracker:
                     key   TEXT PRIMARY KEY,
                     value TEXT NOT NULL
                 );
+
+                CREATE TABLE IF NOT EXISTS protocol_completion_event (
+                    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+                    source_protocol       TEXT NOT NULL,
+                    source_run_session_id TEXT NOT NULL,
+                    status                TEXT NOT NULL,
+                    completed_at          TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS protocol_completion_consumption (
+                    event_id         INTEGER NOT NULL,
+                    target_protocol  TEXT NOT NULL,
+                    consumed_at      TEXT NOT NULL,
+                    PRIMARY KEY (event_id, target_protocol),
+                    FOREIGN KEY (event_id) REFERENCES protocol_completion_event(id) ON DELETE CASCADE
+                );
                 """
             )
             self._conn.commit()
@@ -105,6 +122,18 @@ class ProtocolTracker:
             self._add_column_if_missing("protocol_state", "run_session_id", "TEXT DEFAULT NULL")
             self._conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_log_session ON protocol_log (run_session_id)"
+            )
+            self._conn.execute(
+                """
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_completion_event_unique
+                ON protocol_completion_event (source_protocol, source_run_session_id, status)
+                """
+            )
+            self._conn.execute(
+                """
+                CREATE INDEX IF NOT EXISTS idx_completion_event_lookup
+                ON protocol_completion_event (source_protocol, status, completed_at)
+                """
             )
             self._conn.commit()
 
@@ -343,6 +372,95 @@ class ProtocolTracker:
 
         header = f"Protocol summary for {date_str or 'today'} ({len(entries)} runs):"
         return header + "\n" + "\n".join(lines)
+
+    # ------------------------------------------------------------------
+    # protocol_completion_event  – time-bounded follow-up trigger source
+    # ------------------------------------------------------------------
+
+    def record_protocol_completion_event(
+        self,
+        *,
+        source_protocol: str,
+        source_run_session_id: str,
+        status: str,
+        completed_at: datetime | str,
+    ) -> int:
+        """Create or reuse a protocol completion event row for a source run."""
+        completed_at_iso = (
+            completed_at.isoformat() if isinstance(completed_at, datetime) else str(completed_at)
+        )
+        with self._lock:
+            self._conn.execute(
+                """
+                INSERT OR IGNORE INTO protocol_completion_event
+                    (source_protocol, source_run_session_id, status, completed_at)
+                VALUES (?, ?, ?, ?)
+                """,
+                (source_protocol, source_run_session_id, status, completed_at_iso),
+            )
+            row = self._conn.execute(
+                """
+                SELECT id FROM protocol_completion_event
+                WHERE source_protocol = ? AND source_run_session_id = ? AND status = ?
+                """,
+                (source_protocol, source_run_session_id, status),
+            ).fetchone()
+            self._conn.commit()
+            return int(row["id"])
+
+    def get_unconsumed_protocol_completion_events(
+        self,
+        *,
+        target_protocol: str,
+        since: datetime | str | None = None,
+    ) -> list[dict]:
+        """Return completion events not yet consumed by *target_protocol*."""
+        since_iso = (
+            since.isoformat()
+            if isinstance(since, datetime)
+            else str(since)
+            if since is not None
+            else None
+        )
+        sql = """
+            SELECT e.*
+            FROM protocol_completion_event e
+            LEFT JOIN protocol_completion_consumption c
+              ON c.event_id = e.id AND c.target_protocol = ?
+            WHERE c.event_id IS NULL
+        """
+        params: list[Any] = [target_protocol]
+        if since_iso is not None:
+            sql += " AND e.completed_at >= ?"
+            params.append(since_iso)
+        sql += " ORDER BY e.completed_at ASC, e.id ASC"
+
+        with self._lock:
+            rows = self._conn.execute(sql, params).fetchall()
+            return [dict(r) for r in rows]
+
+    def consume_protocol_completion_events(
+        self,
+        *,
+        target_protocol: str,
+        event_ids: list[int],
+    ) -> None:
+        """Mark completion events as consumed for one target protocol."""
+        ids = [int(event_id) for event_id in event_ids if event_id is not None]
+        if not ids:
+            return
+
+        now_iso = datetime.now().isoformat()
+        with self._lock:
+            self._conn.executemany(
+                """
+                INSERT OR IGNORE INTO protocol_completion_consumption
+                    (event_id, target_protocol, consumed_at)
+                VALUES (?, ?, ?)
+                """,
+                [(event_id, target_protocol, now_iso) for event_id in ids],
+            )
+            self._conn.commit()
 
     # ------------------------------------------------------------------
     # protocol_state  – live per-protocol state

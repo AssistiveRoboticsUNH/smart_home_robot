@@ -14,10 +14,12 @@ from smart_home_pytree.triggers.evaluator import (
     check_location_requirement,
     check_time_requirement,
     evaluate_trigger_block,
+    evaluate_trigger_block_detailed,
     collect_current_events,
     event_condition_match,
     event_xy_within_point_match,
     extract_event_keys,
+    extract_max_protocol_completion_within_seconds,
     normalize_success_on,
 )
 from smart_home_pytree.triggers.persistence import TriggerMonitorPersistence
@@ -62,6 +64,8 @@ class TriggerMonitor:
 
         self.pending_waits = {}
         self.monitor_state_success = {}
+        self.previous_events = {}
+        self.pending_completion_event_ids_by_protocol = {}
         self.satisfied_changed_event = wake_event or threading.Event()
 
         self.tracker = ProtocolTracker()
@@ -78,6 +82,8 @@ class TriggerMonitor:
             self.bb_logger.debug(
                 f"[TriggerMonitor] Time Simulation Active. Starts at {test_time} (Offset: {self.time_offset})"
             )
+        self.max_protocol_completion_within_seconds = self._extract_max_protocol_completion_within_seconds()
+        self.previous_events = self._collect_current_events()
 
     def reload_config(self, yaml_path: str | None = None):
         """Reload trigger YAML and derived trigger metadata."""
@@ -89,8 +95,11 @@ class TriggerMonitor:
             self.protocols_to_reset.clear()
             self.pending_waits.clear()
             self.monitor_state_success.clear()
+            self.pending_completion_event_ids_by_protocol.clear()
         self._restore_state_from_db()
         self.event_keys = self._extract_event_keys()
+        self.max_protocol_completion_within_seconds = self._extract_max_protocol_completion_within_seconds()
+        self.previous_events = self._collect_current_events()
         self.bb_logger.info(
             f"[TriggerMonitor] Reloaded house yaml. Event keys: {self.event_keys}"
         )
@@ -230,6 +239,20 @@ class TriggerMonitor:
     def _extract_event_keys(self):
         return extract_event_keys(self.protocols_yaml)
 
+    def _extract_max_protocol_completion_within_seconds(self):
+        return extract_max_protocol_completion_within_seconds(self.protocols_yaml)
+
+    def _trigger_block_has_protocol_completion(self, trigger_block) -> bool:
+        if not isinstance(trigger_block, dict):
+            return False
+        if "protocol_completion" in trigger_block:
+            return True
+        return any(
+            self._trigger_block_has_protocol_completion(child)
+            for key in ("all", "any")
+            for child in (trigger_block.get(key) or [])
+        )
+
     def _collect_current_events(self):
         return collect_current_events(self.robot_interface, self.event_keys, self.bb_logger)
 
@@ -249,9 +272,29 @@ class TriggerMonitor:
         return evaluate_trigger_block(
             trigger_block,
             current_events=current_events,
+            previous_events=self.previous_events,
             current_time_str=self.get_current_time_string(),
             current_day=current_day,
             robot_interface=self.robot_interface,
+            bb_logger=self.bb_logger,
+        )
+
+    def evaluate_trigger_block_detailed(
+        self,
+        trigger_block,
+        current_events,
+        *,
+        current_day=None,
+        protocol_completion_events=None,
+    ):
+        return evaluate_trigger_block_detailed(
+            trigger_block,
+            current_events=current_events,
+            previous_events=self.previous_events,
+            current_time_str=self.get_current_time_string(),
+            current_day=current_day,
+            robot_interface=self.robot_interface,
+            protocol_completion_events=protocol_completion_events,
             bb_logger=self.bb_logger,
         )
 
@@ -263,11 +306,13 @@ class TriggerMonitor:
 
     def recompute_satisfied(self):
         current_events = self._collect_current_events()
-        new_satisfied = self.satisfied_protocols(current_events)
+        new_satisfied, pending_completion_matches = self.satisfied_protocols(current_events)
 
         with self.lock:
             changed = new_satisfied != self.current_satisfied_protocols
             self.current_satisfied_protocols = new_satisfied
+            self.pending_completion_event_ids_by_protocol = pending_completion_matches
+            self.previous_events = current_events
 
         if changed or new_satisfied:
             if changed:
@@ -277,6 +322,12 @@ class TriggerMonitor:
 
     def satisfied_protocols(self, current_events, current_day=None):
         satisfied = []
+        pending_completion_matches = {}
+        completion_events_since = None
+        if self.max_protocol_completion_within_seconds > 0:
+            completion_events_since = datetime.now() - timedelta(
+                seconds=self.max_protocol_completion_within_seconds
+            )
         for protocol_name, protocol_data in self.protocols_yaml["protocols"].items():
             high_level_subdata = protocol_data["high_level"]
             runner = protocol_data.get("runner", "GenericProtocol")
@@ -291,15 +342,31 @@ class TriggerMonitor:
 
             if not resumed:
                 triggers = high_level_subdata.get("triggers", {})
-                if self.evaluate_trigger_block(triggers, current_events, current_day):
+                protocol_completion_events = []
+                if self._trigger_block_has_protocol_completion(triggers):
+                    protocol_completion_events = self.tracker.get_unconsumed_protocol_completion_events(
+                        target_protocol=full_name,
+                        since=completion_events_since,
+                    )
+                trigger_result = self.evaluate_trigger_block_detailed(
+                    triggers,
+                    current_events,
+                    current_day=current_day,
+                    protocol_completion_events=protocol_completion_events,
+                )
+                if trigger_result["matched"]:
                     priority = high_level_subdata.get("priority", 1)
                     satisfied.append((full_name, priority))
+                    if trigger_result["protocol_completion_event_ids"]:
+                        pending_completion_matches[full_name] = trigger_result[
+                            "protocol_completion_event_ids"
+                        ]
             else:
                 priority = high_level_subdata.get("priority", 1)
                 satisfied.append((full_name, priority))
 
         satisfied.sort(key=lambda x: x[1])
-        return satisfied
+        return satisfied, pending_completion_matches
 
     def start_monitor(self):
         last_day = datetime.now().strftime("%Y-%m-%d")
@@ -331,9 +398,16 @@ class TriggerMonitor:
     def parse_reset_pattern(self, reset_pattern):
         return parse_reset_pattern(reset_pattern, self.bb_logger)
 
-    def mark_completed(self, full_name):
+    def mark_terminal_outcome(
+        self,
+        full_name,
+        *,
+        status: str,
+        run_session_id: str | None,
+        completed_at: datetime | None = None,
+    ):
         with self.lock:
-            self.bb_logger.debug(f"[TriggerMonitor] Marking {full_name} as completed.")
+            self.bb_logger.debug(f"[TriggerMonitor] Marking {full_name} as terminal status={status}.")
             try:
                 main, sub = full_name.split(".", 1)
             except ValueError:
@@ -353,6 +427,19 @@ class TriggerMonitor:
                 self.bb_logger.error(f"[ERROR] Protocol not found in YAML: {full_name}")
                 return
 
+            now = completed_at or datetime.now()
+            if run_session_id:
+                self.tracker.record_protocol_completion_event(
+                    source_protocol=full_name,
+                    source_run_session_id=run_session_id,
+                    status=status,
+                    completed_at=now,
+                )
+
+            if status != "completed":
+                self.recompute_satisfied()
+                return
+
             pattern_type = reset_pattern.get("type", "eod") if reset_pattern else "eod"
             if pattern_type == "default":
                 pattern_type = "eod"
@@ -366,14 +453,13 @@ class TriggerMonitor:
                     full_name,
                     state="idle",
                     reset_type="instant",
-                    last_completed=datetime.now(),
-                    last_status="completed",
+                    last_completed=now,
+                    last_status=status,
                     eligible_at=None,
                 )
                 return
 
             self.completed_protocols.add(full_name)
-            now = datetime.now()
 
             if pattern_type == "periodic":
                 reset_seconds = self.parse_reset_pattern(reset_pattern)
@@ -387,7 +473,7 @@ class TriggerMonitor:
                         reset_type="periodic",
                         eligible_at=eligible_at,
                         last_completed=now,
-                        last_status="completed",
+                        last_status=status,
                     )
                     self.bb_logger.debug(
                         f"[TriggerMonitor] Type PERIODIC: Scheduled reset for {full_name} in {reset_seconds}s"
@@ -406,13 +492,31 @@ class TriggerMonitor:
                     reset_type="eod",
                     eligible_at=tomorrow,
                     last_completed=now,
-                    last_status="completed",
+                    last_status=status,
                 )
                 self.bb_logger.debug(
                     f"[TriggerMonitor] Type EOD: {full_name} marked complete (until daily reset)."
                 )
 
             self.recompute_satisfied()
+
+    def mark_completed(self, full_name):
+        self.mark_terminal_outcome(
+            full_name,
+            status="completed",
+            run_session_id=None,
+        )
+
+    def consume_pending_protocol_completion_events(self, full_name: str):
+        with self.lock:
+            event_ids = list(self.pending_completion_event_ids_by_protocol.pop(full_name, []))
+        if not event_ids:
+            return
+        self.tracker.consume_protocol_completion_events(
+            target_protocol=full_name,
+            event_ids=event_ids,
+        )
+        self.recompute_satisfied()
 
     def check_and_reset_protocols(self):
         now = datetime.now()

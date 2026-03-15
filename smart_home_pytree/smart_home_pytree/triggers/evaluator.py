@@ -25,6 +25,16 @@ def extract_event_keys(protocols_yaml: dict) -> list[str]:
     return sorted(event_keys)
 
 
+def extract_max_protocol_completion_within_seconds(protocols_yaml: dict) -> int:
+    max_within = 0
+    for protocol_data in protocols_yaml.get("protocols", {}).values():
+        high_level_subdata = protocol_data.get("high_level", {})
+        triggers = high_level_subdata.get("triggers", {})
+        _collect_protocol_completion_within_seconds(triggers, max_within_ref := {"value": max_within})
+        max_within = max_within_ref["value"]
+    return max_within
+
+
 def _normalize_event_rules(event_reqs):
     if isinstance(event_reqs, dict):
         return [event_reqs]
@@ -42,6 +52,21 @@ def _collect_event_keys_from_trigger_block(trigger_block: dict, event_keys: set[
     for key in ("all", "any"):
         for child in trigger_block.get(key, []) or []:
             _collect_event_keys_from_trigger_block(child, event_keys)
+
+
+def _collect_protocol_completion_within_seconds(trigger_block: dict, ref: dict[str, int]) -> None:
+    if not isinstance(trigger_block, dict):
+        return
+
+    protocol_completion = trigger_block.get("protocol_completion")
+    if isinstance(protocol_completion, dict):
+        within_seconds = protocol_completion.get("within_seconds")
+        if isinstance(within_seconds, (int, float)) and not isinstance(within_seconds, bool):
+            ref["value"] = max(ref["value"], int(within_seconds))
+
+    for key in ("all", "any"):
+        for child in trigger_block.get(key, []) or []:
+            _collect_protocol_completion_within_seconds(child, ref)
 
 
 def collect_current_events(robot_interface, event_keys: list[str], bb_logger) -> dict[str, Any]:
@@ -145,7 +170,17 @@ def event_condition_match(current_value, expected_value, op: str) -> bool:
     return False
 
 
-def check_event_requirement(event_reqs, current_events, bb_logger=None) -> bool:
+def event_edge_match(previous_value, current_value, edge: str) -> bool:
+    if not isinstance(previous_value, bool) or not isinstance(current_value, bool):
+        return False
+    if edge == "rising":
+        return previous_value is False and current_value is True
+    if edge == "falling":
+        return previous_value is True and current_value is False
+    return False
+
+
+def check_event_requirement(event_reqs, current_events, previous_events=None, bb_logger=None) -> bool:
     if not event_reqs:
         return True
 
@@ -159,6 +194,15 @@ def check_event_requirement(event_reqs, current_events, bb_logger=None) -> bool:
             continue
 
         expected = event_rule["value"]
+        edge = event_rule.get("edge")
+        previous_value = (previous_events or {}).get(topic)
+        if edge:
+            if not event_edge_match(previous_value, current_events[topic], edge):
+                return False
+            if current_events[topic] != expected:
+                return False
+            continue
+
         op = event_rule.get("op", "=")
         if not event_condition_match(current_events[topic], expected, op):
             return False
@@ -166,62 +210,156 @@ def check_event_requirement(event_reqs, current_events, bb_logger=None) -> bool:
     return True
 
 
+def match_protocol_completion_requirement(
+    requirement: dict[str, Any],
+    completion_events: list[dict] | None,
+    *,
+    now: datetime | None = None,
+) -> tuple[bool, list[int]]:
+    if not requirement:
+        return True, []
+
+    now_dt = now or datetime.now()
+    source_protocol = requirement.get("protocol")
+    statuses = set(requirement.get("statuses") or [])
+    after_seconds = int(requirement.get("after_seconds") or 0)
+    within_seconds = int(requirement.get("within_seconds") or 0)
+
+    if not source_protocol or within_seconds <= 0:
+        return False, []
+
+    for event in completion_events or []:
+        if event.get("source_protocol") != source_protocol:
+            continue
+        if statuses and event.get("status") not in statuses:
+            continue
+
+        try:
+            completed_at = datetime.fromisoformat(str(event["completed_at"]))
+        except Exception:
+            continue
+
+        age_seconds = (now_dt - completed_at).total_seconds()
+        if age_seconds < after_seconds:
+            continue
+        if age_seconds > within_seconds:
+            continue
+
+        return True, [int(event["id"])]
+
+    return False, []
+
+
+def evaluate_trigger_block_detailed(
+    trigger_block,
+    *,
+    current_events,
+    previous_events=None,
+    current_time_str: str,
+    current_day,
+    robot_interface,
+    protocol_completion_events: list[dict] | None = None,
+    now: datetime | None = None,
+    bb_logger=None,
+) -> dict[str, Any]:
+    if not trigger_block:
+        return {"matched": True, "protocol_completion_event_ids": []}
+    if not isinstance(trigger_block, dict):
+        return {"matched": False, "protocol_completion_event_ids": []}
+
+    matched_event_ids: list[int] = []
+
+    if "event" in trigger_block:
+        if not check_event_requirement(
+            trigger_block["event"],
+            current_events,
+            previous_events=previous_events,
+            bb_logger=bb_logger,
+        ):
+            return {"matched": False, "protocol_completion_event_ids": []}
+    if "time" in trigger_block:
+        time_req = trigger_block["time"]
+        day_req = time_req.get("day", []) if isinstance(time_req, dict) else []
+        if not (
+            check_day_requirement(day_req, current_day)
+            and check_time_requirement(time_req, current_time_str)
+        ):
+            return {"matched": False, "protocol_completion_event_ids": []}
+    if "permissible_locations" in trigger_block:
+        if not check_location_requirement(
+            robot_interface, trigger_block["permissible_locations"], bb_logger
+        ):
+            return {"matched": False, "protocol_completion_event_ids": []}
+    if "protocol_completion" in trigger_block:
+        matched, event_ids = match_protocol_completion_requirement(
+            trigger_block["protocol_completion"],
+            protocol_completion_events,
+            now=now,
+        )
+        if not matched:
+            return {"matched": False, "protocol_completion_event_ids": []}
+        matched_event_ids.extend(event_ids)
+    if "all" in trigger_block:
+        for child in (trigger_block.get("all") or []):
+            child_result = evaluate_trigger_block_detailed(
+                child,
+                current_events=current_events,
+                previous_events=previous_events,
+                current_time_str=current_time_str,
+                current_day=current_day,
+                robot_interface=robot_interface,
+                protocol_completion_events=protocol_completion_events,
+                now=now,
+                bb_logger=bb_logger,
+            )
+            if not child_result["matched"]:
+                return {"matched": False, "protocol_completion_event_ids": []}
+            matched_event_ids.extend(child_result["protocol_completion_event_ids"])
+    if "any" in trigger_block:
+        any_result = None
+        for child in (trigger_block.get("any") or []):
+            child_result = evaluate_trigger_block_detailed(
+                child,
+                current_events=current_events,
+                previous_events=previous_events,
+                current_time_str=current_time_str,
+                current_day=current_day,
+                robot_interface=robot_interface,
+                protocol_completion_events=protocol_completion_events,
+                now=now,
+                bb_logger=bb_logger,
+            )
+            if child_result["matched"]:
+                any_result = child_result
+                break
+        if not any_result:
+            return {"matched": False, "protocol_completion_event_ids": []}
+        matched_event_ids.extend(any_result["protocol_completion_event_ids"])
+
+    return {"matched": True, "protocol_completion_event_ids": matched_event_ids}
+
+
 def evaluate_trigger_block(
     trigger_block,
     *,
     current_events,
+    previous_events=None,
     current_time_str: str,
     current_day,
     robot_interface,
+    protocol_completion_events: list[dict] | None = None,
+    now: datetime | None = None,
     bb_logger=None,
 ) -> bool:
-    if not trigger_block:
-        return True
-    if not isinstance(trigger_block, dict):
-        return False
-
-    results = []
-
-    if "event" in trigger_block:
-        results.append(check_event_requirement(trigger_block["event"], current_events, bb_logger))
-    if "time" in trigger_block:
-        time_req = trigger_block["time"]
-        day_req = time_req.get("day", []) if isinstance(time_req, dict) else []
-        results.append(
-            check_day_requirement(day_req, current_day)
-            and check_time_requirement(time_req, current_time_str)
-        )
-    if "permissible_locations" in trigger_block:
-        results.append(
-            check_location_requirement(robot_interface, trigger_block["permissible_locations"], bb_logger)
-        )
-    if "all" in trigger_block:
-        results.append(
-            all(
-                evaluate_trigger_block(
-                    child,
-                    current_events=current_events,
-                    current_time_str=current_time_str,
-                    current_day=current_day,
-                    robot_interface=robot_interface,
-                    bb_logger=bb_logger,
-                )
-                for child in (trigger_block.get("all") or [])
-            )
-        )
-    if "any" in trigger_block:
-        results.append(
-            any(
-                evaluate_trigger_block(
-                    child,
-                    current_events=current_events,
-                    current_time_str=current_time_str,
-                    current_day=current_day,
-                    robot_interface=robot_interface,
-                    bb_logger=bb_logger,
-                )
-                for child in (trigger_block.get("any") or [])
-            )
-        )
-
-    return all(results) if results else True
+    result = evaluate_trigger_block_detailed(
+        trigger_block,
+        current_events=current_events,
+        previous_events=previous_events,
+        current_time_str=current_time_str,
+        current_day=current_day,
+        robot_interface=robot_interface,
+        protocol_completion_events=protocol_completion_events,
+        now=now,
+        bb_logger=bb_logger,
+    )
+    return bool(result["matched"])

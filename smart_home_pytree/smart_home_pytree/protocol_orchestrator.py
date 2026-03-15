@@ -339,7 +339,6 @@ class ProtocolOrchestrator:
                 self.bb_logger.info(
                     f"{class_protocol_name} is marked completed" 
                 )
-                self.trigger_monitor.mark_completed(class_protocol_name)
                 # Log the successful run
                 tracker.log_protocol_run(
                     protocol=class_protocol_name,
@@ -347,6 +346,12 @@ class ProtocolOrchestrator:
                     end_time=end_time,
                     status="completed",
                     run_session_id=run_session_id,
+                )
+                self.trigger_monitor.mark_terminal_outcome(
+                    class_protocol_name,
+                    status="completed",
+                    run_session_id=run_session_id,
+                    completed_at=end_time,
                 )
                 tracker.upsert_state(class_protocol_name, run_session_id=None)
             elif (
@@ -385,6 +390,12 @@ class ProtocolOrchestrator:
                     started_at=None,
                     last_status=status,
                     run_session_id=None,
+                )
+                self.trigger_monitor.mark_terminal_outcome(
+                    class_protocol_name,
+                    status=status,
+                    run_session_id=run_session_id,
+                    completed_at=end_time,
                 )
 
             with self.lock:
@@ -499,6 +510,7 @@ class ProtocolOrchestrator:
             last_status=None,
             run_session_id=run_session_id,
         )
+        self.trigger_monitor.consume_pending_protocol_completion_events(class_protocol_name)
 
     def stop_protocol(self):
         """Stop the currently running protocol."""
@@ -534,6 +546,12 @@ class ProtocolOrchestrator:
                 started_at=None,
                 last_status="preempted",
                 run_session_id=None,
+            )
+            self.trigger_monitor.mark_terminal_outcome(
+                full_name,
+                status="preempted",
+                run_session_id=run_session_id,
+                completed_at=datetime.now(),
             )
 
         with self.lock:

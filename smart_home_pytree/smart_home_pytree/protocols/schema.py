@@ -32,7 +32,7 @@ ALLOWED_RUNNERS = {
 ALLOWED_PROTOCOL_KEYS_GENERIC = {"runner", "action", "high_level"}
 ALLOWED_PROTOCOL_KEYS_SPECIAL = {"runner", "low_level", "high_level"}
 ALLOWED_HIGH_LEVEL_KEYS = {"priority", "triggers", "reset_pattern", "success_on"}
-ALLOWED_TRIGGER_KEYS = {"time", "event", "permissible_locations", "all", "any"}
+ALLOWED_TRIGGER_KEYS = {"time", "event", "permissible_locations", "protocol_completion", "all", "any"}
 ALLOWED_ACTION_BLOCK_KEYS = {"steps"}
 
 ALLOWED_TREE_STEP_KEYS = {"tree_name", "tree_params", "next_step_after"}
@@ -49,6 +49,8 @@ ALLOWED_DAY_NAMES = {
     "sunday",
 }
 ALLOWED_EVENT_OPERATORS = {"=", "!=", ">", ">=", "<", "<="}
+ALLOWED_EVENT_EDGES = {"rising", "falling"}
+ALLOWED_PROTOCOL_COMPLETION_STATUSES = {"completed", "failed", "preempted"}
 
 # Central metadata for executable step `tree_name`.
 # Used for schema validation and as developer-facing documentation of supported
@@ -149,7 +151,7 @@ def validate_house_config(data: dict) -> None:
         raise ValueError("protocols must be a non-empty mapping")
 
     for protocol_name, protocol_data in protocols.items():
-        _validate_protocol(protocol_name, protocol_data, locations)
+        _validate_protocol(protocol_name, protocol_data, locations, protocols)
 
 
 def _validate_locations(locations: Any) -> None:
@@ -177,7 +179,7 @@ def _validate_person_init(value: Any, path: str, locations: dict) -> None:
         )
 
 
-def _validate_protocol(protocol_name: str, protocol_data: Any, locations: dict) -> None:
+def _validate_protocol(protocol_name: str, protocol_data: Any, locations: dict, protocols: dict) -> None:
     _ensure_non_empty_string(protocol_name, "protocol name")
     _ensure_type(protocol_data, dict, f"protocols.{protocol_name}")
 
@@ -203,7 +205,7 @@ def _validate_protocol(protocol_name: str, protocol_data: Any, locations: dict) 
                 protocol_data.get("low_level"), dict, f"protocols.{protocol_name}.low_level"
             )
 
-    _validate_high_level(protocol_name, protocol_data.get("high_level"), locations)
+    _validate_high_level(protocol_name, protocol_data.get("high_level"), locations, protocols)
 
 
 def _validate_generic_action(protocol_name: str, action: Any, locations: dict) -> None:
@@ -294,7 +296,7 @@ def _validate_confirmation_step(confirmation: Any, path: str, locations: dict) -
             )
 
 
-def _validate_high_level(protocol_name: str, high_level: Any, locations: dict) -> None:
+def _validate_high_level(protocol_name: str, high_level: Any, locations: dict, protocols: dict) -> None:
     path = f"protocols.{protocol_name}.high_level"
     _ensure_type(high_level, dict, path)
     _reject_unknown_keys(high_level, ALLOWED_HIGH_LEVEL_KEYS, path)
@@ -307,7 +309,7 @@ def _validate_high_level(protocol_name: str, high_level: Any, locations: dict) -
             raise ValueError(f"{path}.priority must be >= 0")
 
     triggers = high_level.get("triggers", {})
-    _validate_triggers(protocol_name, triggers, locations)
+    _validate_triggers(protocol_name, triggers, locations, protocols)
 
     if "reset_pattern" in high_level:
         _validate_reset_pattern(high_level["reset_pattern"], f"{path}.reset_pattern")
@@ -316,13 +318,13 @@ def _validate_high_level(protocol_name: str, high_level: Any, locations: dict) -
         _validate_success_on(high_level["success_on"], f"{path}.success_on")
 
 
-def _validate_triggers(protocol_name: str, triggers: Any, locations: dict) -> None:
+def _validate_triggers(protocol_name: str, triggers: Any, locations: dict, protocols: dict) -> None:
     path = f"protocols.{protocol_name}.high_level.triggers"
     _ensure_type(triggers, dict, path)
-    _validate_trigger_block(triggers, path, locations)
+    _validate_trigger_block(triggers, path, locations, protocols)
 
 
-def _validate_trigger_block(trigger_block: Any, path: str, locations: dict) -> None:
+def _validate_trigger_block(trigger_block: Any, path: str, locations: dict, protocols: dict) -> None:
     _ensure_type(trigger_block, dict, path)
     _reject_unknown_keys(trigger_block, ALLOWED_TRIGGER_KEYS, path)
 
@@ -336,18 +338,24 @@ def _validate_trigger_block(trigger_block: Any, path: str, locations: dict) -> N
             locations,
             f"{path}.permissible_locations",
         )
+    if "protocol_completion" in trigger_block:
+        _validate_protocol_completion_requirement(
+            trigger_block["protocol_completion"],
+            f"{path}.protocol_completion",
+            protocols,
+        )
     if "all" in trigger_block:
-        _validate_trigger_group(trigger_block["all"], f"{path}.all", locations)
+        _validate_trigger_group(trigger_block["all"], f"{path}.all", locations, protocols)
     if "any" in trigger_block:
-        _validate_trigger_group(trigger_block["any"], f"{path}.any", locations)
+        _validate_trigger_group(trigger_block["any"], f"{path}.any", locations, protocols)
 
 
-def _validate_trigger_group(group_items: Any, path: str, locations: dict) -> None:
+def _validate_trigger_group(group_items: Any, path: str, locations: dict, protocols: dict) -> None:
     _ensure_type(group_items, list, path)
     if not group_items:
         raise ValueError(f"{path} must be a non-empty list when provided")
     for idx, item in enumerate(group_items, start=1):
-        _validate_trigger_block(item, f"{path}[{idx}]", locations)
+        _validate_trigger_block(item, f"{path}[{idx}]", locations, protocols)
 
 
 def _validate_time_requirement(time_req: Any, path: str) -> None:
@@ -405,7 +413,7 @@ def _validate_event_conditions(event_reqs: Any, path: str, locations: dict) -> N
                     raise ValueError(f"{cpath}.point_xy[{pidx}] must be numeric")
             continue
 
-        _reject_unknown_keys(cond, {"state", "value", "op"}, cpath)
+        _reject_unknown_keys(cond, {"state", "value", "op", "edge"}, cpath)
         if "value" not in cond:
             raise ValueError(f"{cpath}.value is required")
         if "op" in cond:
@@ -421,6 +429,69 @@ def _validate_event_conditions(event_reqs: Any, path: str, locations: dict) -> N
                     raise ValueError(
                         f"{cpath}.value must be numeric when using op '{op}'"
                     )
+        if "edge" in cond:
+            edge = cond.get("edge")
+            _ensure_non_empty_string(edge, f"{cpath}.edge")
+            if edge not in ALLOWED_EVENT_EDGES:
+                raise ValueError(
+                    f"{cpath}.edge='{edge}' is invalid. Allowed: {sorted(ALLOWED_EVENT_EDGES)}"
+                )
+            if "op" in cond and cond.get("op") != "=":
+                raise ValueError(f"{cpath}.op must be '=' when using edge detection")
+            value = cond.get("value")
+            if not isinstance(value, bool):
+                raise ValueError(f"{cpath}.value must be boolean when using edge detection")
+            if edge == "rising" and value is not True:
+                raise ValueError(f"{cpath}.value must be true for edge='rising'")
+            if edge == "falling" and value is not False:
+                raise ValueError(f"{cpath}.value must be false for edge='falling'")
+
+
+def _validate_protocol_completion_requirement(requirement: Any, path: str, protocols: dict) -> None:
+    _ensure_type(requirement, dict, path)
+    _reject_unknown_keys(
+        requirement,
+        {"protocol", "statuses", "after_seconds", "within_seconds"},
+        path,
+    )
+
+    source_protocol = requirement.get("protocol")
+    _ensure_non_empty_string(source_protocol, f"{path}.protocol")
+    if "." not in source_protocol:
+        raise ValueError(f"{path}.protocol must be in the form '<Runner>.<protocol_name>'")
+    runner, protocol_name = source_protocol.split(".", 1)
+    if protocol_name not in protocols:
+        raise ValueError(f"{path}.protocol references unknown protocol '{protocol_name}'")
+    configured_runner = protocols[protocol_name].get("runner", "GenericProtocol")
+    if configured_runner != runner:
+        raise ValueError(
+            f"{path}.protocol='{source_protocol}' runner mismatch. YAML defines '{configured_runner}.{protocol_name}'."
+        )
+
+    statuses = requirement.get("statuses")
+    _ensure_type(statuses, list, f"{path}.statuses")
+    if not statuses:
+        raise ValueError(f"{path}.statuses must be a non-empty list")
+    for idx, status in enumerate(statuses, start=1):
+        _ensure_non_empty_string(status, f"{path}.statuses[{idx}]")
+        if status not in ALLOWED_PROTOCOL_COMPLETION_STATUSES:
+            raise ValueError(
+                f"{path}.statuses[{idx}]='{status}' is invalid. Allowed: {sorted(ALLOWED_PROTOCOL_COMPLETION_STATUSES)}"
+            )
+
+    within_seconds = requirement.get("within_seconds")
+    _ensure_numeric_not_bool(within_seconds, f"{path}.within_seconds")
+    if float(within_seconds) <= 0:
+        raise ValueError(f"{path}.within_seconds must be > 0")
+
+    if "after_seconds" in requirement:
+        after_seconds = requirement.get("after_seconds")
+        _ensure_numeric_not_bool(after_seconds, f"{path}.after_seconds")
+        if float(after_seconds) < 0:
+            raise ValueError(f"{path}.after_seconds must be >= 0")
+        if float(after_seconds) > float(within_seconds):
+            raise ValueError(f"{path}.after_seconds must be <= {path}.within_seconds")
+
 
 
 def _validate_day_requirement(days: Any, path: str) -> None:
