@@ -122,21 +122,15 @@
       const reload = data.reload || {};
       if (reload.state === 'applied') {
         stopReloadPoll();
-        setFlash('success', 'Saved and runtime YAML loaded successfully.');
+        setFlash('success', 'Runtime YAML reloaded.');
         return;
       }
       if (reload.state === 'error') {
         stopReloadPoll();
-        setFlash('error', `Saved, but runtime YAML reload failed: ${reload.error || 'unknown error'}`);
+        setFlash('error', `Runtime YAML reload failed: ${reload.error || 'unknown error'}`);
         return;
       }
       if (reload.state === 'pending') {
-        setFlash(
-          'warn',
-          (data.all_quiescent ?? data.all_idle)
-            ? 'Saved. Runtime reload is in progress.'
-            : 'Saved. Waiting for all protocols to become idle or cooldown before reloading the YAML.'
-        );
         state.reload.pollTimer = window.setTimeout(pollReloadStatus, 1500);
         return;
       }
@@ -202,6 +196,16 @@
     return ['', ...Object.keys(state.config?.locations || {})];
   }
 
+  function protocolTriggerOptions(currentValue = '') {
+    const options = Object.entries(getProtocols()).map(([name, protocol]) => {
+      const runner = protocol?.runner || 'GenericProtocol';
+      return `${runner}.${name}`;
+    }).sort();
+    const current = String(currentValue || '').trim();
+    if (current && !options.includes(current)) options.unshift(current);
+    return options;
+  }
+
   function assetOptions(kind, currentValue = '') {
     const assets = state.metadata?.user_assets || {};
     const configured = kind === 'audio_asset' ? (assets.audio_files || []) : (assets.video_files || []);
@@ -222,10 +226,19 @@
     return { state: '', value: '' };
   }
 
+  function makeDefaultProtocolCompletionTrigger() {
+    return {
+      protocol: '',
+      statuses: ['completed'],
+      within_seconds: 120,
+    };
+  }
+
   function makeDefaultTriggerNode(kind = 'event') {
     if (kind === 'event') return { event: makeDefaultEventTrigger() };
     if (kind === 'time') return { time: { from: '', to: '', day: [] } };
     if (kind === 'permissible_locations') return { permissible_locations: [] };
+    if (kind === 'protocol_completion') return { protocol_completion: makeDefaultProtocolCompletionTrigger() };
     if (kind === 'all') return { all: [] };
     if (kind === 'any') return { any: [] };
     return { event: makeDefaultEventTrigger() };
@@ -242,6 +255,21 @@
   function normalizeEventRule(evt) {
     const next = deepClone(evt || makeDefaultEventTrigger());
     normalizeScalarEvent(next);
+    return next;
+  }
+
+  function normalizeProtocolCompletionRule(rule) {
+    const next = deepClone(rule || makeDefaultProtocolCompletionTrigger());
+    next.protocol = String(next.protocol || '').trim();
+    next.statuses = Array.isArray(next.statuses) ? next.statuses.filter(Boolean) : ['completed'];
+    if (!next.statuses.length) next.statuses = ['completed'];
+    next.within_seconds = Number(next.within_seconds || 120);
+    if (!Number.isFinite(next.within_seconds) || next.within_seconds <= 0) next.within_seconds = 120;
+    if (next.after_seconds === '' || next.after_seconds == null) delete next.after_seconds;
+    else {
+      next.after_seconds = Number(next.after_seconds);
+      if (!Number.isFinite(next.after_seconds) || next.after_seconds < 0) delete next.after_seconds;
+    }
     return next;
   }
 
@@ -347,12 +375,25 @@
         const rules = Array.isArray(node.event) ? node.event : [node.event];
         const normalizedRules = rules.filter(Boolean).map((evt) => normalizeEventRule(evt));
         if (!normalizedRules.length) return { event: makeDefaultEventTrigger() };
-        if (normalizedRules.length === 1) return { event: normalizedRules[0] };
+        if (normalizedRules.length === 1) {
+          const single = { event: normalizedRules[0] };
+          return forceRoot ? { all: [single] } : single;
+        }
         return { all: normalizedRules.map((evt) => ({ event: evt })) };
       }
-      if (only === 'time') return { time: normalizeTimeRule(node.time) };
+      if (only === 'time') {
+        const single = { time: normalizeTimeRule(node.time) };
+        return forceRoot ? { all: [single] } : single;
+      }
+      if (only === 'protocol_completion') {
+        const single = { protocol_completion: normalizeProtocolCompletionRule(node.protocol_completion) };
+        return forceRoot ? { all: [single] } : single;
+      }
       if (only === 'permissible_locations') {
-        return { permissible_locations: Array.isArray(node.permissible_locations) ? [...node.permissible_locations] : [] };
+        const single = {
+          permissible_locations: Array.isArray(node.permissible_locations) ? [...node.permissible_locations] : [],
+        };
+        return forceRoot ? { all: [single] } : single;
       }
     }
 
@@ -363,6 +404,9 @@
       else children.push(eventNode);
     }
     if ('time' in node) children.push({ time: normalizeTimeRule(node.time) });
+    if ('protocol_completion' in node) {
+      children.push({ protocol_completion: normalizeProtocolCompletionRule(node.protocol_completion) });
+    }
     if ('permissible_locations' in node) {
       children.push({ permissible_locations: Array.isArray(node.permissible_locations) ? [...node.permissible_locations] : [] });
     }
@@ -446,6 +490,7 @@
     if (!triggerBlock || typeof triggerBlock !== 'object' || Array.isArray(triggerBlock)) return false;
     if (kind === 'time' && triggerBlock.time) return true;
     if (kind === 'event' && triggerBlock.event) return true;
+    if (kind === 'protocol_completion' && triggerBlock.protocol_completion) return true;
     for (const groupKey of ['all', 'any']) {
       const children = triggerBlock[groupKey];
       if (Array.isArray(children) && children.some((child) => hasTriggerKind(child, kind))) return true;
@@ -454,11 +499,12 @@
   }
 
   function triggerStats(triggerBlock) {
-    const stats = { events: 0, times: 0, locations: 0, groups: 0 };
+    const stats = { events: 0, times: 0, locations: 0, completions: 0, groups: 0 };
     if (!triggerBlock || typeof triggerBlock !== 'object' || Array.isArray(triggerBlock)) return stats;
     if (triggerBlock.event) stats.events += Array.isArray(triggerBlock.event) ? triggerBlock.event.length : 1;
     if (triggerBlock.time) stats.times += 1;
     if (triggerBlock.permissible_locations) stats.locations += 1;
+    if (triggerBlock.protocol_completion) stats.completions += 1;
     for (const groupKey of ['all', 'any']) {
       const children = triggerBlock[groupKey];
       if (Array.isArray(children)) {
@@ -468,6 +514,7 @@
           stats.events += childStats.events;
           stats.times += childStats.times;
           stats.locations += childStats.locations;
+          stats.completions += childStats.completions;
           stats.groups += childStats.groups;
         });
       }
@@ -737,6 +784,7 @@
     const bits = [];
     if (stats.events) bits.push(`event:${stats.events}`);
     if (stats.times) bits.push(`time:${stats.times}`);
+    if (stats.completions) bits.push(`completion:${stats.completions}`);
     if (stats.locations) bits.push(`loc:${stats.locations}`);
     if (stats.groups) bits.push(`groups:${stats.groups}`);
     return bits.join(' · ') || 'No triggers';
@@ -803,6 +851,7 @@
   function triggerRuleLabel(node) {
     if (node?.event) return 'Event';
     if (node?.time) return 'Time';
+    if (node?.protocol_completion) return 'Protocol';
     if (node?.permissible_locations) return 'Location Filter';
     const mode = triggerNodeMode(node);
     if (mode === 'all') return 'AND Group';
@@ -850,6 +899,18 @@
             push(`${pathLabel}.event.point_xy`, 'Proximity trigger target XY must be two numbers.');
           }
         }
+        if (evt.edge) {
+          if (!['rising', 'falling'].includes(evt.edge)) {
+            push(`${pathLabel}.event.edge`, 'Edge must be rising or falling.');
+          }
+          if (typeof evt.value !== 'boolean') {
+            push(`${pathLabel}.event.value`, 'Edge-based event value must be boolean.');
+          } else if (evt.edge === 'rising' && evt.value !== true) {
+            push(`${pathLabel}.event.value`, 'Rising edge requires expected value true.');
+          } else if (evt.edge === 'falling' && evt.value !== false) {
+            push(`${pathLabel}.event.value`, 'Falling edge requires expected value false.');
+          }
+        }
         return;
       }
       if (node.time) {
@@ -858,6 +919,28 @@
         if (t.to && !hhmm.test(String(t.to))) push(`${pathLabel}.time.to`, 'Time Trigger "To" must be HH:MM');
         if (t.from && t.to && hhmm.test(String(t.from)) && hhmm.test(String(t.to)) && t.from > t.to) {
           push(`${pathLabel}.time`, 'Time window From must be earlier than or equal to To.');
+        }
+        return;
+      }
+      if (node.protocol_completion) {
+        const rule = node.protocol_completion || {};
+        if (!rule.protocol || !String(rule.protocol).trim()) {
+          push(`${pathLabel}.protocol_completion.protocol`, 'Source protocol is required.');
+        }
+        if (!Array.isArray(rule.statuses) || !rule.statuses.length) {
+          push(`${pathLabel}.protocol_completion.statuses`, 'Select at least one terminal status.');
+        }
+        const within = Number(rule.within_seconds);
+        if (!Number.isFinite(within) || within <= 0) {
+          push(`${pathLabel}.protocol_completion.within_seconds`, 'Within seconds must be greater than 0.');
+        }
+        if (rule.after_seconds !== undefined && rule.after_seconds !== '') {
+          const after = Number(rule.after_seconds);
+          if (!Number.isFinite(after) || after < 0) {
+            push(`${pathLabel}.protocol_completion.after_seconds`, 'After seconds must be 0 or greater.');
+          } else if (Number.isFinite(within) && within > 0 && after > within) {
+            push(`${pathLabel}.protocol_completion.after_seconds`, 'After seconds must be less than or equal to Within seconds.');
+          }
         }
         return;
       }
@@ -884,7 +967,7 @@
 
   function errorHtml(key) {
     const msg = fieldError(key);
-    return msg ? `<div class="field-error">${escapeHtml(msg)}</div>` : '';
+    return `<div class="field-error">${msg ? escapeHtml(msg) : ''}</div>`;
   }
 
   function pathLabelFromPath(path) {
@@ -904,6 +987,12 @@
       ...robotStateSpecs().map((s) => `<option value="${escapeAttr(s.name)}" ${s.name === (evt?.state || '') ? 'selected' : ''}>${escapeHtml(s.name)}</option>`),
     ].join('');
     return `<select data-action="trigger-event-state" data-path="${escapeAttr(path)}" title="${escapeAttr(description)}">${options}</select>`;
+  }
+
+  function boolTriggerSelectionValue(evt) {
+    if (evt?.edge === 'rising') return 'rising';
+    if (evt?.edge === 'falling') return 'falling';
+    return evt?.value === true ? 'true' : 'false';
   }
 
   function renderTriggerScalarEventNode(evt, path, kind, isLocationValue) {
@@ -941,12 +1030,14 @@
                 <option value="<=" ${op === '<=' ? 'selected' : ''}>&lt;=</option>
               </select>` : '<input type="text" value="=" disabled />'}
           </div>
-          <div class="col-6">
+          <div class="col-4">
             <label>Expected Value</label>
             ${kind === 'bool' ? `
               <select data-action="trigger-event-value" data-path="${escapeAttr(path)}" data-type="bool">
-                <option value="true" ${rawValue === true ? 'selected' : ''}>true</option>
-                <option value="false" ${rawValue === false ? 'selected' : ''}>false</option>
+                <option value="true" ${boolTriggerSelectionValue(evt) === 'true' ? 'selected' : ''}>true</option>
+                <option value="false" ${boolTriggerSelectionValue(evt) === 'false' ? 'selected' : ''}>false</option>
+                <option value="rising" ${boolTriggerSelectionValue(evt) === 'rising' ? 'selected' : ''}>rising (false to true)</option>
+                <option value="falling" ${boolTriggerSelectionValue(evt) === 'falling' ? 'selected' : ''}>falling (true to false)</option>
               </select>` : isLocationValue ? `
               <select data-action="trigger-event-value" data-path="${escapeAttr(path)}" data-type="string">
                 ${locationOptions.map((loc) => `<option value="${escapeAttr(loc)}" ${String(rawValue ?? '') === loc ? 'selected' : ''}>${escapeHtml(loc)}</option>`).join('')}
@@ -1061,11 +1152,69 @@
       </div>`;
   }
 
+  function renderTriggerProtocolCompletionNode(node, path) {
+    const rule = normalizeProtocolCompletionRule(node.protocol_completion || {});
+    const protocolOptions = protocolTriggerOptions(rule.protocol);
+    const statuses = [
+      { value: 'completed', label: 'Success' },
+      { value: 'failed', label: 'Failure' },
+    ];
+    const selectedStatuses = new Set(rule.statuses || []);
+    return `
+      <div class="section trigger-clause-card">
+        <div class="trigger-clause-head">
+          <div>
+            <div class="eyebrow">Protocol Rule</div>
+            <h3>Follow Another Protocol</h3>
+          </div>
+          <button class="btn small danger" data-action="trigger-remove-node" data-path="${escapeAttr(path)}">Remove</button>
+        </div>
+        <div class="row">
+          <div class="col-5">
+            <label>Protocol</label>
+            <select data-action="trigger-protocol-completion-protocol" data-path="${escapeAttr(path)}">
+              <option value="" ${!rule.protocol ? 'selected' : ''}>Select protocol</option>
+              ${protocolOptions.map((opt) => `<option value="${escapeAttr(opt)}" ${rule.protocol === opt ? 'selected' : ''}>${escapeHtml(opt)}</option>`).join('')}
+            </select>
+            ${errorHtml(`triggers.${pathLabelFromPath(path)}.protocol_completion.protocol`)}
+          </div>
+          <div class="col-2">
+            <label title="Start matching this rule only after this many seconds from the selected protocol completion.">After (sec)</label>
+            <input type="number" min="0" step="1" data-action="trigger-protocol-completion-after" data-path="${escapeAttr(path)}" value="${escapeAttr(rule.after_seconds ?? '')}" placeholder="0" title="Start matching this rule only after this many seconds from the selected protocol completion." />
+            ${errorHtml(`triggers.${pathLabelFromPath(path)}.protocol_completion.after_seconds`)}
+          </div>
+          <div class="col-2">
+            <label title="Stop matching this rule after this many seconds from the selected protocol completion.">Within (sec)</label>
+            <input type="number" min="1" step="1" data-action="trigger-protocol-completion-within" data-path="${escapeAttr(path)}" value="${escapeAttr(rule.within_seconds ?? 120)}" title="Stop matching this rule after this many seconds from the selected protocol completion." />
+            ${errorHtml(`triggers.${pathLabelFromPath(path)}.protocol_completion.within_seconds`)}
+          </div>
+          <div class="col-3">
+            <label>Trigger On</label>
+            <div class="status-checkboxes">
+              ${statuses.map((status) => `
+                <label class="checkbox-line compact">
+                  <input
+                    type="checkbox"
+                    data-action="trigger-protocol-completion-status"
+                    data-path="${escapeAttr(path)}"
+                    data-status="${escapeAttr(status.value)}"
+                    ${selectedStatuses.has(status.value) ? 'checked' : ''}
+                  />
+                  <span>${escapeHtml(status.label)}</span>
+                </label>`).join('')}
+            </div>
+            ${errorHtml(`triggers.${pathLabelFromPath(path)}.protocol_completion.statuses`)}
+          </div>
+        </div>
+      </div>`;
+  }
+
   function renderTriggerAddBar(path, compact = false) {
     return `
       <div class="trigger-add-bar ${compact ? 'compact' : ''}">
         <button class="btn small primary" data-action="trigger-add-node" data-path="${escapeAttr(path)}" data-kind="event">Add Event</button>
         <button class="btn small ghost" data-action="trigger-add-node" data-path="${escapeAttr(path)}" data-kind="time">Add Time</button>
+        <button class="btn small ghost" data-action="trigger-add-node" data-path="${escapeAttr(path)}" data-kind="protocol_completion">Add Protocol</button>
         <button class="btn small ghost" data-action="trigger-add-node" data-path="${escapeAttr(path)}" data-kind="permissible_locations">Add Location</button>
         <button class="btn small ghost" data-action="trigger-add-node" data-path="${escapeAttr(path)}" data-kind="all">Add AND Group</button>
         <button class="btn small ghost" data-action="trigger-add-node" data-path="${escapeAttr(path)}" data-kind="any">Add OR Group</button>
@@ -1108,6 +1257,7 @@
     if (mode) return renderTriggerGroupNode(node, path, depth, false);
     if (node?.event) return renderTriggerEventNode(node, path);
     if (node?.time) return renderTriggerTimeNode(node, path);
+    if (node?.protocol_completion) return renderTriggerProtocolCompletionNode(node, path);
     if (node?.permissible_locations) return renderTriggerLocationNode(node, path);
     return `<div class="section trigger-clause-card"><div class="inline-note">Unknown trigger rule: ${escapeHtml(triggerRuleLabel(node))}</div></div>`;
   }
@@ -1119,6 +1269,7 @@
     const bits = [];
     bits.push(`${stats.events} event${stats.events === 1 ? '' : 's'}`);
     bits.push(`${stats.times} time rule${stats.times === 1 ? '' : 's'}`);
+    bits.push(`${stats.completions} completion rule${stats.completions === 1 ? '' : 's'}`);
     bits.push(`${stats.locations} location filter${stats.locations === 1 ? '' : 's'}`);
     return `
       <div class="section stack trigger-builder-shell">
@@ -1587,22 +1738,33 @@
     if (kind === 'number') {
       evt.value = typeof evt.value === 'number' ? evt.value : 0;
       evt.op = evt.op || '=';
+      delete evt.edge;
     } else if (kind === 'bool') {
       evt.value = evt.value === true;
       delete evt.op;
+      if (evt.edge !== 'rising' && evt.edge !== 'falling') {
+        delete evt.edge;
+      } else if (evt.edge === 'rising') {
+        evt.value = true;
+      } else if (evt.edge === 'falling') {
+        evt.value = false;
+      }
     } else if (uiKind === 'location_name') {
       const opts = locationValueOptionsForState(evt.state);
       if (!opts.includes(evt.value)) evt.value = opts[0] || '';
       delete evt.op;
+      delete evt.edge;
     } else {
       evt.value = (evt.value == null || typeof evt.value === 'object') ? '' : String(evt.value);
       delete evt.op;
+      delete evt.edge;
     }
   }
 
   function normalizeXYEvent(evt) {
     delete evt.value;
     delete evt.op;
+    delete evt.edge;
     evt.within_m = typeof evt.within_m === 'number' ? evt.within_m : 1.0;
     if (!Array.isArray(evt.point_xy) || evt.point_xy.length !== 2) evt.point_xy = [0.0, 0.0];
   }
@@ -1675,16 +1837,14 @@
       state.validation.status = 'ok';
       state.validation.messages = ['Saved and schema validation passed.'];
       state.validation.lastValidatedAt = nowTimeLabel();
-      if (data.reload?.state === 'applied') {
-        setFlash('success', `Saved and runtime YAML loaded successfully. Backup: ${data.save.backup_path}`);
-      } else if (data.reload?.state === 'pending') {
-        setFlash('warn', `Saved. Waiting for runtime YAML reload after protocols settle to idle or cooldown. Backup: ${data.save.backup_path}`);
+      setFlash('success', `YAML saved successfully. Backup: ${data.save.backup_path}`);
+      if (data.reload?.state === 'pending') {
         stopReloadPoll();
         state.reload.pollTimer = window.setTimeout(pollReloadStatus, 1500);
       } else if (data.reload?.state === 'error') {
-        setFlash('error', `Saved, but runtime YAML reload failed: ${data.reload.error || 'unknown error'}`);
-      } else {
-        setFlash('success', `Saved. Backup: ${data.save.backup_path}`);
+        setFlash('error', `YAML saved successfully. Runtime YAML reload failed: ${data.reload.error || 'unknown error'}`);
+      } else if (data.reload?.state === 'applied') {
+        setFlash('success', 'Runtime YAML reloaded.');
       }
       renderRoute();
     } catch (err) {
@@ -2046,7 +2206,18 @@
         const node = getTriggerNodeAtPath(protocol, target.dataset.path || '');
         const evt = node.event;
         const type = target.dataset.type;
-        if (type === 'bool') evt.value = target.value === 'true';
+        if (type === 'bool') {
+          if (target.value === 'rising') {
+            evt.value = true;
+            evt.edge = 'rising';
+          } else if (target.value === 'falling') {
+            evt.value = false;
+            evt.edge = 'falling';
+          } else {
+            evt.value = target.value === 'true';
+            delete evt.edge;
+          }
+        }
         else if (type === 'number') evt.value = Number(target.value || 0);
         else evt.value = target.value;
         if (type !== 'number') delete evt.op;
@@ -2059,6 +2230,39 @@
         const field = target.dataset.field;
         const part = target.dataset.part;
         time[field] = setTimePart(time[field], part, target.value);
+        setDirty(true);
+        return;
+      }
+      if (action === 'trigger-protocol-completion-protocol') {
+        const node = getTriggerNodeAtPath(protocol, target.dataset.path || '');
+        const rule = node.protocol_completion ||= makeDefaultProtocolCompletionTrigger();
+        rule.protocol = target.value;
+        setDirty(true);
+        return;
+      }
+      if (action === 'trigger-protocol-completion-after') {
+        const node = getTriggerNodeAtPath(protocol, target.dataset.path || '');
+        const rule = node.protocol_completion ||= makeDefaultProtocolCompletionTrigger();
+        if (target.value === '') delete rule.after_seconds;
+        else rule.after_seconds = Number(target.value);
+        setDirty(true);
+        return;
+      }
+      if (action === 'trigger-protocol-completion-within') {
+        const node = getTriggerNodeAtPath(protocol, target.dataset.path || '');
+        const rule = node.protocol_completion ||= makeDefaultProtocolCompletionTrigger();
+        rule.within_seconds = Number(target.value || 0);
+        setDirty(true);
+        return;
+      }
+      if (action === 'trigger-protocol-completion-status') {
+        const node = getTriggerNodeAtPath(protocol, target.dataset.path || '');
+        const rule = node.protocol_completion ||= makeDefaultProtocolCompletionTrigger();
+        const statuses = new Set(Array.isArray(rule.statuses) ? rule.statuses : []);
+        const status = target.dataset.status;
+        if (target.checked) statuses.add(status);
+        else statuses.delete(status);
+        rule.statuses = [...statuses];
         setDirty(true);
         return;
       }
