@@ -28,9 +28,10 @@ protocols:
       reset_pattern:
         type: instant
       triggers:
-        event:
-        - state: charging
-          value: false
+        all:
+        - event:
+            state: charging
+            value: false
     runner: GenericProtocol
   coffee:
     action:
@@ -50,9 +51,10 @@ protocols:
       reset_pattern:
         type: eod
       triggers:
-        event:
-        - state: coffee
-          value: true
+        all:
+        - event:
+            state: coffee
+            value: true
     runner: GenericProtocol
   exercise:
     high_level:
@@ -101,38 +103,6 @@ protocols:
       total_num_exercises: 2
       video_dir_path: Exercise_Videos
     runner: ExerciseRandomProtocol
-  medicine_3:
-    action:
-      steps:
-      - next_step_after: 10
-        tree_name: play_audio
-        tree_params:
-          audio_path: food_reminder.mp3
-      - confirmation:
-          on_no:
-          - tree_name: play_text
-            tree_params:
-              text: Please take your medicines
-          on_yes:
-          - tree_name: play_text
-            tree_params:
-              text: Great job
-          question: Have you taken your medication yet?
-    high_level:
-      priority: 2
-      reset_pattern:
-        type: eod
-      success_on:
-        state: coffee
-        value: true
-      triggers:
-        permissible_locations:
-        - living_room
-        time:
-          day: []
-          from: '10:00'
-          to: '12:00'
-    runner: GenericProtocol
   medicine_am:
     action:
       steps:
@@ -214,25 +184,22 @@ protocols:
         - state: move_away
           value: true
     runner: GenericProtocol
-  evening_sensor_rule_demo:
+  emergency_dock:
+    runner: GenericProtocol
+    high_level:
+      priority: 1
+      triggers:
+        all:
+        - event:
+            state: battery_percent
+            value: 30
+            op: <
+        - event:
+            state: charging
+            value: false
+      reset_pattern:
+        type: instant
     action:
       steps:
-      - tree_name: play_text
-        tree_params:
-          text: Demo evening trigger rule matched.
-    high_level:
-      priority: 50
-      reset_pattern:
-        type: eod
-      triggers:
-        any:
-        - event:
-            state: sensor1
-            value: true
-        - event:
-            state: sensor2
-            value: true
-        time:
-          from: '19:00'
-          to: '19:00'
-    runner: GenericProtocol
+      - tree_name: charge_robot
+        tree_params: {}
